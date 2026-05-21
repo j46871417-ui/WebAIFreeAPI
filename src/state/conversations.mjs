@@ -7,6 +7,9 @@ export function conversationList(state) {
     title: conversation.title,
     workspace: conversation.workspace,
     mode: conversation.mode || "fast",
+    provider: conversation.provider || "deepseek",
+    model: conversation.model || "",
+    coderMode: conversation.coderMode === true,
     updatedAt: conversation.updatedAt,
     messageCount: conversation.messages.length,
   }));

@@ -12,12 +12,33 @@ import { openAppWindow } from "../browser/launch.mjs";
 import { runCodeTask } from "../code-agent/run.mjs";
 import { COMMAND_CATALOG, loadSettings, saveSettings } from "../state/settings.mjs";
 import { conversationList, makeConversationTitle, shouldAutoTitle } from "../state/conversations.mjs";
+import { startTask, isRunning, getRunningIds } from "./task-runner.mjs";
 import { getStateFile, loadWindowState, saveWindowState } from "../state/window-state.mjs";
 import { readJsonBody, sendHtml, sendJson } from "./http.mjs";
 import { renderWindowHtml } from "./ui-html.mjs";
 
 export async function runWindowApp({ client, workspaceRoot, port, modelType, thinkingEnabled, searchEnabled }) {
   const state = loadWindowState(workspaceRoot);
+
+  // Lazy init Qwen-клиента. Создаём один раз, переиспользуем для всех Qwen-чатов.
+  // Если auth Qwen нет — бросаем понятную ошибку.
+  let qwenClient = null;
+  async function getOrCreateQwenClient() {
+    if (qwenClient) return qwenClient;
+    const { QWEN_AUTH_FILE } = await import("../providers/qwen/config.mjs");
+    const { readQwenAuth } = await import("../providers/qwen/auth-files.mjs");
+    const auth = readQwenAuth(QWEN_AUTH_FILE);
+    if (!auth?.token) {
+      throw new Error("Qwen не подключён. Запусти: npm run welcome или npm run login-qwen.");
+    }
+    const { QwenChatClient } = await import("../providers/qwen/client.mjs");
+    qwenClient = new QwenChatClient({
+      token: auth.token,
+      cookieHeader: auth.cookieHeader,
+      debug: Boolean(process.env.DEEPSEEK_DEBUG_QWEN),
+    });
+    return qwenClient;
+  }
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -30,6 +51,18 @@ export async function runWindowApp({ client, workspaceRoot, port, modelType, thi
       // Lifeline для фронта. Если этот endpoint не отвечает 3 раза подряд → окно закрывается.
       if (req.method === "GET" && url.pathname === "/api/heartbeat") {
         return sendJson(res, { ok: true, ts: Date.now() });
+      }
+
+      // Список провайдеров + статус auth. UI рисует picker по этому ответу.
+      if (req.method === "GET" && url.pathname === "/api/providers") {
+        const { listProviders } = await import("../providers/registry.mjs");
+        const providers = listProviders().map((p) => ({
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          hasAuth: p.hasAuth(),
+        }));
+        return sendJson(res, { providers });
       }
 
       // Загрузка файла (картинки) на DeepSeek через наш прокси.
@@ -61,6 +94,7 @@ export async function runWindowApp({ client, workspaceRoot, port, modelType, thi
           stateFile: getStateFile(),
           activeConversationId: state.activeConversationId,
           conversations: conversationList(state),
+          runningTaskIds: getRunningIds(),
         });
       }
 
@@ -222,17 +256,26 @@ export async function runWindowApp({ client, workspaceRoot, port, modelType, thi
           return sendJson(res, { error: `Путь существует, но это не папка: ${workspace}` }, 400);
         }
 
-        const sessionId = await client.createSession();
+        // Сессию DeepSeek создаём только для DeepSeek-чатов. У Qwen своя модель чатов,
+        // там нет понятия "сессии перед сообщением" в том же виде.
+        const _provider = String(body.provider || "deepseek");
+        const sessionId = _provider === "deepseek" ? await client.createSession() : null;
         const now = new Date().toISOString();
         const rawTitle = String(body.title || "").trim();
-        // Режим фиксируется при создании чата. После первого сообщения переключать
-        // нельзя — DeepSeek завязывает chain на одну модель. Если режим неизвестный
-        // или не указан — fallback на "fast".
-        const allowedModes = new Set(["fast", "expert", "vision"]);
-        const mode = allowedModes.has(String(body.mode)) ? String(body.mode) : "fast";
+        // Провайдер и режим фиксируются при создании чата.
+        const allowedProviders = new Set(["deepseek", "qwen"]);
+        const provider = allowedProviders.has(String(body.provider)) ? String(body.provider) : "deepseek";
+        // Допустимые режимы per-provider. Если режим не из набора — fallback на дефолт провайдера.
+        const PROVIDER_MODES = {
+          deepseek: { allowed: ["fast", "expert", "vision"], default: "fast" },
+          qwen: { allowed: ["default"], default: "default" },
+        };
+        const modeCfg = PROVIDER_MODES[provider];
+        const mode = modeCfg.allowed.includes(String(body.mode)) ? String(body.mode) : modeCfg.default;
         const conversation = {
           id: randomUUID(),
           sessionId,
+          provider,
           title: rawTitle || "New chat",
           autoTitle: !rawTitle,
           workspace,
@@ -255,6 +298,24 @@ export async function runWindowApp({ client, workspaceRoot, port, modelType, thi
         const conversation = state.conversations.find((item) => item.id === conversationMatch[1]);
         if (!conversation) return sendJson(res, { error: "Conversation not found" }, 404);
         state.activeConversationId = conversation.id;
+        saveWindowState(workspaceRoot, state);
+        return sendJson(res, { conversation, running: isRunning(conversation.id) });
+      }
+
+      // Обновление настроек чата: модель (для Qwen) и coderMode toggle.
+      // Тело: { model?: string, coderMode?: boolean }
+      if (req.method === "PATCH" && conversationMatch) {
+        const id = conversationMatch[1];
+        const conversation = state.conversations.find((item) => item.id === id);
+        if (!conversation) return sendJson(res, { error: "Conversation not found" }, 404);
+        const body = await readJsonBody(req);
+        if (typeof body.model === "string" && body.model.length > 0) {
+          conversation.model = body.model;
+        }
+        if (typeof body.coderMode === "boolean") {
+          conversation.coderMode = body.coderMode;
+        }
+        conversation.updatedAt = new Date().toISOString();
         saveWindowState(workspaceRoot, state);
         return sendJson(res, { conversation });
       }
@@ -285,6 +346,135 @@ export async function runWindowApp({ client, workspaceRoot, port, modelType, thi
         const prompt = String(body.content || "").trim();
         if (!prompt) return sendJson(res, { error: "Message is empty" }, 400);
 
+        // Маршрутизация по провайдеру.
+        const convProvider = conversation.provider || "deepseek";
+        if (convProvider === "qwen") {
+          // Пушим user-сообщение СРАЗУ, до запроса к Qwen, чтобы оно отображалось
+          // в UI пока ждём ответ (4-5 сек). Иначе пользовательское сообщение
+          // «исчезает» с экрана до момента, как придёт ответ.
+          conversation.messages.push({
+            role: "user",
+            content: prompt,
+            createdAt: new Date().toISOString(),
+          });
+          conversation.updatedAt = new Date().toISOString();
+          saveWindowState(workspaceRoot, state);
+
+          // Lazy-init Qwen-клиента — создаём один раз за life сервера.
+          try {
+            const qwenClient = await getOrCreateQwenClient();
+            // Lazy createChat: на первом сообщении. Модель — из чата.
+            if (!conversation.sessionId) {
+              conversation.sessionId = await qwenClient.createChat({
+                model: conversation.model || undefined,
+              });
+              saveWindowState(workspaceRoot, state);
+            }
+
+            // /code-режим или Coder-mode (per-chat toggle) → запускаем code-agent.
+            // ASYNC: задача идёт в фоне через task-runner. Возвращаем conversation
+            // сразу с running:true, UI делает polling до завершения.
+            const slashCode = prompt === "/code" || prompt.startsWith("/code ");
+            const coderMode = conversation.coderMode === true;
+            if (slashCode || coderMode) {
+              const task = slashCode ? prompt.slice(5).trim() : prompt;
+              if (!task) {
+                conversation.messages.push({
+                  role: "assistant",
+                  content: "Напиши задачу после /code. Например: /code создай файл notes.txt с текстом hello",
+                  createdAt: new Date().toISOString(),
+                });
+                conversation.updatedAt = new Date().toISOString();
+                saveWindowState(workspaceRoot, state);
+                return sendJson(res, { conversation });
+              }
+
+              if (isRunning(conversation.id)) {
+                conversation.messages.push({
+                  role: "assistant",
+                  content: "⏳ В этом чате уже выполняется задача. Подожди завершения.",
+                  createdAt: new Date().toISOString(),
+                });
+                conversation.updatedAt = new Date().toISOString();
+                saveWindowState(workspaceRoot, state);
+                return sendJson(res, { conversation, running: true });
+              }
+
+              const { createQwenAgentAdapter } = await import("../providers/qwen/agent-adapter.mjs");
+              const adapter = createQwenAgentAdapter(qwenClient);
+              const workspacePath = path.resolve(conversation.workspace || workspaceRoot);
+              const baseOptions = {
+                sessionId: conversation.sessionId,
+                thinkingEnabled: body.thinking === true,
+                searchEnabled: false,
+              };
+              const parentId = conversation.codeParentMessageId || null;
+
+              startTask(conversation.id, "code", async () => {
+                try {
+                  const codeResult = await runCodeTask(adapter, baseOptions, workspacePath, task, parentId);
+                  conversation.codeParentMessageId = codeResult.parentMessageId ?? conversation.codeParentMessageId;
+                  const toolText = codeResult.toolLogs.length ? `${codeResult.toolLogs.join("\n")}\n\n` : "";
+                  conversation.messages.push({
+                    role: "assistant",
+                    content: `${toolText}${codeResult.message}`.trimEnd(),
+                    createdAt: new Date().toISOString(),
+                  });
+                } catch (err) {
+                  conversation.messages.push({
+                    role: "assistant",
+                    content: `⚠️ /code error: ${err.message}`,
+                    createdAt: new Date().toISOString(),
+                  });
+                }
+                conversation.updatedAt = new Date().toISOString();
+                saveWindowState(workspaceRoot, state);
+              }, "Qwen /code");
+
+              return sendJson(res, { conversation, running: true });
+            }
+
+            const result = await qwenClient.complete({
+              chatId: conversation.sessionId,
+              prompt,
+              parentId: conversation.parentMessageId,
+              thinking: body.thinking === true,
+              search: body.search === true,
+              model: conversation.model || undefined,
+            });
+            conversation.parentMessageId = result.lastMessageId ?? conversation.parentMessageId;
+            const finalText = result.thinkingText
+              ? `🧠 ${result.thinkingText.trim()}\n\n---\n\n${result.text.trim()}`
+              : result.text.trim();
+            conversation.messages.push({
+              role: "assistant",
+              content: finalText || "[empty]",
+              createdAt: new Date().toISOString(),
+            });
+            conversation.updatedAt = new Date().toISOString();
+            saveWindowState(workspaceRoot, state);
+          } catch (error) {
+            conversation.messages.push({
+              role: "assistant",
+              content: `⚠️ Qwen error: ${error.message}`,
+              createdAt: new Date().toISOString(),
+            });
+            conversation.updatedAt = new Date().toISOString();
+            saveWindowState(workspaceRoot, state);
+          }
+          return sendJson(res, { conversation });
+        }
+        if (convProvider !== "deepseek") {
+          conversation.messages.push({
+            role: "assistant",
+            content: `⚠️ Провайдер "${convProvider}" не поддерживается этим CLI.`,
+            createdAt: new Date().toISOString(),
+          });
+          conversation.updatedAt = new Date().toISOString();
+          saveWindowState(workspaceRoot, state);
+          return sendJson(res, { conversation });
+        }
+
         // Режим берём ИЗ ЧАТА (зафиксирован при создании). Переключить нельзя —
         // DeepSeek завязывает parent_message_id chain на одну модель.
         // Тумблеры (thinking/search) — можно переключать per-message.
@@ -310,8 +500,10 @@ export async function runWindowApp({ client, workspaceRoot, port, modelType, thi
         state.activeConversationId = conversation.id;
         saveWindowState(workspaceRoot, state);
 
-        if (prompt === "/code" || prompt.startsWith("/code ")) {
-          const task = prompt.slice(5).trim();
+        const dsSlashCode = prompt === "/code" || prompt.startsWith("/code ");
+        const dsCoderMode = conversation.coderMode === true;
+        if (dsSlashCode || dsCoderMode) {
+          const task = dsSlashCode ? prompt.slice(5).trim() : prompt;
           if (!task) {
             conversation.messages.push({
               role: "assistant",
@@ -323,26 +515,55 @@ export async function runWindowApp({ client, workspaceRoot, port, modelType, thi
             return sendJson(res, { conversation });
           }
 
+          if (isRunning(conversation.id)) {
+            conversation.messages.push({
+              role: "assistant",
+              content: "⏳ В этом чате уже выполняется задача. Подожди завершения.",
+              createdAt: new Date().toISOString(),
+            });
+            conversation.updatedAt = new Date().toISOString();
+            saveWindowState(workspaceRoot, state);
+            return sendJson(res, { conversation, running: true });
+          }
+
           // КРИТИЧНО: /code держит СВОЙ parent_message_id chain, отдельный от обычного чата.
           // Иначе system-prompt «You are a coding agent, no internet» цепляется к обычным
           // сообщениям, и модель отказывается отвечать на вопросы про реальный мир.
-          const codeResult = await runCodeTask(client, {
+          //
+          // ASYNC: запускаем через task-runner, чтобы UI не блокировался и можно было
+          // параллельно запустить /code в других чатах. Возвращаем conversation сразу,
+          // фронт делает polling /api/state до завершения.
+          const workspacePath = path.resolve(conversation.workspace || workspaceRoot);
+          const baseOptions = {
             sessionId: conversation.sessionId,
             modelType: effectiveModelType,
             thinkingEnabled: useThinking,
             searchEnabled: useSearch,
-          }, path.resolve(conversation.workspace || workspaceRoot), task, conversation.codeParentMessageId || null);
+          };
+          const parentId = conversation.codeParentMessageId || null;
 
-          conversation.codeParentMessageId = codeResult.parentMessageId ?? conversation.codeParentMessageId;
-          const toolText = codeResult.toolLogs.length ? `${codeResult.toolLogs.join("\n")}\n\n` : "";
-          conversation.messages.push({
-            role: "assistant",
-            content: `${toolText}${codeResult.message}`.trimEnd(),
-            createdAt: new Date().toISOString(),
-          });
-          conversation.updatedAt = new Date().toISOString();
-          saveWindowState(workspaceRoot, state);
-          return sendJson(res, { conversation });
+          startTask(conversation.id, "code", async () => {
+            try {
+              const codeResult = await runCodeTask(client, baseOptions, workspacePath, task, parentId);
+              conversation.codeParentMessageId = codeResult.parentMessageId ?? conversation.codeParentMessageId;
+              const toolText = codeResult.toolLogs.length ? `${codeResult.toolLogs.join("\n")}\n\n` : "";
+              conversation.messages.push({
+                role: "assistant",
+                content: `${toolText}${codeResult.message}`.trimEnd(),
+                createdAt: new Date().toISOString(),
+              });
+            } catch (err) {
+              conversation.messages.push({
+                role: "assistant",
+                content: `⚠️ /code error: ${err.message}`,
+                createdAt: new Date().toISOString(),
+              });
+            }
+            conversation.updatedAt = new Date().toISOString();
+            saveWindowState(workspaceRoot, state);
+          }, "DeepSeek /code");
+
+          return sendJson(res, { conversation, running: true });
         }
 
         const result = await client.complete({
@@ -379,7 +600,7 @@ export async function runWindowApp({ client, workspaceRoot, port, modelType, thi
   });
 
   const url = `http://127.0.0.1:${port}`;
-  console.log(`DeepSeek window: ${url}`);
+  console.log(`Workspace window: ${url}`);
   openAppWindow(url);
 
   // Graceful shutdown: Ctrl+C / kill / закрытие терминала.

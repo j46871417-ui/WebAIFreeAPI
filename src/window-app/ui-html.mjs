@@ -1,792 +1,25 @@
-// Огромный HTML-шаблон окна чатов: layout, стили, фронтенд JS.
+// Огромный HTML-шаблон окна чатов: layout и фронтенд JS.
+// Стили вынесены в ./ui-styles.mjs.
 // Самодостаточный — никаких внешних зависимостей и шаблонизации.
 //
 // При изменении: тест — открыть localhost:4317, проверить, что сайдбар, чат,
 // модалки (Settings, New chat, файловый браузер) рендерятся и работают.
 
+import { STYLES } from "./ui-styles.mjs";
 export function renderWindowHtml() {
   return `<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DeepSeek Workspace</title>
-  <style>
-    :root {
-      color-scheme: dark;
-      --bg: #0b0d10;
-      --sidebar: #111418;
-      --panel: #15191f;
-      --panel-2: #0f1216;
-      --line: #2a3038;
-      --line-strong: #3a4350;
-      --text: #edf1f7;
-      --muted: #929baa;
-      --accent: #4d7cff;
-      --accent-strong: #7fa0ff;
-      --accent-soft: #18264a;
-      --bubble: #1b2028;
-      --danger: #ff776d;
-    }
-    * { box-sizing: border-box; }
-    html {
-      height: 100%;
-      overflow: hidden;
-      background: var(--bg);
-    }
-    body {
-      margin: 0;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      height: 100vh;
-      overflow: hidden;
-    }
-    button, input, textarea {
-      font: inherit;
-    }
-    ::selection {
-      background: rgba(77, 124, 255, 0.35);
-    }
-    ::-webkit-scrollbar {
-      width: 10px;
-      height: 10px;
-    }
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #343c47;
-      border: 2px solid transparent;
-      background-clip: content-box;
-      border-radius: 999px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #48515f;
-      border: 2px solid transparent;
-      background-clip: content-box;
-    }
-    .app {
-      --sidebar-width: 300px;
-      display: grid;
-      grid-template-columns: var(--sidebar-width) 6px minmax(0, 1fr);
-      height: 100vh;
-      width: 100vw;
-      overflow: hidden;
-    }
-    .sidebar {
-      background: var(--sidebar);
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      min-width: 0;
-      overflow: hidden;
-    }
-    .sidebarResizer {
-      width: 6px;
-      height: 100vh;
-      background: var(--panel-2);
-      border-left: 1px solid var(--line);
-      border-right: 1px solid var(--line);
-      cursor: col-resize;
-      touch-action: none;
-    }
-    .sidebarResizer:hover,
-    .sidebarResizer.dragging {
-      background: var(--accent);
-      border-color: var(--accent);
-    }
-    body.resizingSidebar {
-      cursor: col-resize;
-      user-select: none;
-    }
-    .sideHead {
-      padding: 14px;
-      border-bottom: 1px solid var(--line);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .brand {
-      font-weight: 700;
-      flex: 1;
-      min-width: 0;
-      color: var(--text);
-    }
-    .iconBtn, .sendBtn {
-      border: 1px solid var(--line);
-      background: #1a1f27;
-      color: var(--text);
-      height: 36px;
-      min-width: 36px;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    .iconBtn:hover, .sendBtn:hover {
-      border-color: var(--line-strong);
-      background: #222936;
-    }
-    .newForm {
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--line);
-      display: grid;
-      gap: 8px;
-    }
-    .newForm input {
-      width: 100%;
-      border: 1px solid var(--line);
-      background: var(--panel-2);
-      color: var(--text);
-      border-radius: 6px;
-      padding: 9px 10px;
-      min-width: 0;
-    }
-    .newForm input::placeholder,
-    textarea::placeholder {
-      color: #687181;
-    }
-    .chatList {
-      flex: 1;
-      min-height: 0;
-      overflow-y: auto;
-      overflow-x: hidden;
-      padding: 8px;
-      display: grid;
-      align-content: start;
-      gap: 4px;
-    }
-    .chatItem {
-      border: 1px solid transparent;
-      background: transparent;
-      color: var(--text);
-      border-radius: 6px;
-      padding: 10px;
-      text-align: left;
-      cursor: pointer;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 8px;
-      width: 100%;
-    }
-    .chatItem:hover { background: #171c24; }
-    .chatItem.active {
-      background: var(--accent-soft);
-      border-color: #304b8f;
-    }
-    .chatTitle {
-      font-size: 14px;
-      font-weight: 600;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .chatMeta {
-      color: var(--muted);
-      font-size: 12px;
-    }
-    .chatDelete {
-      width: 28px;
-      height: 28px;
-      border: 1px solid transparent;
-      background: transparent;
-      color: var(--muted);
-      border-radius: 6px;
-      cursor: pointer;
-      align-self: center;
-      grid-row: 1 / span 2;
-      grid-column: 2;
-    }
-    .chatDelete:hover {
-      color: var(--danger);
-      border-color: #5a3030;
-      background: #2b1719;
-    }
-    .main {
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto;
-      min-width: 0;
-      height: 100vh;
-      min-height: 0;
-      background: var(--panel);
-      overflow: hidden;
-    }
-    .topbar {
-      border-bottom: 1px solid var(--line);
-      padding: 12px 18px;
-      display: grid;
-      grid-template-columns: 1fr auto;
-      grid-template-rows: auto auto;
-      gap: 3px 12px;
-      align-items: center;
-    }
-    .title {
-      font-weight: 700;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      grid-column: 1;
-      grid-row: 1;
-    }
-    .workspace {
-      color: var(--muted);
-      font-size: 12px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      grid-column: 1;
-      grid-row: 2;
-    }
-    .settingsBtn {
-      grid-column: 2;
-      grid-row: 1 / span 2;
-      font-size: 18px;
-      padding: 6px 10px;
-    }
-    .settingsOverlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.45);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-    .settingsOverlay.hidden { display: none; }
-    .settingsPanel {
-      background: var(--panel);
-      color: var(--text);
-      width: min(720px, 92vw);
-      max-height: 86vh;
-      border-radius: 12px;
-      border: 1px solid var(--line);
-      box-shadow: 0 24px 64px rgba(0,0,0,0.4);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .settingsHead {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--line);
-    }
-    .settingsHead h2 {
-      margin: 0;
-      font-size: 16px;
-    }
-    .settingsHint {
-      margin: 12px 20px 4px;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.5;
-    }
-    .settingsHint code {
-      background: var(--code-bg, #1e1e1e);
-      padding: 1px 6px;
-      border-radius: 4px;
-      font-size: 12px;
-    }
-    .settingsBody {
-      overflow-y: auto;
-      padding: 12px 20px 20px;
-      display: grid;
-      gap: 18px;
-    }
-    .settingsGroup h3 {
-      margin: 0 0 8px;
-      font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--muted);
-    }
-    .settingsItem {
-      display: grid;
-      grid-template-columns: 24px 1fr auto;
-      gap: 10px;
-      align-items: start;
-      padding: 10px 12px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      margin-bottom: 6px;
-    }
-    .settingsItem input[type="checkbox"] {
-      margin-top: 3px;
-      width: 18px;
-      height: 18px;
-    }
-    .settingsItem .name {
-      font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      font-weight: 600;
-      font-size: 14px;
-    }
-    .settingsItem .desc {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.4;
-      margin-top: 2px;
-    }
-    .riskBadge {
-      align-self: center;
-      font-size: 11px;
-      padding: 3px 8px;
-      border-radius: 999px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-    }
-    .riskBadge.low    { background: rgba(34,197,94,0.15);  color: #22c55e; border: 1px solid rgba(34,197,94,0.35); }
-    .riskBadge.medium { background: rgba(234,179,8,0.15);  color: #eab308; border: 1px solid rgba(234,179,8,0.35); }
-    .riskBadge.high   { background: rgba(239,68,68,0.15);  color: #ef4444; border: 1px solid rgba(239,68,68,0.4); }
-
-    .newChatBtn {
-      width: 100%;
-      padding: 10px;
-      font-size: 14px;
-      margin: 8px 0;
-    }
-    .formField {
-      display: grid;
-      gap: 6px;
-      margin-bottom: 14px;
-    }
-    .formField > span {
-      font-size: 12px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-    }
-    .formField input {
-      padding: 10px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      background: var(--panel);
-      color: var(--text);
-      font-size: 14px;
-      font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    }
-    .recentProjects {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-bottom: 14px;
-    }
-    .recentProjects .chip {
-      cursor: pointer;
-      font-size: 12px;
-      padding: 4px 10px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: transparent;
-      color: var(--muted);
-    }
-    .recentProjects .chip:hover {
-      color: var(--text);
-      border-color: var(--text);
-    }
-    .recentProjects .chip.missing {
-      opacity: 0.5;
-      text-decoration: line-through;
-    }
-    .checkboxRow {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-bottom: 14px;
-      font-size: 13px;
-      color: var(--muted);
-    }
-    .formActions {
-      display: flex;
-      justify-content: flex-end;
-    }
-    .primaryBtn {
-      background: var(--accent, #4f46e5);
-      color: white;
-      padding: 8px 16px;
-      font-weight: 600;
-    }
-    .formError {
-      margin-top: 10px;
-      padding: 10px 12px;
-      background: rgba(239,68,68,0.1);
-      border: 1px solid rgba(239,68,68,0.35);
-      border-radius: 8px;
-      color: #ef4444;
-      font-size: 13px;
-    }
-    .formError.hidden { display: none; }
-    .chatItem .chatFolder {
-      font-size: 11px;
-      color: var(--muted);
-      font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .pathRow {
-      display: flex;
-      gap: 8px;
-      align-items: stretch;
-    }
-    .pathRow input {
-      flex: 1;
-    }
-    .pathRow .iconBtn {
-      white-space: nowrap;
-    }
-    .browseSection {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 14px;
-      background: #0f1115;
-    }
-    .browseSection.hidden { display: none; }
-    .browsePath {
-      font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      font-size: 12px;
-      color: var(--text);
-      margin-bottom: 10px;
-      padding: 6px 8px;
-      background: rgba(255,255,255,0.04);
-      border-radius: 4px;
-      word-break: break-all;
-    }
-    .browseControls {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
-    }
-    .checkboxRow.inline {
-      margin: 0;
-    }
-    .browseList {
-      max-height: 280px;
-      overflow-y: auto;
-      display: grid;
-      gap: 2px;
-      font-size: 13px;
-    }
-    .browseRow {
-      text-align: left;
-      padding: 6px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text);
-      font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      display: block;
-      width: 100%;
-    }
-    .browseRow:hover {
-      background: rgba(255,255,255,0.05);
-      border-color: var(--line);
-    }
-    .browseEmpty {
-      color: var(--muted);
-      font-size: 13px;
-      padding: 8px;
-      text-align: center;
-    }
-    .browseTruncated {
-      margin-top: 6px;
-      font-size: 11px;
-      color: var(--muted);
-      font-style: italic;
-    }
-    .browseTruncated.hidden { display: none; }
-    .createFolderRow {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-    .createFolderRow.hidden { display: none; }
-    .createFolderRow input {
-      flex: 1;
-      padding: 8px 10px;
-      border-radius: 6px;
-      border: 1px solid var(--line);
-      background: var(--panel);
-      color: var(--text);
-      font-size: 13px;
-      font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    }
-    .messages {
-      min-height: 0;
-      overflow-y: auto;
-      overflow-x: hidden;
-      padding: 22px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      background: var(--panel);
-    }
-    .empty {
-      margin: auto;
-      color: var(--muted);
-      text-align: center;
-      max-width: 420px;
-      line-height: 1.5;
-    }
-    .msg {
-      max-width: min(860px, 92%);
-      display: grid;
-      gap: 6px;
-    }
-    .msg.user {
-      align-self: flex-end;
-    }
-    .msg.assistant {
-      align-self: flex-start;
-    }
-    .role {
-      font-size: 12px;
-      color: var(--muted);
-      padding: 0 2px;
-    }
-    .bubble {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 12px 14px;
-      line-height: 1.48;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      background: var(--bubble);
-      color: var(--text);
-    }
-    .user .bubble {
-      background: var(--accent);
-      color: #fff;
-      border-color: var(--accent);
-    }
-    .composer {
-      padding: 0 18px 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      background: var(--panel-2);
-    }
-    .composerControls {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    .composerSpacer { flex: 1; }
-    .bottomBar {
-      border-top: 1px solid var(--line);
-      background: var(--panel-2);
-    }
-    /* Бейдж режима в шапке текущего чата (read-only индикатор). */
-    .titleRow {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      grid-column: 1;
-      grid-row: 1;
-      min-width: 0;
-    }
-    .titleRow .title {
-      grid-column: unset;
-      grid-row: unset;
-    }
-    .modeBadge {
-      font-size: 11px;
-      padding: 3px 10px;
-      border-radius: 999px;
-      font-weight: 700;
-      background: rgba(82, 126, 255, 0.14);
-      color: #aabfff;
-      border: 1px solid rgba(82, 126, 255, 0.4);
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-    .modeBadge.hidden { display: none; }
-    .modeBadge.fast    { background: rgba(82, 126, 255, 0.14); color: #aabfff; border-color: rgba(82, 126, 255, 0.4); }
-    .modeBadge.expert  { background: rgba(168, 85, 247, 0.14); color: #d8b4fe; border-color: rgba(168, 85, 247, 0.4); }
-    .modeBadge.vision  { background: rgba(34, 197, 94, 0.14);  color: #86efac; border-color: rgba(34, 197, 94, 0.4); }
-
-    /* Mode picker в модалке Новый чат: 3 квадратные карточки с выбором. */
-    .modePicker {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 8px;
-    }
-    .modeOption {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 4px;
-      padding: 12px;
-      border: 1px solid var(--line);
-      background: transparent;
-      border-radius: 10px;
-      cursor: pointer;
-      transition: all 120ms;
-      text-align: left;
-      color: var(--text);
-    }
-    .modeOption:hover {
-      border-color: var(--line-strong);
-      background: rgba(255,255,255,0.03);
-    }
-    .modeOption.active {
-      background: rgba(82, 126, 255, 0.10);
-      border-color: rgba(82, 126, 255, 0.55);
-    }
-    .modeOptionTitle {
-      font-weight: 700;
-      font-size: 14px;
-    }
-    .modeOptionSub {
-      font-size: 11px;
-      color: var(--muted);
-    }
-    .modeHint {
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: 4px;
-    }
-    /* Toggle pills внутри composer: «Глубокое мышление» / «Умный поиск». */
-    .togglePill {
-      padding: 6px 14px;
-      border: 1px solid var(--line);
-      background: transparent;
-      color: var(--muted);
-      font-size: 12px;
-      border-radius: 999px;
-      cursor: pointer;
-      font-weight: 500;
-      transition: all 120ms;
-    }
-    .togglePill:hover {
-      color: var(--text);
-      border-color: var(--line-strong);
-    }
-    .togglePill.active {
-      background: rgba(82, 126, 255, 0.12);
-      color: #aabfff;
-      border-color: rgba(82, 126, 255, 0.4);
-    }
-    .togglePill.disabled,
-    .togglePill:disabled {
-      opacity: 0.35;
-      cursor: not-allowed;
-      background: transparent;
-      color: var(--muted);
-      border-color: var(--line);
-    }
-    .togglePill:disabled:hover {
-      background: transparent;
-      color: var(--muted);
-      border-color: var(--line);
-    }
-    .attachBtn { font-size: 12px; }
-
-    /* Список прикреплённых файлов над input'ом. */
-    .attachmentList {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    .attachmentList:empty { display: none; }
-    .attachChip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 8px 4px 10px;
-      background: rgba(82, 126, 255, 0.08);
-      border: 1px solid rgba(82, 126, 255, 0.3);
-      border-radius: 999px;
-      font-size: 12px;
-      color: var(--text);
-    }
-    .attachChip .name {
-      font-weight: 600;
-      max-width: 240px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .attachChip .size {
-      color: var(--muted);
-      font-size: 11px;
-    }
-    .attachChip .remove {
-      cursor: pointer;
-      color: var(--muted);
-      background: transparent;
-      border: none;
-      padding: 0 4px;
-      font-size: 14px;
-    }
-    .attachChip .remove:hover { color: #ef4444; }
-    textarea {
-      resize: none;
-      min-height: 48px;
-      max-height: 180px;
-      border: 1px solid var(--line);
-      background: #10141a;
-      color: var(--text);
-      border-radius: 8px;
-      padding: 12px;
-      line-height: 1.4;
-      width: 100%;
-    }
-    .sendBtn {
-      height: 48px;
-      padding: 0 16px;
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
-      font-weight: 700;
-    }
-    .sendBtn:hover {
-      background: var(--accent-strong);
-      border-color: var(--accent-strong);
-    }
-    .codeBtn {
-      height: 48px;
-      padding: 0 14px;
-      border: 1px solid var(--line);
-      background: #1a1f27;
-      color: var(--text);
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 700;
-    }
-    .codeBtn:hover {
-      border-color: var(--line-strong);
-      background: #222936;
-    }
-    .codeBtn:disabled {
-      opacity: 0.55;
-      cursor: not-allowed;
-    }
-    .sendBtn:disabled {
-      opacity: 0.55;
-      cursor: not-allowed;
-    }
-    .status {
-      color: var(--muted);
-      font-size: 12px;
-      min-height: 16px;
-      padding: 0 18px 12px;
-      background: var(--panel-2);
-    }
-    .error { color: var(--danger); }
-  </style>
+  <title>AI Free v0.1.7</title>
+  <style>${STYLES}</style>
 </head>
 <body>
   <div class="app">
     <aside class="sidebar">
       <div class="sideHead">
-        <div class="brand">DeepSeek Workspace</div>
+        <div class="brand">Workspace</div>
         <button id="refreshBtn" class="iconBtn" title="Refresh">↻</button>
       </div>
       <button id="openNewChat" class="iconBtn newChatBtn" type="button">+ New chat</button>
@@ -799,20 +32,16 @@ export function renderWindowHtml() {
           </div>
           <form id="newForm" class="newForm" autocomplete="off">
             <label class="formField">
-              <span>Режим (модель DeepSeek)</span>
+              <span>Провайдер</span>
+              <div class="providerPicker" id="newChatProvider">
+                <!-- кнопки рендерятся динамически по ответу /api/providers -->
+              </div>
+            </label>
+
+            <label class="formField">
+              <span>Режим (модель)</span>
               <div class="modePicker" id="newChatMode">
-                <button type="button" class="modeOption active" data-mode="fast">
-                  <div class="modeOptionTitle">⚡ Быстрый</div>
-                  <div class="modeOptionSub">стандартная модель, быстро</div>
-                </button>
-                <button type="button" class="modeOption" data-mode="expert">
-                  <div class="modeOptionTitle">💎 Эксперт</div>
-                  <div class="modeOptionSub">reasoning, глубже думает</div>
-                </button>
-                <button type="button" class="modeOption" data-mode="vision">
-                  <div class="modeOptionTitle">🖼 Распознание</div>
-                  <div class="modeOptionSub">для изображений (beta)</div>
-                </button>
+                <!-- кнопки режимов рендерятся динамически в зависимости от выбранного провайдера -->
               </div>
               <div class="modeHint">Режим зафиксируется при создании чата. Переключить потом нельзя — создавай новый чат в нужном режиме.</div>
             </label>
@@ -874,6 +103,8 @@ export function renderWindowHtml() {
         <div id="activeTitleRow" class="titleRow">
           <div id="activeTitle" class="title">No chat selected</div>
           <span id="activeMode" class="modeBadge hidden"></span>
+          <select id="modelPicker" class="modelPicker hidden" title="Модель"></select>
+          <button id="coderToggle" class="coderToggle hidden" type="button" title="Включить режим агента — модель сама создаёт/редактирует файлы">🛠 Coder</button>
         </div>
         <div id="workspace" class="workspace"></div>
         <button id="settingsBtn" class="iconBtn settingsBtn" type="button" title="Settings / разрешённые команды">⚙</button>
@@ -896,6 +127,7 @@ export function renderWindowHtml() {
       <section id="messages" class="messages">
         <div class="empty">Создай чат слева. Каждый чат можно использовать как отдельный проект или рабочий контекст.</div>
       </section>
+      <div id="composerResizer" class="composerResizer" title="Изменить высоту формы ввода"></div>
       <div class="bottomBar">
         <form id="composer" class="composer">
           <div id="attachmentList" class="attachmentList"></div>
@@ -931,9 +163,12 @@ export function renderWindowHtml() {
     const codeBtn = document.getElementById("codeBtn");
     const sendBtn = document.getElementById("sendBtn");
     const SIDEBAR_WIDTH_KEY = "deepseek.sidebarWidth";
+    const COMPOSER_HEIGHT_KEY = "deepseek.composerHeight";
 
     applySavedSidebarWidth();
     setupSidebarResize();
+    applySavedComposerHeight();
+    setupComposerResize();
 
     document.getElementById("refreshBtn").addEventListener("click", loadState);
     // ---- New chat modal ----
@@ -1124,7 +359,13 @@ export function renderWindowHtml() {
       try {
         const data = await api("/api/conversations", {
           method: "POST",
-          body: { title, workspace, createFolder, mode: newChatSelectedMode },
+          body: {
+            title,
+            workspace,
+            createFolder,
+            mode: newChatSelectedMode,
+            provider: newChatSelectedProvider,
+          },
         });
         activeConversation = data.conversation;
         await loadState(activeConversation.id);
@@ -1307,27 +548,122 @@ export function renderWindowHtml() {
       return parts.join("\\n");
     }
 
-    // Mode picker в модалке нового чата — выбор фиксируется при создании.
-    const MODE_LABELS = {
-      fast: "⚡ Быстрый",
-      expert: "💎 Эксперт",
-      vision: "🖼 Распознание",
+    // Provider picker + Mode picker — оба зависят от провайдера, рендерятся динамически.
+    // Provider определяет, какие модели доступны (DeepSeek: Fast/Expert/Vision;
+    // Qwen: пока default; в будущем добавим больше после реверса их API).
+    const PROVIDER_PICK_KEY = "deepseek.newchat.provider";
+
+    const PROVIDER_INFO = {
+      deepseek: {
+        label: "🐳 DeepSeek",
+        sub: "chat.deepseek.com",
+        modes: [
+          { id: "fast",   title: "⚡ Быстрый",     sub: "default, быстро" },
+          { id: "expert", title: "💎 Эксперт",    sub: "reasoning + мышление" },
+          { id: "vision", title: "🖼 Распознание", sub: "для изображений" },
+        ],
+      },
+      qwen: {
+        label: "🐫 Qwen",
+        sub: "chat.qwen.ai",
+        modes: [
+          { id: "default", title: "💬 Чат",        sub: "стандартная модель Qwen" },
+        ],
+        // Список моделей для picker'а. Должен совпадать с QWEN_MODELS в config.mjs.
+        models: [
+          { id: "qwen3.6-plus",  label: "Qwen3.6 Plus" },
+          { id: "qwen3-max",     label: "Qwen3 Max" },
+          { id: "qwen2.5-plus",  label: "Qwen 2.5 Plus" },
+          { id: "qwq-32b",       label: "QwQ-32B (reasoning)" },
+          { id: "qwen-vl-max",   label: "Qwen-VL Max (vision)" },
+        ],
+        defaultModel: "qwen3.6-plus",
+      },
     };
+
+    const newChatProviderPicker = document.getElementById("newChatProvider");
     const newChatModePicker = document.getElementById("newChatMode");
+
+    let availableProviders = ["deepseek"]; // подтянем с сервера через /api/providers
+    let newChatSelectedProvider = localStorage.getItem(PROVIDER_PICK_KEY) || "deepseek";
     let newChatSelectedMode = localStorage.getItem(NEWCHAT_MODE_KEY) || "fast";
-    function applyNewChatModeUI() {
-      for (const btn of newChatModePicker.querySelectorAll(".modeOption")) {
-        btn.classList.toggle("active", btn.dataset.mode === newChatSelectedMode);
+
+    function renderProviderPicker() {
+      newChatProviderPicker.innerHTML = "";
+      for (const id of Object.keys(PROVIDER_INFO)) {
+        const info = PROVIDER_INFO[id];
+        const isAuthed = availableProviders.includes(id);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "providerOption " + id
+          + (id === newChatSelectedProvider ? " active" : "")
+          + (!isAuthed ? " disabled" : "");
+        btn.dataset.provider = id;
+        btn.disabled = !isAuthed;
+        btn.innerHTML =
+          '<div class="providerOptionTitle"></div>' +
+          '<div class="providerOptionSub"></div>';
+        btn.querySelector(".providerOptionTitle").textContent = info.label;
+        btn.querySelector(".providerOptionSub").textContent = isAuthed
+          ? info.sub
+          : info.sub + " (не подключён — npm run welcome)";
+        newChatProviderPicker.appendChild(btn);
       }
     }
-    applyNewChatModeUI();
+
+    function renderModePickerForProvider() {
+      const info = PROVIDER_INFO[newChatSelectedProvider] || PROVIDER_INFO.deepseek;
+      // Если текущий режим не подходит провайдеру — сбросим на первый.
+      if (!info.modes.find((m) => m.id === newChatSelectedMode)) {
+        newChatSelectedMode = info.modes[0].id;
+      }
+      newChatModePicker.innerHTML = "";
+      for (const m of info.modes) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "modeOption" + (m.id === newChatSelectedMode ? " active" : "");
+        btn.dataset.mode = m.id;
+        btn.innerHTML =
+          '<div class="modeOptionTitle"></div><div class="modeOptionSub"></div>';
+        btn.querySelector(".modeOptionTitle").textContent = m.title;
+        btn.querySelector(".modeOptionSub").textContent = m.sub;
+        newChatModePicker.appendChild(btn);
+      }
+    }
+
+    newChatProviderPicker.addEventListener("click", (event) => {
+      const opt = event.target.closest(".providerOption");
+      if (!opt || opt.disabled) return;
+      newChatSelectedProvider = opt.dataset.provider;
+      localStorage.setItem(PROVIDER_PICK_KEY, newChatSelectedProvider);
+      renderProviderPicker();
+      renderModePickerForProvider();
+    });
+
     newChatModePicker.addEventListener("click", (event) => {
       const opt = event.target.closest(".modeOption");
       if (!opt) return;
       newChatSelectedMode = opt.dataset.mode;
       localStorage.setItem(NEWCHAT_MODE_KEY, newChatSelectedMode);
-      applyNewChatModeUI();
+      renderModePickerForProvider();
     });
+
+    // На старте подтянем список доступных провайдеров и нарисуем picker'ы.
+    (async () => {
+      try {
+        const r = await fetch("/api/providers");
+        if (r.ok) {
+          const j = await r.json();
+          availableProviders = (j.providers || []).filter((p) => p.hasAuth).map((p) => p.id);
+        }
+      } catch {}
+      // Если сохранённый провайдер недоступен — переключаемся на первый доступный.
+      if (!availableProviders.includes(newChatSelectedProvider) && availableProviders.length) {
+        newChatSelectedProvider = availableProviders[0];
+      }
+      renderProviderPicker();
+      renderModePickerForProvider();
+    })();
 
     document.getElementById("composer").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1360,6 +696,8 @@ export function renderWindowHtml() {
       sending = true;
       setComposerEnabled(false);
       messageInput.value = "";
+      // Сбросить авто-рост на исходную высоту (но если юзер тянул руками — оставить).
+      if (!userResizedInput) messageInput.style.height = "";
       const sentAttachments = attachments;
       attachments = [];
       renderAttachments();
@@ -1389,8 +727,9 @@ export function renderWindowHtml() {
           }
         }
 
-        setStatus("DeepSeek is thinking...");
-        const data = await api("/api/conversations/" + activeConversation.id + "/messages", {
+        setStatus("Thinking...");
+        const sentConvId = activeConversation.id;
+        const data = await api("/api/conversations/" + sentConvId + "/messages", {
           method: "POST",
           body: {
             content: contentForApi,
@@ -1399,6 +738,18 @@ export function renderWindowHtml() {
             refFileIds,
           },
         });
+
+        // Если сервер вернул running:true — это /code в фоне. Отпускаем UI,
+        // даём юзеру переключаться по чатам. Polling сам подхватит результат.
+        if (data.running) {
+          activeConversation = data.conversation;
+          await loadState(activeConversation.id);
+          renderConversation(activeConversation);
+          setStatus("⚙️ Задача выполняется в фоне — можно перейти в другой чат");
+          ensurePolling();
+          return; // sending снимет в finally, polling завершит UI
+        }
+
         activeConversation = data.conversation;
         await loadState(activeConversation.id);
         renderConversation(activeConversation);
@@ -1419,6 +770,27 @@ export function renderWindowHtml() {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         document.getElementById("composer").requestSubmit();
+      }
+    });
+
+    // Авто-рост textarea по содержимому. Не мешает ручному resize:
+    // как только пользователь перетащил угол — фиксированная высота
+    // выставлена через inline style и больше не сбрасывается до отправки.
+    let userResizedInput = false;
+    const autoGrowInput = () => {
+      if (userResizedInput) return;
+      messageInput.style.height = "auto";
+      const maxPx = Math.floor(window.innerHeight * 0.6);
+      const next = Math.min(messageInput.scrollHeight, maxPx);
+      messageInput.style.height = next + "px";
+    };
+    messageInput.addEventListener("input", autoGrowInput);
+    // Если пользователь сам потянул за уголок — запоминаем и не трогаем.
+    messageInput.addEventListener("mousedown", (e) => {
+      const rect = messageInput.getBoundingClientRect();
+      // нижний-правый угол ~16x16 — резайз-хэндл
+      if (e.clientX > rect.right - 18 && e.clientY > rect.bottom - 18) {
+        userResizedInput = true;
       }
     });
 
@@ -1446,16 +818,87 @@ export function renderWindowHtml() {
         activeConversation = null;
         renderNoConversation();
       }
+      // Если есть фоновые задачи — запустить polling.
+      if ((appState.runningTaskIds || []).length > 0) ensurePolling();
+    }
+
+    // Polling для отслеживания фоновых /code-задач. Один setInterval на всю сессию,
+    // запускается при наличии running tasks и автоматически останавливается, когда
+    // их не остаётся. Тик — 1.5 сек.
+    let pollTimer = null;
+    function ensurePolling() {
+      if (pollTimer) return;
+      pollTimer = setInterval(pollTick, 1500);
+    }
+    function stopPolling() {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
+    async function pollTick() {
+      let nextState;
+      try {
+        nextState = await api("/api/state");
+      } catch {
+        return; // сетевая ошибка — попробуем на следующем тике
+      }
+      const prevRunning = new Set(appState.runningTaskIds || []);
+      const nextRunning = new Set(nextState.runningTaskIds || []);
+      appState.conversations = nextState.conversations;
+      appState.runningTaskIds = nextState.runningTaskIds;
+      renderList();
+
+      // Если активный чат всё ещё в работе — подтягиваем его свежие сообщения
+      // (могут добавляться tool-логи во время /code).
+      if (activeConversation && nextRunning.has(activeConversation.id)) {
+        try {
+          const data = await api("/api/conversations/" + activeConversation.id);
+          activeConversation = data.conversation;
+          renderConversation(activeConversation);
+        } catch {}
+      }
+
+      // Если активный чат ТОЛЬКО ЧТО завершился — финальный рендер + сброс статуса.
+      if (activeConversation && prevRunning.has(activeConversation.id) && !nextRunning.has(activeConversation.id)) {
+        try {
+          const data = await api("/api/conversations/" + activeConversation.id);
+          activeConversation = data.conversation;
+          renderConversation(activeConversation);
+          setStatus("");
+        } catch {}
+      }
+
+      if (nextRunning.size === 0) stopPolling();
     }
 
     function renderList() {
       chatList.innerHTML = "";
+      const running = new Set(appState.runningTaskIds || []);
       for (const conversation of appState.conversations) {
         const button = document.createElement("button");
-        button.className = "chatItem" + (conversation.id === appState.activeConversationId ? " active" : "");
+        const isRunning = running.has(conversation.id);
+        button.className =
+          "chatItem"
+          + (conversation.id === appState.activeConversationId ? " active" : "")
+          + (isRunning ? " running" : "");
         button.innerHTML =
           '<div class="chatTitle"></div><div class="chatFolder"></div><div class="chatMeta"></div><button class="chatDelete" type="button" title="Удалить чат">×</button>';
-        button.querySelector(".chatTitle").textContent = conversation.title;
+        // Заголовок + спиннер (если задача в работе) + бейдж провайдера.
+        const titleEl = button.querySelector(".chatTitle");
+        if (isRunning) {
+          const sp = document.createElement("span");
+          sp.className = "taskSpinner";
+          sp.title = "Выполняется /code-задача";
+          titleEl.appendChild(sp);
+        }
+        titleEl.appendChild(document.createTextNode(conversation.title));
+        const prov = conversation.provider || "deepseek";
+        const pb = document.createElement("span");
+        pb.className = "providerBadge " + prov;
+        pb.textContent = prov;
+        titleEl.appendChild(document.createTextNode(" "));
+        titleEl.appendChild(pb);
         // Папка проекта — короткое имя (basename) с полным путём в tooltip.
         const folderEl = button.querySelector(".chatFolder");
         const ws = conversation.workspace || "";
@@ -1491,23 +934,79 @@ export function renderWindowHtml() {
     }
 
     const activeModeBadge = document.getElementById("activeMode");
+    const modelPickerEl = document.getElementById("modelPicker");
+    const coderToggleEl = document.getElementById("coderToggle");
 
     function renderNoConversation() {
       activeTitle.textContent = "No chat selected";
       workspace.textContent = appState.workspaceRoot || "";
       activeModeBadge.classList.add("hidden");
+      modelPickerEl.classList.add("hidden");
+      coderToggleEl.classList.add("hidden");
       messages.innerHTML = '<div class="empty">Создай чат слева. Каждый чат можно использовать как отдельный проект или рабочий контекст.</div>';
       setComposerEnabled(false);
     }
+
+    // Patch на сервере: обновить model / coderMode для активного чата.
+    async function patchActiveConversation(payload) {
+      if (!activeConversation) return;
+      const data = await api("/api/conversations/" + activeConversation.id, {
+        method: "PATCH",
+        body: payload,
+      });
+      activeConversation = data.conversation;
+      renderConversation(activeConversation);
+      renderList();
+    }
+
+    modelPickerEl.addEventListener("change", () => {
+      patchActiveConversation({ model: modelPickerEl.value }).catch((e) => setStatus(e.message, true));
+    });
+    coderToggleEl.addEventListener("click", () => {
+      const next = !(activeConversation && activeConversation.coderMode === true);
+      patchActiveConversation({ coderMode: next }).catch((e) => setStatus(e.message, true));
+    });
 
     function renderConversation(conversation) {
       activeTitle.textContent = conversation.title;
       workspace.textContent = conversation.workspace || appState.workspaceRoot;
       if (appState.stateFile) workspace.title = "History: " + appState.stateFile;
       // Бейдж режима: показывает, какая модель привязана к этому чату.
+      // Берём label из PROVIDER_INFO с учётом провайдера чата.
       const mode = conversation.mode || "fast";
+      const prov = conversation.provider || "deepseek";
+      const info = PROVIDER_INFO[prov] || PROVIDER_INFO.deepseek;
+      const modeDef = info.modes.find((m) => m.id === mode) || info.modes[0];
       activeModeBadge.className = "modeBadge " + mode;
-      activeModeBadge.textContent = MODE_LABELS[mode] || MODE_LABELS.fast;
+      activeModeBadge.textContent = modeDef?.title || mode;
+
+      // Model picker — только для провайдеров с поддержкой смены модели (сейчас Qwen).
+      if (Array.isArray(info.models) && info.models.length > 1) {
+        const currentModel = conversation.model || info.defaultModel || info.models[0].id;
+        modelPickerEl.innerHTML = "";
+        for (const m of info.models) {
+          const opt = document.createElement("option");
+          opt.value = m.id;
+          opt.textContent = m.label;
+          if (m.id === currentModel) opt.selected = true;
+          modelPickerEl.appendChild(opt);
+        }
+        modelPickerEl.classList.remove("hidden");
+      } else {
+        modelPickerEl.classList.add("hidden");
+      }
+
+      // Coder toggle — переключает coderMode для текущего чата.
+      // Когда включён, каждое сообщение проходит через runCodeTask (без /code префикса).
+      coderToggleEl.classList.remove("hidden");
+      if (conversation.coderMode === true) {
+        coderToggleEl.classList.add("active");
+        coderToggleEl.textContent = "🛠 Coder ON";
+      } else {
+        coderToggleEl.classList.remove("active");
+        coderToggleEl.textContent = "🛠 Coder";
+      }
+
       // Раньше я думал, что search не работает в Expert — но юзер подтвердил
       // что в реальном DeepSeek UI работает в Fast и Expert. Vision ещё не проверяли.
       toggleSearch.disabled = false;
@@ -1526,7 +1025,9 @@ export function renderWindowHtml() {
         row.className = "msg " + message.role;
         const role = document.createElement("div");
         role.className = "role";
-        role.textContent = message.role === "user" ? "You" : "DeepSeek";
+        // Подпись assistant'а — провайдер-специфичная.
+        const assistantLabel = ({ deepseek: "DeepSeek", qwen: "Qwen" })[conversation.provider || "deepseek"] || "Assistant";
+        role.textContent = message.role === "user" ? "You" : assistantLabel;
         const bubble = document.createElement("div");
         bubble.className = "bubble";
         bubble.textContent = message.content;
@@ -1729,6 +1230,68 @@ export function renderWindowHtml() {
 
     function getSidebarWidth() {
       return parseInt(getComputedStyle(appShell).getPropertyValue("--sidebar-width"), 10) || 300;
+    }
+
+    // === Resize composer (вертикально) ===
+    // Логика похожа на sidebar: pointerdown → dragging → pointermove обновляет
+    // --composer-height в стиле .main, pointerup сохраняет в localStorage.
+    function applySavedComposerHeight() {
+      const saved = Number(localStorage.getItem(COMPOSER_HEIGHT_KEY));
+      if (Number.isFinite(saved) && saved > 0) applyComposerHeight(saved);
+    }
+
+    function setupComposerResize() {
+      const resizer = document.getElementById("composerResizer");
+      const mainEl = document.querySelector(".main");
+      if (!resizer || !mainEl) return;
+      let dragging = false;
+
+      resizer.addEventListener("pointerdown", (event) => {
+        dragging = true;
+        resizer.classList.add("dragging");
+        document.body.classList.add("resizingComposer");
+        resizer.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      });
+
+      resizer.addEventListener("pointermove", (event) => {
+        if (!dragging) return;
+        // composer-height = расстояние от низа окна до курсора.
+        const fromBottom = window.innerHeight - event.clientY - 3; // -3: половина handle'а
+        applyComposerHeight(fromBottom);
+      });
+
+      const finishDrag = (event) => {
+        if (!dragging) return;
+        dragging = false;
+        resizer.classList.remove("dragging");
+        document.body.classList.remove("resizingComposer");
+        try { resizer.releasePointerCapture(event.pointerId); } catch {}
+        const current = getComposerHeight();
+        if (current) localStorage.setItem(COMPOSER_HEIGHT_KEY, String(current));
+      };
+
+      resizer.addEventListener("pointerup", finishDrag);
+      resizer.addEventListener("pointercancel", finishDrag);
+    }
+
+    function applyComposerHeight(rawPx) {
+      const mainEl = document.querySelector(".main");
+      if (!mainEl) return;
+      // Лимиты:
+      //  - min 140px = textarea (~70) + gap (10) + composerControls (~48) + padding. Меньше — обрезает кнопки.
+      //  - max 80% окна, чтобы messages не сжимался полностью.
+      const maxPx = Math.floor(window.innerHeight * 0.8);
+      const px = Math.max(140, Math.min(maxPx, Math.round(rawPx)));
+      mainEl.style.setProperty("--composer-height", px + "px");
+      mainEl.classList.add("composerSized");
+    }
+
+    function getComposerHeight() {
+      const mainEl = document.querySelector(".main");
+      if (!mainEl) return 0;
+      const raw = getComputedStyle(mainEl).getPropertyValue("--composer-height").trim();
+      return parseInt(raw, 10) || 0;
     }
 
     loadState().catch((error) => setStatus(error.message, true));

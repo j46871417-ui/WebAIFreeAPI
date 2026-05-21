@@ -21,6 +21,9 @@ export function parseArgs(argv) {
     thinking: false,
     search: false,
     saveCreds: false,
+    loginQwen: false,
+    importQwenFile: null,
+    forceWelcome: false,
     prompt: [],
   };
 
@@ -40,6 +43,9 @@ export function parseArgs(argv) {
     else if (arg === "--window") args.window = true;
     else if (arg === "--login") args.login = true;
     else if (arg === "--save-creds") args.saveCreds = true;
+    else if (arg === "--login-qwen") args.loginQwen = true;
+    else if (arg === "--import-qwen") args.importQwenFile = argv[++i];
+    else if (arg === "--welcome") args.forceWelcome = true;
     else if (arg === "--port") args.port = Number(argv[++i]);
     else if (arg === "-h" || arg === "--help") {
       printHelp();
@@ -92,6 +98,9 @@ Options:
   --token-file FILE   File containing the token
   --auth-file FILE    Saved auth file, default ~/.deepseek-cli/auth.json
   --login             Open a remembered browser profile and save cookies/token
+  --login-qwen        Same but for chat.qwen.ai (separate profile, separate auth)
+  --import-qwen FILE  Import Qwen cookies from a Chrome JSON export (bypasses anti-bot)
+  --welcome           Force show welcome screen (for adding new provider or testing)
   --save-creds        Save email + password for autofill on re-login
   --thinking          Enable thinking mode
   --search            Enable web search mode

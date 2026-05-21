@@ -1,6 +1,6 @@
-# DeepSeek Free
+# AI Free
 
-> CLI и десктопное окно для работы с `chat.deepseek.com` через сохранённую браузерную сессию. Кросс-платформенно — macOS, Linux, Windows.
+> CLI и десктопное окно для бесплатных AI-веб-чатов в одном интерфейсе. Сейчас: **DeepSeek + Qwen**. На очереди: Kimi, Mistral, Claude.ai. Кросс-платформенно — macOS, Linux, Windows.
 
 ---
 

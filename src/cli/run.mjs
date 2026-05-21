@@ -31,6 +31,26 @@ export async function run() {
     return;
   }
 
+  if (args.loginQwen) {
+    const { loginQwenAndSave } = await import("../providers/qwen/browser-login.mjs");
+    await loginQwenAndSave();
+    return;
+  }
+
+  if (args.importQwenFile) {
+    const { importQwenFromJson } = await import("../providers/qwen/browser-login.mjs");
+    await importQwenFromJson(path.resolve(args.importQwenFile));
+    return;
+  }
+
+  // Welcome TUI: показывается ТОЛЬКО если ни один провайдер не залогинен,
+  // ИЛИ если юзер явно попросил через --welcome (для добавления провайдера).
+  const { configuredCount } = await import("../providers/registry.mjs");
+  if (args.forceWelcome || configuredCount() === 0) {
+    const { runWelcome } = await import("./welcome.mjs");
+    await runWelcome();
+  }
+
   // resolveAuth получает callbacks для login и silent-refresh — это избегает
   // цикла зависимостей между src/auth/files.mjs и src/browser/login.mjs.
   const auth = await resolveAuth(args, { loginAndSaveAuth, refreshAuthFromProfile });

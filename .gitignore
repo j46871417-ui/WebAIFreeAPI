@@ -5,3 +5,14 @@ node_modules/
 cookies*.json
 *cookie*.json
 deepseek-token*.txt
+
+# IDE
+.idea/
+.vscode/
+
+# Internal notes (не для публики)
+CLAUDE.md
+CONTINUATION.md
+HANDOFF.md
+REFACTOR_NOTES.md
+api/README.md

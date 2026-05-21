@@ -1,6 +1,6 @@
 {
   "name": "deepseek-cookie-cli",
-  "version": "0.2.0",
+  "version": "0.1.7",
   "private": true,
   "type": "module",
   "bin": {
@@ -14,6 +14,9 @@
     "cli": "node ./bin/deepseek.mjs",
     "chat": "node ./bin/deepseek.mjs",
     "login": "node ./bin/deepseek.mjs --login",
+    "login-qwen": "node ./bin/deepseek.mjs --login-qwen",
+    "import-qwen": "node ./bin/deepseek.mjs --import-qwen",
+    "welcome": "node ./bin/deepseek.mjs --welcome",
     "save-creds": "node ./bin/deepseek.mjs --save-creds",
     "check": "node ./bin/deepseek.mjs --check",
     "test": "node --test test/"
