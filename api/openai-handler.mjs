@@ -22,9 +22,14 @@ import { findModel, modelsList } from "./models.mjs";
 import { readQwenAuth } from "../src/providers/qwen/auth-files.mjs";
 import { QWEN_AUTH_FILE } from "../src/providers/qwen/config.mjs";
 import { QwenChatClient } from "../src/providers/qwen/client.mjs";
+import { DEFAULT_AUTH_FILE } from "../src/config.mjs";
+import { readSavedAuth } from "../src/auth/files.mjs";
+import { DeepSeekChatClient } from "../src/deepseek/client.mjs";
 
 // Ленивый singleton Qwen-клиента — переиспользуем через все вызовы API.
 let qwenClient = null;
+// Ленивый singleton DeepSeek-клиента — переиспользуем через все вызовы API.
+let deepseekClient = null;
 async function getQwenClient() {
   if (qwenClient) return qwenClient;
   const auth = readQwenAuth(QWEN_AUTH_FILE);
@@ -37,6 +42,20 @@ async function getQwenClient() {
     debug: Boolean(process.env.API_DEBUG),
   });
   return qwenClient;
+}
+
+async function getDeepSeekClient() {
+  if (deepseekClient) return deepseekClient;
+  const auth = readSavedAuth(DEFAULT_AUTH_FILE);
+  if (!auth?.token || !auth?.cookieHeader) {
+    throw new Error("DeepSeek не подключён. Запусти: npm run login");
+  }
+  deepseekClient = new DeepSeekChatClient({
+    token: auth.token,
+    cookieHeader: auth.cookieHeader,
+    debug: Boolean(process.env.API_DEBUG),
+  });
+  return deepseekClient;
 }
 
 export async function handleRequest(req, res) {
@@ -108,7 +127,20 @@ async function handleChatCompletions(req, res) {
       return sendJson(res, toOpenAIResponse(modelName, result.text));
     }
     if (mapping.provider === "deepseek") {
-      return sendError(res, 501, "DeepSeek в прототипе не подключён. Сначала Qwen.");
+      const client = await getDeepSeekClient();
+      // DeepSeek: создаём сессию и отправляем completion.
+      const sessionId = await client.createSession();
+
+      if (body.stream === true) {
+        return handleDeepSeekStream(client, sessionId, prompt, modelName, mapping.model, res);
+      }
+
+      const result = await client.complete({
+        sessionId,
+        prompt,
+        modelType: mapping.model,
+      });
+      return sendJson(res, toOpenAIResponse(modelName, result.text));
     }
     return sendError(res, 500, `Unknown provider: ${mapping.provider}`);
   } catch (e) {
@@ -149,6 +181,36 @@ async function handleQwenStream(client, chatId, prompt, modelName, model, res) {
       thinking: false,
       search: false,
       model,
+      onText: (textDelta) => {
+        if (first) {
+          sendSseEvent(res, toOpenAIStreamChunk(modelName, "", true));
+          first = false;
+        }
+        sendSseEvent(res, toOpenAIStreamChunk(modelName, textDelta));
+        if (res.flush) res.flush();
+      },
+    });
+    res.write("data: [DONE]\n\n");
+    res.end();
+  } catch (e) {
+    res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
+    res.end();
+  }
+}
+
+// Обработка streaming-запроса к DeepSeek.
+async function handleDeepSeekStream(client, sessionId, prompt, modelName, model, res) {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  let first = true;
+  try {
+    await client.complete({
+      sessionId,
+      prompt,
+      modelType: model,
       onText: (textDelta) => {
         if (first) {
           sendSseEvent(res, toOpenAIStreamChunk(modelName, "", true));
