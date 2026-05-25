@@ -81,6 +81,8 @@ describe("conversationList", () => {
         workspace: "/tmp/p1",
         mode: "fast",
         provider: "deepseek",
+        model: "",
+        coderMode: false,
         updatedAt: "2026-01-01T00:00:00Z",
         messageCount: 1,
       },

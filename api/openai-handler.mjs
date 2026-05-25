@@ -108,26 +108,61 @@ async function handleChatCompletions(req, res) {
   // потом сделаем proper multi-turn через persistent sessionId + parent_id chain.
   let prompt = "";
   if (body.tools && body.tools.length > 0) {
-    // DeepSeek and Qwen often ignore soft instructions.
-    // Try to inject it as a direct command from the user for better compliance.
-    prompt += `[TOOL INSTRUCTIONS]
-You are interacting with a system that executes tool calls automatically.
-To call a tool, you must reply with a JSON array wrapped in a \`\`\`tool_calls\`\`\` markdown block.
-Example:
+    // DeepSeek-Reasoner (R1) и Qwen QwQ часто игнорируют мягкие инструкции —
+    // вставляют свои bash-команды, придуманный синтаксис, или прячут tool-вызовы
+    // в <think>. Поэтому промпт жёсткий: positive + negative few-shot,
+    // запрет <think>, явное упоминание модели если она reasoning-class.
+    const isReasoner =
+      /reason|r1|qwq|expert/i.test(String(modelName)) ||
+      mapping.model === "expert";
+    const reasonerNote = isReasoner
+      ? `
+NOTE FOR REASONING MODELS (R1 / QwQ / Reasoner):
+- Do NOT wrap the final answer in <think>…</think>. After your reasoning, your
+  final output MUST be either plain text OR a \`\`\`tool_calls\`\`\` block.
+- If the user asks you to inspect/edit/run anything in a project, you MUST
+  emit a tool_calls block. Never invent shell commands ("rtk cat ...", "kit ls ...")
+  — those tools do not exist. Use ONLY the names from the Available tools list.
+`
+      : "";
+
+    prompt += `[TOOL INSTRUCTIONS — STRICT FORMAT]
+You are connected to an automated tool-execution system. There is NO human reading
+your text in the loop. Compliance with the format below is mandatory.
+
+To call one or more tools, your ENTIRE reply must be a single markdown block:
+
+\`\`\`tool_calls
+[
+  {
+    "name": "<exact tool name from the list>",
+    "arguments": { ... arguments object ... }
+  }
+]
+\`\`\`
+
+GOOD example:
 \`\`\`tool_calls
 [
   {
     "name": "default_api:bash",
-    "arguments": {
-      "command": "python --version"
-    }
+    "arguments": { "command": "python --version" }
   }
 ]
 \`\`\`
-DO NOT output just "command: ...". You MUST use the exact JSON structure and markdown block above.
-If you need to output text to the user, you can just write normal text. If you want to use tools, write the tool block.
-IMPORTANT: Never insert conversational text (like "Now let me look...") INSIDE the JSON array. Keep JSON valid.
 
+BAD examples (WILL FAIL — DO NOT DO THIS):
+- "I will run: python --version"             ← plain text instead of tool_calls
+- "command: python --version"                ← arbitrary key/value
+- \`\`\`bash\\npython --version\\n\`\`\`           ← wrong fence language
+- a tool_calls block with non-existent tool names (e.g. "rtk", "kit", "exec")
+
+Rules:
+1. If you want to use a tool, the WHOLE message is one \`\`\`tool_calls\`\`\` block.
+2. If you just want to talk to the user, do not emit any tool_calls block.
+3. Never insert text INSIDE the JSON array. JSON must be valid.
+4. Tool "name" MUST match exactly one of the names in Available tools below.
+${reasonerNote}
 Available tools:
 ${JSON.stringify(body.tools, null, 2)}
 [END TOOL INSTRUCTIONS]\n\n---\n\n`;
@@ -197,13 +232,65 @@ ${JSON.stringify(body.tools, null, 2)}
     }
     return sendError(res, 500, `Unknown provider: ${mapping.provider}`);
   } catch (e) {
-    return sendError(res, 500, `Upstream error: ${e.message}`);
+    console.error("[API] Upstream error:", e.message);
+    return sendError(res, 500, humanizeUpstreamError(e.message));
   }
 }
 
 // Отправка SSE-события в OpenAI формате.
 function sendSseEvent(res, data) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+// Превращает сырое сообщение об ошибке от апстрима в читабельную фразу.
+// Особый случай — chat.deepseek.com отдаёт HTTP 422 с serde-сообщением
+// "unknown variant 'X' expected one of 'DEFAULT', 'default', 'expert', 'vision'".
+// Это происходит, когда в model_type ушло OpenAI-имя ("deepseek-reasoner")
+// вместо допустимого значения. Подсказываем, что обычно лечится обновлением репо.
+function humanizeUpstreamError(rawMessage) {
+  const msg = String(rawMessage || "");
+  if (msg.includes("422") && /unknown variant/i.test(msg)) {
+    const match = msg.match(/unknown variant `([^`]+)`/i);
+    const bad = match ? match[1] : "?";
+    return (
+      `Upstream rejected model_type='${bad}'. ` +
+      `This usually means api/models.mjs is out of date — ` +
+      `'deepseek-reasoner' must map to model: "expert", ` +
+      `'deepseek-chat' to model: null. ` +
+      `Run 'git pull' and restart the API server. ` +
+      `Original error: ${msg}`
+    );
+  }
+  return msg;
+}
+
+// SSE-чанк ошибки в OpenAI-совместимом формате.
+// Шлём ДВА события подряд:
+//   1) chat.completion.chunk c finish_reason="stop" и content-дельтой — клиенты
+//      вроде Continue/Cursor дочитают и закроются гладко.
+//   2) data: { error: { message, type, code } } — клиенты вроде Kilo Code
+//      смотрят именно сюда. error — ОБЪЕКТ (string ломает Zod-схему).
+// После — обязательный data: [DONE].
+function sendStreamError(res, modelName, rawMessage) {
+  const message = humanizeUpstreamError(rawMessage);
+  const ts = Math.floor(Date.now() / 1000);
+  const id = `chatcmpl-${ts}${Math.random().toString(36).slice(2, 10)}`;
+
+  const chunk = {
+    id,
+    object: "chat.completion.chunk",
+    created: ts,
+    model: modelName,
+    choices: [
+      { index: 0, delta: { content: `\n[Error] ${message}` }, finish_reason: "stop" },
+    ],
+  };
+  sendSseEvent(res, chunk);
+  sendSseEvent(res, {
+    error: { message, type: "server_error", code: "upstream_error" },
+  });
+  res.write("data: [DONE]\n\n");
+  res.end();
 }
 
 // Формирует SSE-чанк в OpenAI формате.
@@ -240,8 +327,8 @@ async function handleQwenStream(client, chatId, prompt, modelName, model, res) {
     res.write("data: [DONE]\n\n");
     res.end();
   } catch (e) {
-    res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
-    res.end();
+    console.error("[API] Qwen stream error:", e.message);
+    sendStreamError(res, modelName, e.message);
   }
 }
 
@@ -264,8 +351,8 @@ async function handleDeepSeekStream(client, sessionId, prompt, modelName, model,
     res.write("data: [DONE]\n\n");
     res.end();
   } catch (e) {
-    res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
-    res.end();
+    console.error("[API] DeepSeek stream error:", e.message);
+    sendStreamError(res, modelName, e.message);
   }
 }
 

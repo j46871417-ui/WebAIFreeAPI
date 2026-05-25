@@ -46,6 +46,55 @@ describe("parseToolCall", () => {
   it("returns null on malformed JSON", () => {
     assert.equal(parseToolCall("{tool:"), null);
   });
+
+  it("ignores ```python``` fence and finds JSON tool-call after it (Qwen case)", () => {
+    const text = [
+      "Сейчас покажу как создать файл:",
+      "```python",
+      'with open("hello.py", "w") as f:',
+      '    f.write("print(1)")',
+      "```",
+      "Теперь выполню это через write_file:",
+      '{"tool":"write_file","path":"hello.py","content":"print(1)"}',
+    ].join("\n");
+    assert.deepEqual(parseToolCall(text), {
+      tool: "write_file",
+      path: "hello.py",
+      content: "print(1)",
+    });
+  });
+
+  it("finds JSON tool-call inside ```tool_calls``` fence", () => {
+    const text = '```tool_calls\n{"tool":"read_file","path":"a.txt"}\n```';
+    assert.deepEqual(parseToolCall(text), {
+      tool: "read_file",
+      path: "a.txt",
+    });
+  });
+
+  it("finds JSON inside ```python``` fence if the python block itself contains tool JSON", () => {
+    const text = '```python\n{"tool":"finish","message":"ok"}\n```';
+    assert.deepEqual(parseToolCall(text), { tool: "finish", message: "ok" });
+  });
+
+  it("skips non-tool JSON objects and returns the one with 'tool' field", () => {
+    const text =
+      'config: {"version":1,"name":"x"} and now action {"tool":"list_files","path":"."}.';
+    assert.deepEqual(parseToolCall(text), { tool: "list_files", path: "." });
+  });
+
+  it("handles multiple fenced blocks — picks one with tool", () => {
+    const text = [
+      "```json",
+      '{"comment":"this is just metadata"}',
+      "```",
+      "и потом",
+      "```json",
+      '{"tool":"mkdir","path":"src"}',
+      "```",
+    ].join("\n");
+    assert.deepEqual(parseToolCall(text), { tool: "mkdir", path: "src" });
+  });
 });
 
 describe("extractFirstJsonObject", () => {
