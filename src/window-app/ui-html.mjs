@@ -454,14 +454,26 @@ export function renderWindowHtml() {
     fileInput.addEventListener("change", async (event) => {
       for (const file of event.target.files) {
         const ext = (file.name.split(".").pop() || "").toLowerCase();
-        const isImage = file.type.startsWith("image/")
-          || ["png","jpg","jpeg","gif","webp","bmp","svg"].includes(ext);
+        const visionImageExts = ["png", "jpg", "jpeg", "gif", "webp", "bmp"];
+        const isImage = (file.type.startsWith("image/") && file.type !== "image/svg+xml")
+          || visionImageExts.includes(ext);
+
+        if (file.type === "image/svg+xml" || ext === "svg") {
+          alert(\`SVG ("\${file.name}") не поддерживается для распознавания. Сохрани как PNG или JPG.\`);
+          continue;
+        }
 
         if (isImage) {
-          // Картинки — заливаем на DeepSeek через наш сервер. Лимит 10 МБ на файл.
+          // Картинки — заливаем на DeepSeek. Рекомендуем ≤4 МБ (большие PNG часто дают CONTENT_EMPTY).
           if (file.size > 10 * 1024 * 1024) {
             alert(\`Картинка "\${file.name}" слишком большая (\${Math.round(file.size/1024/1024)} МБ). Лимит 10 МБ.\`);
             continue;
+          }
+          if (file.size > 4 * 1024 * 1024) {
+            const ok = confirm(
+              \`"\${file.name}" — \${Math.round(file.size / 1024 / 1024)} МБ. Большие файлы часто получают CONTENT_EMPTY на DeepSeek.\\n\\nЗагрузить всё равно?\`,
+            );
+            if (!ok) continue;
           }
           try {
             const dataBase64 = await fileToBase64(file);
@@ -550,7 +562,7 @@ export function renderWindowHtml() {
 
     // Provider picker + Mode picker — оба зависят от провайдера, рендерятся динамически.
     // Provider определяет, какие модели доступны (DeepSeek: Fast/Expert/Vision;
-    // Qwen: пока default; в будущем добавим больше после реверса их API).
+    // Qwen: выбор модели в picker (см. QWEN_MODELS в config.mjs).
     const PROVIDER_PICK_KEY = "deepseek.newchat.provider";
 
     const PROVIDER_INFO = {
@@ -571,13 +583,14 @@ export function renderWindowHtml() {
         ],
         // Список моделей для picker'а. Должен совпадать с QWEN_MODELS в config.mjs.
         models: [
+          { id: "qwen3.7-max",   label: "Qwen3.7 MAX" },
           { id: "qwen3.6-plus",  label: "Qwen3.6 Plus" },
           { id: "qwen3-max",     label: "Qwen3 Max" },
           { id: "qwen2.5-plus",  label: "Qwen 2.5 Plus" },
           { id: "qwq-32b",       label: "QwQ-32B (reasoning)" },
           { id: "qwen-vl-max",   label: "Qwen-VL Max (vision)" },
         ],
-        defaultModel: "qwen3.6-plus",
+        defaultModel: "qwen3.7-max",
       },
     };
 
@@ -755,6 +768,7 @@ export function renderWindowHtml() {
                 name: img.name,
                 mimeType: img.mimeType,
                 dataBase64: img.dataBase64,
+                chatSessionId: activeConversation.sessionId,
               },
             });
             if (!result.fileId) throw new Error("Upload вернул без fileId");

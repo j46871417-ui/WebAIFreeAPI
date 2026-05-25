@@ -9,6 +9,7 @@
 
 export const MODELS = [
   // Qwen — через browser-proxy (chat.qwen.ai)
+  { name: "qwen3.7-max",    provider: "qwen",     model: "qwen3.7-max" },
   { name: "qwen3.6-plus",   provider: "qwen",     model: "qwen3.6-plus" },
   { name: "qwen3-max",      provider: "qwen",     model: "qwen3-max" },
   { name: "qwen2.5-plus",   provider: "qwen",     model: "qwen2.5-plus" },

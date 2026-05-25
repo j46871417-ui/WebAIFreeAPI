@@ -7,6 +7,56 @@ import { baseHeaders } from "./headers.mjs";
 import { solvePow } from "./pow.mjs";
 import { streamSse } from "./sse.mjs";
 
+// Экспорт для тестов и документации статусов upload/fetch_files.
+const FILE_STATUS_READY = [
+  "SUCCESS", "READY", "DONE", "COMPLETED", "FINISHED", "OK", "AVAILABLE", "SUCCEEDED",
+];
+const FILE_STATUS_PENDING = [
+  "PENDING", "PROCESSING", "UPLOADING", "RUNNING", "PARSING", "PARSE",
+  "PARSING_IMAGE", "INDEXING", "QUEUED", "WAITING", "INIT", "INITIALIZING",
+];
+
+export function isDeepSeekFileReadyStatus(status) {
+  const s = String(status || "").toUpperCase();
+  if (!s) return false;
+  if (isDeepSeekFileFailedStatus(status)) return false;
+  if (FILE_STATUS_PENDING.includes(s) || s.includes("PARS")) return false;
+  return FILE_STATUS_READY.includes(s);
+}
+
+// Терминальная ошибка — polling бессмысленен (CONTENT_EMPTY = «картинку не разобрали»).
+export function isDeepSeekFileFailedStatus(status, file = null) {
+  const s = String(status || "").toUpperCase();
+  if (!s) return false;
+  if (["FAILED", "ERROR", "REJECTED", "DELETED", "CANCELLED", "CONTENT_EMPTY"].includes(s)) {
+    return true;
+  }
+  if (s.endsWith("_EMPTY") || s.includes("AUDIT_FAIL") || s.includes("UNSAFE")) return true;
+  if (file?.error_code) return true;
+  const audit = String(file?.audit_result || "").toUpperCase();
+  if (audit && (audit.includes("FAIL") || audit.includes("REJECT") || audit.includes("BLOCK"))) {
+    return true;
+  }
+  return false;
+}
+
+export function formatDeepSeekFileFailure(file, fileId) {
+  const status = String(file?.status || "unknown");
+  const name = file?.file_name || file?.name || fileId;
+  if (status.toUpperCase() === "CONTENT_EMPTY") {
+    return (
+      `DeepSeek не смог обработать изображение «${name}» (статус CONTENT_EMPTY: пустое содержимое). ` +
+      `Частые причины: SVG/слишком большой файл/картинка без распознаваемого текста или объектов. ` +
+      `Попробуй JPG или PNG до 4 МБ, со скриншотом или фото с чётким содержимым.`
+    );
+  }
+  const extra = [
+    file?.error_code ? `error_code=${file.error_code}` : "",
+    file?.audit_result ? `audit=${file.audit_result}` : "",
+  ].filter(Boolean).join(", ");
+  return `Обработка файла «${name}» не удалась (status=${status}${extra ? `, ${extra}` : ""}).`;
+}
+
 export class DeepSeekChatClient {
   constructor({ cookieHeader, token, debug, authManager = null }) {
     this.cookieHeader = cookieHeader;
@@ -135,31 +185,34 @@ export class DeepSeekChatClient {
     return Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
   }
 
-  async complete(args) {
-    return await this._withReauth(() => this._completeOnce(args));
-  }
-
   // Загрузка файла на DeepSeek для использования в vision-режиме.
   // Endpoint и формат — реконструированы из network log'а:
   // POST /api/v0/file/upload_file с multipart/form-data, PoW обязателен,
   // возвращает file_id с префиксом "file-". Этот id потом идёт в ref_file_ids
   // массиве запроса completion.
-  async uploadFile(buffer, mimeType, filename) {
-    return await this._withReauth(() => this._uploadFileOnce(buffer, mimeType, filename));
+  async uploadFile(buffer, mimeType, filename, options = {}) {
+    return await this._withReauth(() =>
+      this._uploadFileOnce(buffer, mimeType, filename, options),
+    );
   }
 
-  async _uploadFileOnce(buffer, mimeType, filename) {
+  async _uploadFileOnce(buffer, mimeType, filename, { chatSessionId = null } = {}) {
     const path = "/api/v0/file/upload_file";
     const pow = await this.createPowHeader(path);
 
     const form = new FormData();
     const blob = new Blob([buffer], { type: mimeType || "application/octet-stream" });
     form.append("file", blob, filename || "upload.bin");
+    if (chatSessionId) {
+      form.append("chat_session_id", String(chatSessionId));
+    }
 
     const headers = baseHeaders(this.cookieHeader, this.token);
     // FormData сама проставит Content-Type с boundary — наш дефолтный убираем.
     delete headers["Content-Type"];
     headers["X-DS-PoW-Response"] = pow;
+    // Фронт DeepSeek шлёт x-file-size — без него upload может вернуть id, но ref_file_ids даст biz_code 9.
+    headers["x-file-size"] = String(buffer?.byteLength ?? buffer?.length ?? 0);
 
     const res = await fetch(`${BASE_URL}${path}`, {
       method: "POST",
@@ -198,11 +251,18 @@ export class DeepSeekChatClient {
       throw new Error(`Upload failed: HTTP ${res.status}, code ${json.code}, msg ${json.msg || ""}: ${text.slice(0, 400)}`);
     }
 
-    // file_id может лежать в нескольких местах — ищем во всех типичных.
-    const biz = json?.data?.biz_data;
+    const bizWrap = json?.data;
+    if (bizWrap?.biz_code !== undefined && bizWrap.biz_code !== 0) {
+      throw new Error(
+        `Upload rejected: biz_code ${bizWrap.biz_code}, ${bizWrap.biz_msg || ""}: ${text.slice(0, 400)}`,
+      );
+    }
+
+    // file_id в ответе DeepSeek обычно в data.biz_data.id (формат "file-<uuid>").
+    const biz = bizWrap?.biz_data;
     const candidates = [
-      biz?.file_id,
       biz?.id,
+      biz?.file_id,
       biz?.file?.id,
       biz?.file?.file_id,
       biz?.uuid,
@@ -231,23 +291,52 @@ export class DeepSeekChatClient {
       fileId = "file-" + fileId;
     }
 
-    // КРИТИЧНО: upload возвращает file_id сразу, но статус "PENDING" — файл ещё
-    // обрабатывается асинхронно. Если шлём его в completion слишком рано, получаем
-    // biz_code 9 "invalid ref file id". Ждём, пока статус сменится на READY/SUCCESS.
+    // КРИТИЧНО: даже при status SUCCESS в ответе upload файл может быть ещё не готов
+    // для ref_file_ids → biz_code 9 "invalid ref file id". Всегда ждём через fetch_files.
     const initialStatus = biz?.status;
-    if (initialStatus === "PENDING") {
-      console.log(`[upload] file ${fileId} is PENDING — waiting for DeepSeek to process...`);
-      const finalStatus = await this.waitForFileReady(fileId);
-      console.log(`[upload] file ${fileId} ready (status=${finalStatus})`);
-    }
+    console.log(
+      `[upload] file ${fileId} uploaded (initial status=${initialStatus ?? "unknown"}), waiting until ready...`,
+    );
+    const finalStatus = await this.waitForFileReady(fileId);
+    console.log(`[upload] file ${fileId} ready (status=${finalStatus})`);
 
     return fileId;
   }
 
-  // Polling статуса файла после upload. DeepSeek обрабатывает картинки 1-3 сек.
-  // Делаем GET /api/v0/file/fetch_files?file_ids=<id>, ждём пока status уйдёт из PENDING.
-  // Возвращает финальный статус (для логирования наверх).
-  async waitForFileReady(fileId, { timeoutMs = 60000, intervalMs = 600 } = {}) {
+  // Найти запись файла в ответе fetch_files по id (с учётом/без префикса "file-").
+  _findFileInBizData(biz, fileId) {
+    if (!biz) return null;
+    const list = [];
+    if (Array.isArray(biz)) list.push(...biz);
+    else if (Array.isArray(biz.files)) list.push(...biz.files);
+    else list.push(biz);
+
+    const target = String(fileId);
+    const variants = new Set([
+      target,
+      target.startsWith("file-") ? target.slice(5) : `file-${target}`,
+    ]);
+
+    for (const item of list) {
+      const ids = [item?.id, item?.file_id].filter(Boolean).map(String);
+      if (ids.some((id) => variants.has(id) || variants.has(`file-${id}`) || id === target)) {
+        return item;
+      }
+    }
+    return list[0] || null;
+  }
+
+  _isFileReadyStatus(status) {
+    return isDeepSeekFileReadyStatus(status);
+  }
+
+  static _isInvalidRefFileError(error) {
+    const msg = String(error?.message || "");
+    return /biz_code\s*9/i.test(msg) || /invalid ref file id/i.test(msg);
+  }
+
+  // Polling статуса файла после upload. Картинки 3–15+ сек (PENDING → PARSING → SUCCESS).
+  async waitForFileReady(fileId, { timeoutMs = 120000, intervalMs = 800, settleMs = 1200 } = {}) {
     const deadline = Date.now() + timeoutMs;
     let lastStatus = null;
     let attempt = 0;
@@ -267,30 +356,70 @@ export class DeepSeekChatClient {
       // Структура ответа: data.biz_data может быть массивом, объектом с files,
       // или одиночным объектом — пробуем все варианты.
       const biz = json?.data?.biz_data;
-      let file = null;
-      if (Array.isArray(biz)) file = biz[0];
-      else if (biz?.files && Array.isArray(biz.files)) file = biz.files[0];
-      else if (biz?.id) file = biz;
-
+      const file = this._findFileInBizData(biz, fileId);
       const status = file?.status;
       lastStatus = status;
-      if (this.debug) {
-        console.error(`[upload] poll #${attempt} ${fileId}: status=${status} audit=${file?.audit_result}`);
+      const audit = file?.audit_result;
+      const errCode = file?.error_code;
+      console.log(
+        `[upload] poll #${attempt} ${fileId}: status=${status ?? "?"}`
+          + (audit != null ? ` audit=${audit}` : "")
+          + (errCode != null ? ` error_code=${errCode}` : ""),
+      );
+
+      if (isDeepSeekFileFailedStatus(status, file)) {
+        throw new Error(formatDeepSeekFileFailure(file, fileId));
       }
 
-      if (status && status !== "PENDING") {
-        if (status === "FAILED" || status === "ERROR" || file?.error_code) {
-          throw new Error(
-            `File processing failed: status=${status}, error_code=${file?.error_code}, audit=${file?.audit_result}`,
-          );
+      if (this._isFileReadyStatus(status)) {
+        if (settleMs > 0) {
+          console.log(`[upload] status=${status}, settle ${settleMs}ms before ref_file_ids…`);
+          await new Promise((resolve) => setTimeout(resolve, settleMs));
         }
-        // SUCCESS / READY / DONE / etc — годится.
         return status;
       }
 
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
-    throw new Error(`File ${fileId} still ${lastStatus || "PENDING"} after ${timeoutMs}ms (timeout)`);
+    if (isDeepSeekFileFailedStatus(lastStatus)) {
+      throw new Error(formatDeepSeekFileFailure({ status: lastStatus }, fileId));
+    }
+    throw new Error(
+      `Файл ${fileId} не стал готов за ${Math.round(timeoutMs / 1000)} с (последний status=${lastStatus || "unknown"}). ` +
+        `Если status завис на PARSING — подожди и повтори; если CONTENT_EMPTY — смени изображение.`,
+    );
+  }
+
+  // Completion с ref_file_ids: при biz_code 9 повторно ждём готовность файлов и ретраим.
+  async complete(args) {
+    const refFileIds = Array.isArray(args?.refFileIds) ? args.refFileIds.filter(Boolean) : [];
+    if (!refFileIds.length) {
+      return await this._withReauth(() => this._completeOnce(args));
+    }
+    return await this._withReauth(() => this._completeOnceWithRefRetry(args, refFileIds));
+  }
+
+  async _completeOnceWithRefRetry(args, refFileIds, { maxAttempts = 4 } = {}) {
+    let lastError;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      if (attempt > 1) {
+        console.log(`[upload] ref_file retry ${attempt}/${maxAttempts} — re-check file readiness…`);
+        for (const fileId of refFileIds) {
+          await this.waitForFileReady(fileId, { timeoutMs: 120000, intervalMs: 800, settleMs: 1500 });
+        }
+      }
+      try {
+        return await this._completeOnce(args);
+      } catch (error) {
+        lastError = error;
+        if (!DeepSeekChatClient._isInvalidRefFileError(error) || attempt >= maxAttempts) {
+          throw error;
+        }
+        console.log(`[upload] completion got invalid ref_file_id, will retry after wait…`);
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+    throw lastError;
   }
 
 async _completeOnce({
@@ -345,8 +474,23 @@ async _completeOnce({
           err.isAuthError = true;
           throw err;
         }
+        const bizCode = parsed?.data?.biz_code;
+        const bizMsg = parsed?.data?.biz_msg || "";
+        if (bizCode === 9 || /invalid ref file id/i.test(bizMsg)) {
+          throw new Error(
+            `Изображение ещё не готово для распознавания (biz_code 9: invalid ref file id). ` +
+              `Подожди несколько секунд и отправь сообщение снова, или прикрепи картинку заново. ` +
+              `ref_files=${JSON.stringify(refFileIds)}`,
+          );
+        }
+        if (bizCode !== undefined && bizCode !== 0) {
+          throw new Error(`Completion rejected: biz_code ${bizCode}, ${bizMsg}: ${text.slice(0, 500)}`);
+        }
       } catch (parseError) {
         if (parseError?.isAuthError) throw parseError;
+        if (parseError?.message?.includes("biz_code") || parseError?.message?.includes("ref file")) {
+          throw parseError;
+        }
       }
       throw new Error(`Completion failed: HTTP ${res.status}: ${text.slice(0, 1000)}`);
     }

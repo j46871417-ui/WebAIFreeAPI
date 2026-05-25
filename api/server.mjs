@@ -12,12 +12,12 @@
 //
 //   curl http://127.0.0.1:4318/v1/chat/completions \
 //     -H 'Content-Type: application/json' \
-//     -d '{"model":"qwen3.6-plus","messages":[{"role":"user","content":"привет"}]}' | jq
+//     -d '{"model":"qwen3.7-max","messages":[{"role":"user","content":"привет"}]}' | jq
 //
 // Тест из Continue.dev / Cursor:
 //   baseURL: http://127.0.0.1:4318/v1
 //   apiKey:  anything (не проверяется в прототипе)
-//   model:   qwen3.6-plus  (или любая из /v1/models)
+//   model:   qwen3.7-max  (или любая из /v1/models)
 
 import http from "node:http";
 import { handleRequest } from "./openai-handler.mjs";

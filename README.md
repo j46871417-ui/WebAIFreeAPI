@@ -275,6 +275,10 @@ npm run save-creds
 
 **Сессия истекла, окно re-login не открывается** → `npm run login` (DeepSeek) или `npm run login-qwen` (Qwen).
 
+**Распознавание картинок (vision): `invalid ref file id` (biz_code 9)** → completion раньше, чем файл стал SUCCESS. В логах нужно `ready (status=SUCCESS)`, не `PARSING`.
+
+**`CONTENT_EMPTY` после upload** → DeepSeek **не смог разобрать** картинку (не «долго грузится»). Сразу ошибка с подсказкой. Что попробовать: JPG/PNG (не SVG), до ~4 МБ, чёткий скриншот/фото с текстом. Большие PNG (~1.5 МБ) иногда дают CONTENT_EMPTY — сожми или пересохрани в JPEG.
+
 ### Qwen
 
 | Симптом | Что делать |
@@ -320,7 +324,7 @@ node api/server.mjs
 |-----------------|-----------|
 | `deepseek-chat` | DeepSeek, обычный чат |
 | `deepseek-reasoner` | DeepSeek R1 (reasoner) |
-| `qwen3.6-plus`, `qwen3-max`, … | Qwen |
+| `qwen3.7-max` (дефолт), `qwen3.6-plus`, `qwen3-max`, … | Qwen |
 
 **Важно:** в настройках Kilo указывай именно эти id — не подставляй `deepseek-reasoner` вручную в другие поля. Сервер сам маппит `deepseek-reasoner` → `model_type: expert` у DeepSeek.
 

@@ -135,11 +135,29 @@ export async function runWindowApp({ client, workspaceRoot, port, modelType, thi
           return sendJson(res, { error: "Поля name + dataBase64 обязательны." }, 400);
         }
         try {
+          const mime = String(body.mimeType || "application/octet-stream").toLowerCase();
+          if (mime === "image/svg+xml" || mime.includes("svg")) {
+            return sendJson(
+              res,
+              { error: "SVG не поддерживается для распознавания. Используй PNG или JPG." },
+              400,
+            );
+          }
+          const allowedVisionMime = /^image\/(jpeg|jpg|png|gif|webp|bmp)$/;
+          if (!allowedVisionMime.test(mime)) {
+            return sendJson(
+              res,
+              { error: `Формат ${mime} не поддерживается. Нужен PNG, JPEG, GIF или WebP.` },
+              400,
+            );
+          }
           const buffer = Buffer.from(body.dataBase64, "base64");
+          const chatSessionId = body.chatSessionId || body.sessionId || null;
           const fileId = await client.uploadFile(
             buffer,
             String(body.mimeType || "application/octet-stream"),
             String(body.name),
+            { chatSessionId },
           );
           console.log(`[upload] ${body.name} (${buffer.length}b) -> file_id=${fileId}`);
           return sendJson(res, { fileId });
@@ -546,13 +564,21 @@ export async function runWindowApp({ client, workspaceRoot, port, modelType, thi
         // thinking: в Expert по умолчанию true, юзер может перебить тумблером в обе стороны.
         // search: чистый юзер-флаг, без переопределения от режима.
         const useThinking = effectiveThinkingForMode(messageMode, body.thinking, thinkingEnabled);
-        const useSearch = body.search === true || (body.search !== false && searchEnabled);
-        const effectiveModelType = mapModeToModelType(messageMode, modelType);
+        let useSearch = body.search === true || (body.search !== false && searchEnabled);
         // file_id'ы загруженных картинок для vision-режима. Фронт сначала зальёт
         // файлы через /api/upload, потом шлёт их id здесь.
         const refFileIds = Array.isArray(body.refFileIds)
           ? body.refFileIds.filter((id) => typeof id === "string" && id.length > 0)
           : [];
+        let effectiveModelType = mapModeToModelType(messageMode, modelType);
+        // С картинками и режимом «Распознание» — явный model_type vision, если не задан в .env.
+        if (refFileIds.length > 0 && messageMode === "vision" && effectiveModelType == null) {
+          effectiveModelType = process.env.DEEPSEEK_MODEL_VISION ?? "vision";
+        }
+        // С картинками поиск обычно ломает vision-completion (ref_file_ids).
+        if (refFileIds.length > 0) {
+          useSearch = false;
+        }
 
         const now = new Date().toISOString();
         const isFirstUserMessage = !conversation.messages.some((message) => message.role === "user");
