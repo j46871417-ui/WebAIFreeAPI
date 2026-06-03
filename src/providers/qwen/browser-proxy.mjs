@@ -72,6 +72,23 @@ async function createProxy({ debug }) {
   });
 
   const page = context.pages()[0] || (await context.newPage());
+  const recentRequestFailures = [];
+
+  page.on("requestfailed", (request) => {
+    const requestUrl = request.url();
+    if (!requestUrl.startsWith(QWEN_BASE_URL)) return;
+    const failure = request.failure();
+    recentRequestFailures.push({
+      url: requestUrl,
+      method: request.method(),
+      errorText: failure?.errorText || "unknown",
+      ts: Date.now(),
+    });
+    if (recentRequestFailures.length > 20) recentRequestFailures.shift();
+    if (debug) {
+      console.log(`[qwen-proxy:requestfailed] ${request.method()} ${requestUrl}: ${failure?.errorText || "unknown"}`);
+    }
+  });
 
   // auth.json может быть свежее профиля (import-qwen, silent refresh). Подмешиваем куки до goto.
   const savedAuth = readQwenAuth(QWEN_AUTH_FILE);
@@ -111,8 +128,8 @@ async function createProxy({ debug }) {
   }
 
   await page.goto(QWEN_BASE_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
-  // Даём JS-бандлу проинициализировать перехватчик fetch (≈1–2 сек).
-  await page.waitForTimeout(2000);
+  // Даём JS-бандлу проинициализировать перехватчик fetch / bx-ua (на слабых сетях 1-2 сек мало).
+  await page.waitForTimeout(3000);
 
   if (debug) console.log("[qwen-proxy] ready");
 
@@ -137,9 +154,17 @@ async function createProxy({ debug }) {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
-    // Подождём, пока SPA доделает свою регистрацию (WebSocket handshake и т.п.).
-    await page.waitForTimeout(1500);
+    // Подождём, пока SPA доделает свою регистрацию и поднимет антибот-перехватчики.
+    await page.waitForTimeout(3000);
     currentChatId = chatId;
+  }
+
+  function latestFailureFor(requestUrl) {
+    for (let i = recentRequestFailures.length - 1; i >= 0; i -= 1) {
+      const item = recentRequestFailures[i];
+      if (item.url === requestUrl) return item;
+    }
+    return null;
   }
 
   return {
@@ -147,29 +172,54 @@ async function createProxy({ debug }) {
     // переходим на /c/<chatId>, чтобы чат был зарегистрирован SPA-роутером.
     // Возвращает { ok, status, contentType, text } — Node парсит text сам.
     async proxyFetch({ url, body, chatId }) {
-      if (chatId) await ensureChatPage(chatId);
-      const result = await page.evaluate(
-        async ({ url, body }) => {
-          try {
-            const res = await fetch(url, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Accept: "application/json" },
-              body,
-              credentials: "include",
-            });
-            const text = await res.text();
-            return {
-              ok: res.ok,
-              status: res.status,
-              contentType: res.headers.get("content-type") || "",
-              text,
-            };
-          } catch (e) {
-            return { ok: false, status: 0, contentType: "", text: `__fetch_error__: ${e.message}` };
-          }
-        },
-        { url, body },
-      );
+      let result = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        if (chatId) await ensureChatPage(chatId);
+        result = await page.evaluate(
+          async ({ url, body }) => {
+            const requestUrl = new URL(url);
+            const sameOrigin = requestUrl.origin === window.location.origin;
+            const fetchUrl = sameOrigin ? `${requestUrl.pathname}${requestUrl.search}` : url;
+            try {
+              const res = await fetch(fetchUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
+                body,
+                credentials: "include",
+              });
+              const text = await res.text();
+              return {
+                ok: res.ok,
+                status: res.status,
+                contentType: res.headers.get("content-type") || "",
+                text,
+              };
+            } catch (e) {
+              return {
+                ok: false,
+                status: 0,
+                contentType: "",
+                text:
+                  `__fetch_error__: ${e.name || "Error"}: ${e.message}\n` +
+                  `page=${window.location.href}\n` +
+                  `request=${fetchUrl}`,
+              };
+            }
+          },
+          { url, body },
+        );
+        if (result.status !== 0 || attempt === 1) break;
+        if (debug) console.log("[qwen-proxy] fetch failed before HTTP response; reloading page and retrying once");
+        currentChatId = null;
+        await page.goto(QWEN_BASE_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
+        await page.waitForTimeout(3000);
+      }
+      if (result.status === 0) {
+        const failure = latestFailureFor(url);
+        if (failure) {
+          result.text += `\nnetwork=${failure.errorText}\nnetworkMethod=${failure.method}`;
+        }
+      }
       return result;
     },
     async close() { await close(); },
