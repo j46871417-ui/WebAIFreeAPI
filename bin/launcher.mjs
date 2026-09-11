@@ -3,9 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import readline from "node:readline";
+import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
-const APP_DIR = "C:\\ai-free";
+const APP_DIR = process.env.AI_FREE_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENTRY_FILE = path.join(APP_DIR, "bin", "deepseek.mjs");
 const NODE_EXE = path.join(APP_DIR, "node", "node.exe");
 

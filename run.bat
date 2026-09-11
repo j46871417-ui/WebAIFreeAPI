@@ -1,4 +1,5 @@
 @echo off
 chcp 65001 >nul
-powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File "C:\ai-free\scripts\tray.ps1"
+cd /d "%~dp0"
+powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0scripts\tray.ps1"
 

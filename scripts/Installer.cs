@@ -6,6 +6,7 @@ using System.Windows.Forms;
 using System.Drawing;
 using System.Diagnostics;
 using System.Threading;
+using System.Security.Principal;
 
 namespace AiFreeInstaller
 {
@@ -16,7 +17,41 @@ namespace AiFreeInstaller
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
+            if (!IsAdministrator())
+            {
+                ProcessStartInfo psi = new ProcessStartInfo()
+                {
+                    FileName = Application.ExecutablePath,
+                    UseShellExecute = true,
+                    Verb = "runas"
+                };
+                try
+                {
+                    Process.Start(psi);
+                }
+                catch
+                {
+                    MessageBox.Show("Для установки в папку Program Files требуются права администратора.", "AI Free Setup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                return;
+            }
+
             Application.Run(new InstallerForm());
+        }
+
+        private static bool IsAdministrator()
+        {
+            try
+            {
+                WindowsIdentity identity = WindowsIdentity.GetCurrent();
+                WindowsPrincipal principal = new WindowsPrincipal(identity);
+                return principal.IsInRole(WindowsBuiltInRole.Administrator);
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 
@@ -26,10 +61,12 @@ namespace AiFreeInstaller
         private Label statusLabel;
         private Label titleLabel;
         private Button actionButton;
-        private string targetDir = @"C:\ai-free";
+        private string targetDir;
 
         public InstallerForm()
         {
+            targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "AI-Free");
+
             this.Text = "Установка AI Free";
             this.Size = new Size(520, 250);
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -41,7 +78,7 @@ namespace AiFreeInstaller
             } catch {}
 
             titleLabel = new Label() {
-                Text = "Установка AI Free в C:\\ai-free",
+                Text = "Установка AI Free в Program Files",
                 Font = new Font("Segoe UI", 12, FontStyle.Bold),
                 Location = new Point(25, 20),
                 AutoSize = true
@@ -100,7 +137,8 @@ namespace AiFreeInstaller
                 actionButton.Text = "Запустить";
                 actionButton.Click += (s, e) => {
                     try {
-                        Process.Start("wscript.exe", string.Format("\"{0}\\run-silent.vbs\"", targetDir));
+                        string vbsPath = Path.Combine(targetDir, "run-silent.vbs");
+                        Process.Start("wscript.exe", "\"" + vbsPath + "\"");
                     } catch {}
                     this.Close();
                 };
@@ -118,7 +156,7 @@ namespace AiFreeInstaller
                     Directory.CreateDirectory(targetDir);
                 }
 
-                SetStatus("Распаковка файлов приложения в " + targetDir + " (это займет 5-10 сек)...");
+                SetStatus("Распаковка файлов приложения в " + targetDir + "...");
                 Assembly asm = Assembly.GetExecutingAssembly();
                 using (Stream stream = asm.GetManifestResourceStream("ai-free.zip"))
                 {
@@ -133,11 +171,8 @@ namespace AiFreeInstaller
 
                     using (ZipArchive archive = ZipFile.OpenRead(tempZip))
                     {
-                        int total = archive.Entries.Count;
-                        int current = 0;
                         foreach (ZipArchiveEntry entry in archive.Entries)
                         {
-                            current++;
                             string destPath = Path.Combine(targetDir, entry.FullName);
                             if (string.IsNullOrEmpty(entry.Name))
                             {
@@ -161,7 +196,7 @@ namespace AiFreeInstaller
                 SetStatus("Настройка конфигурации OpenCode Desktop...");
                 RunSetupScript();
 
-                Finish(true, "Установка успешно завершена! Ярлыки созданы на Рабочем столе.");
+                Finish(true, "Установка успешно завершена в Program Files! Ярлыки созданы на Рабочем столе.");
             }
             catch (Exception ex)
             {
@@ -178,7 +213,7 @@ namespace AiFreeInstaller
                 ProcessStartInfo psi = new ProcessStartInfo()
                 {
                     FileName = nodeExe,
-                    Arguments = string.Format("\"{0}\"", shortcutScript),
+                    Arguments = string.Format("\"{0}\" \"{1}\"", shortcutScript, targetDir),
                     WorkingDirectory = targetDir,
                     WindowStyle = ProcessWindowStyle.Hidden,
                     CreateNoWindow = true,
@@ -198,7 +233,7 @@ namespace AiFreeInstaller
                 ProcessStartInfo psi = new ProcessStartInfo()
                 {
                     FileName = nodeExe,
-                    Arguments = string.Format("\"{0}\"", setupScript),
+                    Arguments = string.Format("\"{0}\" \"{1}\"", setupScript, targetDir),
                     WorkingDirectory = targetDir,
                     WindowStyle = ProcessWindowStyle.Hidden,
                     CreateNoWindow = true,
