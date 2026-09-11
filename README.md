@@ -4,6 +4,11 @@
   <strong>Локальный AI-клиент для DeepSeek, Qwen и ChatGPT с API, автономными кодовыми агентами (OpenCode / CLI), памятью и поиском</strong>
 </p>
 
+<p align="center">
+  <a href="https://github.com/j46871417-ui/ai-free/releases/latest/download/AI-Free-Setup.exe"><img src="https://img.shields.io/badge/Скачать_AI--Free--Setup.exe-2ea44f?style=for-the-badge&logo=windows&logoColor=white" alt="Скачать AI-Free-Setup.exe"></a>
+  <a href="https://github.com/j46871417-ui/ai-free/releases"><img src="https://img.shields.io/github/v/release/j46871417-ui/ai-free?style=for-the-badge&label=Релиз" alt="Релизы"></a>
+</p>
+
 AI Free превращает бесплатные веб-чаты AI в полноценный локальный инструмент разработчика.
 
 Используй **DeepSeek**, **Qwen** и **ChatGPT** через единое графическое окно, фоновый сервис, OpenAI-совместимый API, расширение VS Code, а также в роли агента в **OpenCode Desktop** и других средах разработки.
@@ -23,7 +28,7 @@ AI Free превращает бесплатные веб-чаты AI в полн
 ## 🚀 Быстрый старт на Windows
 
 ### Способ 1 — Готовый установщик (AI-Free-Setup.exe)
-1. Скачай **`AI-Free-Setup.exe`** (из вкладки [Releases](https://github.com/j46871417-ui/ai-free/releases)).
+1. Скачай **[AI-Free-Setup.exe](https://github.com/j46871417-ui/ai-free/releases/latest/download/AI-Free-Setup.exe)** (или выбери версию в [Releases](https://github.com/j46871417-ui/ai-free/releases)).
 2. Запусти установщик — он автоматически:
    - Распакует приложение в `C:\ai-free`;
    - Скачает необходимый Chromium для Playwright;
