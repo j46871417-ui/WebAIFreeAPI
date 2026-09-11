@@ -1,0 +1,26 @@
+.git/**
+.github/**
+.idea/**
+.vscode/**
+node_modules/.cache/**
+*.vsix
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Internal development and verification files are not shipped to clients.
+test/
+**/test/**
+**/tests/**
+**/__tests__/**
+**/*.test.*
+**/*.spec.*
+coverage/
+docs/**
+scripts/**
+AGENTS.md
+CLAUDE.md
+CONTINUATION.md
+HANDOFF.md
+.repro-snapshot.tar.gz
