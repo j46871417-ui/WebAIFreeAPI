@@ -34,7 +34,7 @@ function showMenu() {
   console.log(`${C.cyan}${C.bold}              AI Free - Главное Меню                  ${C.reset}`);
   console.log(`${C.cyan}${C.bold}======================================================${C.reset}`);
   console.log(`\n${C.bold}Основные действия:${C.reset}`);
-  console.log(`  ${C.green}1${C.reset} - Запустить веб-интерфейс AI Free (окно в браузере)`);
+  console.log(`  ${C.green}1${C.reset} - Запустить AI Free (с поддержкой трея и фоновым сервером)`);
   console.log(`  ${C.green}2${C.reset} - Запустить фоновый сервер API (для OpenCode / Cursor)`);
   console.log(`\n${C.bold}Авторизация аккаунтов (откроется окно браузера):${C.reset}`);
   console.log(`  ${C.yellow}3${C.reset} - Войти в DeepSeek (chat.deepseek.com)`);
@@ -56,7 +56,7 @@ function showMenu() {
 function handleChoice(choice) {
   switch (choice) {
     case "1":
-      runCommand(["--window"]);
+      runPowershell("scripts/tray.ps1");
       break;
     case "2":
       runCommand(["--no-window"]);
@@ -90,6 +90,15 @@ function handleChoice(choice) {
       setTimeout(showMenu, 1200);
       break;
   }
+}
+
+function runPowershell(relScript) {
+  const scriptPath = path.join(APP_DIR, relScript);
+  console.log(`\n${C.cyan}▶ Запуск в системном трее: ${relScript}...${C.reset}\n`);
+  const child = spawn("cmd.exe", ["/c", "powershell", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", scriptPath], { cwd: APP_DIR, detached: true, stdio: "ignore" });
+  child.unref();
+  console.log(`${C.green}✔ Приложение запущено и свернуто в системный трей возле часов.${C.reset}`);
+  promptReturn();
 }
 
 function runScript(relScript) {
