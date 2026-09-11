@@ -32,7 +32,7 @@ namespace AiFreeInstaller
                 }
                 catch
                 {
-                    MessageBox.Show("Для установки в папку Program Files требуются права администратора.", "AI Free Setup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show("Для установки программы требуются права администратора.", "AI Free Setup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
                 return;
             }
@@ -57,10 +57,17 @@ namespace AiFreeInstaller
 
     public class InstallerForm : Form
     {
+        private Label titleLabel;
+        private Label pathLabel;
+        private TextBox pathTextBox;
+        private Button browseButton;
         private ProgressBar progressBar;
         private Label statusLabel;
-        private Label titleLabel;
+        private CheckBox launchCheckBox;
         private Button actionButton;
+        private Button cancelButton;
+
+        private bool isInstalled = false;
         private string targetDir;
 
         public InstallerForm()
@@ -68,7 +75,7 @@ namespace AiFreeInstaller
             targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "AI-Free");
 
             this.Text = "Установка AI Free";
-            this.Size = new Size(520, 250);
+            this.Size = new Size(550, 315);
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -78,41 +85,139 @@ namespace AiFreeInstaller
             } catch {}
 
             titleLabel = new Label() {
-                Text = "Установка AI Free в Program Files",
+                Text = "Мастер установки AI Free",
                 Font = new Font("Segoe UI", 12, FontStyle.Bold),
-                Location = new Point(25, 20),
+                Location = new Point(25, 16),
                 AutoSize = true
             };
             this.Controls.Add(titleLabel);
 
-            statusLabel = new Label() {
-                Text = "Подготовка к установке...",
+            pathLabel = new Label() {
+                Text = "Папка установки:",
                 Font = new Font("Segoe UI", 9),
-                Location = new Point(25, 60),
-                Size = new Size(455, 35)
+                Location = new Point(25, 52),
+                AutoSize = true
             };
-            this.Controls.Add(statusLabel);
+            this.Controls.Add(pathLabel);
+
+            pathTextBox = new TextBox() {
+                Text = targetDir,
+                Font = new Font("Segoe UI", 9),
+                Location = new Point(25, 75),
+                Size = new Size(390, 24)
+            };
+            this.Controls.Add(pathTextBox);
+
+            browseButton = new Button() {
+                Text = "Обзор...",
+                Font = new Font("Segoe UI", 9),
+                Location = new Point(423, 73),
+                Size = new Size(88, 28)
+            };
+            browseButton.Click += OnBrowseClick;
+            this.Controls.Add(browseButton);
 
             progressBar = new ProgressBar() {
-                Location = new Point(25, 105),
-                Size = new Size(455, 24),
-                Style = ProgressBarStyle.Marquee,
-                MarqueeAnimationSpeed = 25
+                Location = new Point(25, 115),
+                Size = new Size(486, 22),
+                Style = ProgressBarStyle.Continuous,
+                Value = 0
             };
             this.Controls.Add(progressBar);
 
-            actionButton = new Button() {
-                Text = "Отмена",
-                Location = new Point(380, 155),
-                Size = new Size(100, 32),
-                Font = new Font("Segoe UI", 9)
+            statusLabel = new Label() {
+                Text = "Выберите папку и нажмите «Установить».",
+                Font = new Font("Segoe UI", 9),
+                Location = new Point(25, 145),
+                Size = new Size(486, 32)
             };
-            actionButton.Click += (s, e) => this.Close();
-            this.Controls.Add(actionButton);
+            this.Controls.Add(statusLabel);
 
-            this.Shown += (s, e) => {
-                ThreadPool.QueueUserWorkItem(DoInstall);
+            launchCheckBox = new CheckBox() {
+                Text = "Запустить AI Free сейчас",
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Location = new Point(26, 185),
+                Size = new Size(300, 24),
+                Checked = true,
+                Visible = false
             };
+            this.Controls.Add(launchCheckBox);
+
+            cancelButton = new Button() {
+                Text = "Отмена",
+                Font = new Font("Segoe UI", 9),
+                Location = new Point(300, 225),
+                Size = new Size(100, 32)
+            };
+            cancelButton.Click += (s, e) => this.Close();
+            this.Controls.Add(cancelButton);
+
+            actionButton = new Button() {
+                Text = "Установить",
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Location = new Point(411, 225),
+                Size = new Size(100, 32)
+            };
+            actionButton.Click += OnActionClick;
+            this.Controls.Add(actionButton);
+        }
+
+        private void OnBrowseClick(object sender, EventArgs e)
+        {
+            using (FolderBrowserDialog fbd = new FolderBrowserDialog())
+            {
+                fbd.Description = "Выберите папку для установки AI Free:";
+                fbd.SelectedPath = pathTextBox.Text;
+                fbd.ShowNewFolderButton = true;
+                if (fbd.ShowDialog() == DialogResult.OK)
+                {
+                    string selected = fbd.SelectedPath;
+                    if (!selected.EndsWith("AI-Free", StringComparison.OrdinalIgnoreCase))
+                    {
+                        selected = Path.Combine(selected, "AI-Free");
+                    }
+                    pathTextBox.Text = selected;
+                }
+            }
+        }
+
+        private void OnActionClick(object sender, EventArgs e)
+        {
+            if (isInstalled)
+            {
+                // Закрытие формы с учетом чекбокса
+                if (launchCheckBox.Checked)
+                {
+                    try
+                    {
+                        string vbsPath = Path.Combine(targetDir, "run-silent.vbs");
+                        Process.Start("wscript.exe", "\"" + vbsPath + "\"");
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Не удалось запустить: " + ex.Message, "AI Free");
+                    }
+                }
+                this.Close();
+                return;
+            }
+
+            targetDir = pathTextBox.Text.Trim();
+            if (string.IsNullOrEmpty(targetDir))
+            {
+                MessageBox.Show("Укажите папку для установки.", "AI Free Setup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // Блокируем настройки и начинаем установку
+            pathTextBox.Enabled = false;
+            browseButton.Enabled = false;
+            actionButton.Enabled = false;
+            cancelButton.Enabled = false;
+            progressBar.Style = ProgressBarStyle.Marquee;
+            progressBar.MarqueeAnimationSpeed = 25;
+
+            ThreadPool.QueueUserWorkItem(DoInstall);
         }
 
         private void SetStatus(string text)
@@ -133,17 +238,21 @@ namespace AiFreeInstaller
             progressBar.Style = ProgressBarStyle.Continuous;
             progressBar.Value = success ? 100 : 0;
             statusLabel.Text = msg;
-            if (success) {
-                actionButton.Text = "Запустить";
-                actionButton.Click += (s, e) => {
-                    try {
-                        string vbsPath = Path.Combine(targetDir, "run-silent.vbs");
-                        Process.Start("wscript.exe", "\"" + vbsPath + "\"");
-                    } catch {}
-                    this.Close();
-                };
-            } else {
+
+            if (success)
+            {
+                isInstalled = true;
+                launchCheckBox.Visible = true;
+                cancelButton.Visible = false;
                 actionButton.Text = "Закрыть";
+                actionButton.Enabled = true;
+                actionButton.Focus();
+            }
+            else
+            {
+                cancelButton.Text = "Закрыть";
+                cancelButton.Enabled = true;
+                actionButton.Visible = false;
             }
         }
 
@@ -196,11 +305,11 @@ namespace AiFreeInstaller
                 SetStatus("Настройка конфигурации OpenCode Desktop...");
                 RunSetupScript();
 
-                Finish(true, "Установка успешно завершена в Program Files! Ярлыки созданы на Рабочем столе.");
+                Finish(true, "Установка успешно завершена! Ярлыки созданы на Рабочем столе.");
             }
             catch (Exception ex)
             {
-                Finish(false, "Ошибка: " + ex.Message);
+                Finish(false, "Ошибка установки: " + ex.Message);
             }
         }
 
