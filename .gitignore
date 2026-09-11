@@ -1,6 +1,9 @@
 node_modules/
 node/
 plugin-for-vscode/packages/
+dist/
+*.7z
+*.exe
 .env
 .DS_Store
 .deepseek-cli/
