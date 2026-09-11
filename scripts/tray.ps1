@@ -2,15 +2,18 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$appDir = "C:\ai-free"
+$appDir = Split-Path -Parent $PSScriptRoot
+if (-not (Test-Path (Join-Path $appDir "bin\deepseek.mjs"))) {
+    $appDir = Join-Path $env:ProgramFiles "AI-Free"
+}
 Set-Location $appDir
 
-$nodeExe = "C:\ai-free\node\node.exe"
+$nodeExe = Join-Path $appDir "node\node.exe"
 if (-not (Test-Path $nodeExe)) {
     $nodeExe = "node"
 }
-$entryScript = "C:\ai-free\bin\deepseek.mjs"
-$iconPath = "C:\ai-free\ai-free.ico"
+$entryScript = Join-Path $appDir "bin\deepseek.mjs"
+$iconPath = Join-Path $appDir "ai-free.ico"
 $url = "http://127.0.0.1:4317"
 
 $script:serverProcess = $null

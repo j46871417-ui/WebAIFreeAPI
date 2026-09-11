@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 
 const homedir = os.homedir();
@@ -9,7 +10,7 @@ const desktopDirs = [
   path.join(homedir, "OneDrive", "Desktop"),
 ].filter((dir) => fs.existsSync(dir));
 
-const targetDir = "C:\\ai-free";
+const targetDir = process.argv[2] || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const iconFile = path.join(targetDir, "ai-free.ico");
 
 const shortcuts = [
