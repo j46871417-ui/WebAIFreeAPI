@@ -57,8 +57,9 @@ const excludes = [
 const cmdZip = `"${sevenZipExe}" a -tzip -mx=5 "${archiveZip}" ${itemsToInclude.map(i => `"${path.join(rootDir, i)}"`).join(" ")} ${excludes.join(" ")}`;
 execSync(cmdZip, { cwd: rootDir, stdio: "inherit" });
 
-console.log("2. Compiling native Windows GUI installer with csc.exe...");
-const cmdCsc = `"${cscExe}" /target:winexe /out:"${outputExe}" /win32icon:"${iconFile}" /resource:"${archiveZip}",ai-free.zip /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll "${csFile}"`;
+const manifestFile = path.join(rootDir, "scripts", "app.manifest");
+console.log("2. Compiling native Windows GUI installer with csc.exe (with UAC manifest)...");
+const cmdCsc = `"${cscExe}" /target:winexe /win32manifest:"${manifestFile}" /out:"${outputExe}" /win32icon:"${iconFile}" /resource:"${archiveZip}",ai-free.zip /reference:System.Windows.Forms.dll /reference:System.Drawing.dll "${csFile}"`;
 execSync(cmdCsc, { cwd: rootDir, stdio: "inherit" });
 
 console.log(`\nNative GUI Installer created: ${outputExe} (${(fs.statSync(outputExe).size / (1024 * 1024)).toFixed(1)} MB)`);
