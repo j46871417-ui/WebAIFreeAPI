@@ -1,0 +1,66 @@
+{
+  "name": "ai-free-vscode",
+  "displayName": "AI Free Chat & Agent",
+  "description": "AI chat and coding agents for DeepSeek, Qwen and ChatGPT in the VS Code sidebar",
+  "version": "0.4.25",
+  "publisher": "developers-daily-life",
+  "license": "SEE LICENSE IN LICENSE",
+  "icon": "media/marketplace-icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Staks-sor/ai-free.git",
+    "directory": "plugin-for-vscode"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "assistant",
+    "chat",
+    "coding",
+    "coding-agent",
+    "ai-coding-assistant",
+    "deepseek",
+    "qwen",
+    "chatgpt",
+    "openai-compatible-api",
+    "local-ai",
+    "vscode-extension",
+    "developer-tools"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ai-free-sidebar",
+          "title": "AI Free",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "ai-free-sidebar": [
+        {
+          "type": "webview",
+          "id": "ai-free-chat",
+          "name": "AI Free Chat & Agent"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "package": "npm run build && npx @vscode/vsce package"
+  },
+  "dependencies": {
+    "patchright": "^1.60.2",
+    "playwright": "^1.60.0"
+  }
+}

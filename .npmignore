@@ -1,0 +1,21 @@
+# Internal development and verification files are not shipped to clients.
+test/
+**/test/**
+**/tests/**
+**/__tests__/**
+**/*.test.*
+**/*.spec.*
+coverage/
+.github/
+docs/
+scripts/
+AGENTS.md
+CLAUDE.md
+CONTINUATION.md
+HANDOFF.md
+.repro-snapshot.tar.gz
+.env
+.env.*
+!.env.example
+*.vsix
+.DS_Store

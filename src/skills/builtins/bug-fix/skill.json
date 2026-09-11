@@ -1,0 +1,9 @@
+{
+  "id": "bug-fix",
+  "name": "Bug Fix",
+  "description": "Поиск и исправление багов в коде",
+  "version": "0.1.0",
+  "promptFile": "prompt.md",
+  "commands": ["list_files", "read_file", "mkdir", "write_file", "append_file", "run_command", "run_shell"],
+  "permissions": []
+}

@@ -1,0 +1,79 @@
+{
+  "name": "ai-free",
+  "version": "0.4.25",
+  "description": "Free local AI client for DeepSeek, Qwen and ChatGPT with OpenAI-compatible API, CLI, code agent, memory and skills.",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Staks-sor/ai-free.git"
+  },
+  "homepage": "https://github.com/Staks-sor/ai-free#readme",
+  "bugs": {
+    "url": "https://github.com/Staks-sor/ai-free/issues"
+  },
+  "keywords": [
+    "ai",
+    "llm",
+    "deepseek",
+    "qwen",
+    "chatgpt",
+    "openai-api",
+    "anthropic-api",
+    "openai-compatible-api",
+    "anthropic-compatible-api",
+    "ai-agent",
+    "code-agent",
+    "coding-agent",
+    "ai-coding-assistant",
+    "cli",
+    "developer-tools",
+    "automation",
+    "playwright",
+    "nodejs",
+    "local-ai",
+    "ide",
+    "vscode-extension",
+    "telegram-bot",
+    "web-automation"
+  ],
+  "bin": {
+    "ai-free": "./bin/deepseek.mjs",
+    "deepseek": "./bin/deepseek.mjs",
+    "deepseek-cookie-cli": "./bin/deepseek.mjs",
+    "ai-free-browser-mcp": "./bin/ai-free-browser-mcp.mjs"
+  },
+  "scripts": {
+    "postinstall": "patchright install chromium && playwright install chromium",
+    "start": "node ./bin/deepseek.mjs --window",
+    "window": "node ./bin/deepseek.mjs --window",
+    "server": "node ./bin/deepseek.mjs --no-window",
+    "cli": "node ./bin/deepseek.mjs",
+    "chat": "node ./bin/deepseek.mjs",
+    "api": "node ./bin/deepseek.mjs --api",
+    "login": "node ./bin/deepseek.mjs --login",
+    "login-qwen": "node ./bin/deepseek.mjs --login-qwen",
+    "import-qwen": "node ./bin/deepseek.mjs --import-qwen",
+    "login-chatgpt": "node ./bin/deepseek.mjs --login-chatgpt",
+    "import-chatgpt": "node ./bin/deepseek.mjs --import-chatgpt",
+    "welcome": "node ./bin/deepseek.mjs --welcome",
+    "save-creds": "node ./bin/deepseek.mjs --save-creds",
+    "check": "node ./bin/deepseek.mjs --check",
+    "precheck:ci": "node plugin-for-vscode/build.mjs",
+    "check:ci": "node ./scripts/check-ci-invariants.mjs",
+    "inventory": "node ./scripts/inventory-duplicates.mjs --report",
+    "pretest": "node plugin-for-vscode/build.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "patchright": "^1.60.2",
+    "playwright": "^1.60.0"
+  }
+}

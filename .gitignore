@@ -1,0 +1,30 @@
+node_modules/
+node/
+plugin-for-vscode/packages/
+.env
+.DS_Store
+.deepseek-cli/
+.qwen-cli/
+.chatgpt-cli/
+.ai-free/
+*.vsix
+*.log
+*.db
+.repro-snapshot.tar.gz
+cookies*.json
+*cookie*.json
+deepseek-token*.txt
+
+# IDE
+.idea/
+.vscode/
+
+# Internal notes (не для публики)
+CLAUDE.md
+CONTINUATION.md
+HANDOFF.md
+REFACTOR_NOTES.md
+api/README.md
+.kilo/
+package-lock.json
+!plugin-for-vscode/package-lock.json
