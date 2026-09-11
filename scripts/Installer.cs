@@ -154,12 +154,23 @@ namespace AiFreeInstaller
                     try
                     {
                         string vbsPath = Path.Combine(targetDir, "run-silent.vbs");
+                        string trayPs1 = Path.Combine(targetDir, "scripts", "tray.ps1");
                         if (File.Exists(vbsPath))
                         {
                             ProcessStartInfo psi = new ProcessStartInfo("wscript.exe", "\"" + vbsPath + "\"")
                             {
                                 WorkingDirectory = targetDir,
                                 UseShellExecute = true
+                            };
+                            Process.Start(psi);
+                        }
+                        else if (File.Exists(trayPs1))
+                        {
+                            ProcessStartInfo psi = new ProcessStartInfo("powershell.exe", "-ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + trayPs1 + "\"")
+                            {
+                                WorkingDirectory = targetDir,
+                                UseShellExecute = false,
+                                CreateNoWindow = true
                             };
                             Process.Start(psi);
                         }

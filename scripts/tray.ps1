@@ -1,4 +1,4 @@
-# AI Free - Windows System Tray Manager
+﻿# AI Free - Windows System Tray Manager
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
