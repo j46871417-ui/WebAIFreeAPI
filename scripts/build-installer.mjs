@@ -6,33 +6,24 @@ import { execSync } from "node:child_process";
 const rootDir = "C:\\ai-free";
 const distDir = path.join(rootDir, "dist");
 const sevenZipExe = "C:\\Program Files\\7-Zip\\7z.exe";
-const sevenZipSfx = "C:\\Program Files\\7-Zip\\7z.sfx";
+const cscExe = "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe";
+const iconFile = path.join(rootDir, "ai-free.ico");
+const csFile = path.join(rootDir, "scripts", "Installer.cs");
 
-if (!fs.existsSync(sevenZipExe) || !fs.existsSync(sevenZipSfx)) {
-  console.error("7-Zip or 7z.sfx not found in C:\\Program Files\\7-Zip");
+if (!fs.existsSync(sevenZipExe)) {
+  console.error("7-Zip not found in C:\\Program Files\\7-Zip");
   process.exit(1);
 }
 
 fs.mkdirSync(distDir, { recursive: true });
 
-const archive7z = path.join(distDir, "ai-free.7z");
-const sfxConfig = path.join(distDir, "sfx-config.txt");
+const archiveZip = path.join(distDir, "ai-free.zip");
 const outputExe = path.join(distDir, "AI-Free-Setup.exe");
 
-if (fs.existsSync(archive7z)) fs.unlinkSync(archive7z);
+if (fs.existsSync(archiveZip)) fs.unlinkSync(archiveZip);
 if (fs.existsSync(outputExe)) fs.unlinkSync(outputExe);
 
-const configContent = `;!@Install@!UTF-8!
-Title="Установка AI Free"
-BeginPrompt="Распаковать и установить AI Free на ваш компьютер?"
-Progress="yes"
-ExecuteFile="setup.bat"
-;!@InstallEnd@!
-`;
-
-fs.writeFileSync(sfxConfig, configContent, "utf8");
-
-console.log("Creating 7z archive...");
+console.log("1. Creating ai-free.zip archive using 7-Zip...");
 const itemsToInclude = [
   "api",
   "bin",
@@ -63,18 +54,14 @@ const excludes = [
   "-xr!*.db",
 ];
 
-const cmd7z = `"${sevenZipExe}" a -t7z -mx=5 "${archive7z}" ${itemsToInclude.map(i => `"${path.join(rootDir, i)}"`).join(" ")} ${excludes.join(" ")}`;
-execSync(cmd7z, { cwd: rootDir, stdio: "inherit" });
+const cmdZip = `"${sevenZipExe}" a -tzip -mx=5 "${archiveZip}" ${itemsToInclude.map(i => `"${path.join(rootDir, i)}"`).join(" ")} ${excludes.join(" ")}`;
+execSync(cmdZip, { cwd: rootDir, stdio: "inherit" });
 
-console.log("Creating SFX EXE installer...");
-const sfxBuffer = fs.readFileSync(sevenZipSfx);
-const configBuffer = Buffer.from(configContent, "utf8");
-const archiveBuffer = fs.readFileSync(archive7z);
+console.log("2. Compiling native Windows GUI installer with csc.exe...");
+const cmdCsc = `"${cscExe}" /target:winexe /out:"${outputExe}" /win32icon:"${iconFile}" /resource:"${archiveZip}",ai-free.zip /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll "${csFile}"`;
+execSync(cmdCsc, { cwd: rootDir, stdio: "inherit" });
 
-const exeBuffer = Buffer.concat([sfxBuffer, configBuffer, archiveBuffer]);
-fs.writeFileSync(outputExe, exeBuffer);
-
-console.log(`SFX Installer created successfully: ${outputExe} (${(exeBuffer.length / (1024 * 1024)).toFixed(1)} MB)`);
+console.log(`\nNative GUI Installer created: ${outputExe} (${(fs.statSync(outputExe).size / (1024 * 1024)).toFixed(1)} MB)`);
 
 const desktops = [
   path.join(os.homedir(), "Desktop"),
@@ -86,3 +73,4 @@ for (const d of desktops) {
   fs.copyFileSync(outputExe, dest);
   console.log(`Copied installer to: ${dest}`);
 }
+
