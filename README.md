@@ -1,156 +1,42 @@
-<h1 align="center">AI Free</h1>
+<h1 align="center">AI Free (Fork)</h1>
 
 <p align="center">
-  <strong>Local AI client for DeepSeek, Qwen and ChatGPT with API, code agent, memory and skills</strong>
+  <strong>Локальный AI-клиент для DeepSeek, Qwen и ChatGPT с API, автономными кодовыми агентами (OpenCode / CLI), памятью и поиском</strong>
 </p>
 
-AI Free turns free AI web chats into a local developer tool.
+AI Free превращает бесплатные веб-чаты AI в полноценный локальный инструмент разработчика.
 
-Use **DeepSeek**, **Qwen** and **ChatGPT** from one desktop window, CLI, compatible APIs, IDE integrations and code-agent workflows — with local memory, skills and workspace-aware chats.
-
-Good for:
-
-- developers who want a free local AI coding assistant;
-- people who use web AI chats but want API/CLI access;
-- experiments with agents, memory, skills and IDE automation.
-
-## What Is AI Free?
-
-**AI Free** is an open-source local AI client and developer tool for using free web AI chats as a practical coding assistant. It connects **DeepSeek**, **Qwen** and **ChatGPT** to a desktop app, command line interface, local OpenAI-compatible API, Anthropic-compatible API, VS Code plugin, memory, skills and workspace-aware code-agent workflows.
-
-People usually look for this project as a **free AI coding assistant**, **local AI client**, **OpenAI-compatible API for Qwen or DeepSeek**, **ChatGPT desktop client**, **Qwen VS Code extension**, **DeepSeek code agent**, **free alternative for AI developer tools**, or **local agent with memory and skills**.
-
-## Popular Use Cases
-
-- Run Qwen, DeepSeek and ChatGPT from one local desktop app.
-- Use Qwen or DeepSeek through an OpenAI-compatible API endpoint.
-- Connect local AI chats to VS Code, Continue, Kilo Code and other developer tools.
-- Ask a code agent to read and edit a project folder with controlled command permissions.
-- Keep local memory, skills and reusable workflows for repeated development tasks.
-- Build agent pipelines, Telegram workflows and browser automation around free web AI providers.
-
-## ✨ Highlights
-
-- **One local app:** DeepSeek, Qwen and ChatGPT chats in one workspace.
-- **Developer interfaces:** desktop UI, CLI, OpenAI-compatible API and Anthropic-compatible API.
-- **Code agent:** `/code` mode with workspace file access and controlled command permissions.
-- **Memory and skills:** long-term memory, memory graph and reusable task workflows.
-- **Project instructions:** hierarchical `AGENTS.md` files are reloaded before every code-agent task; nested files apply to their own directory tree.
-- **IDE-friendly:** works with tools such as Continue, Kilo Code and PyCharm ACP-compatible flows.
-- **Local-first sessions:** provider browser sessions and app state are stored on your machine.
-
-## 🌍 Выберите язык / Choose your language
-
-<p>
-  <a href="README.md"><img src="https://img.shields.io/badge/Русский-0969da?style=for-the-badge" height="30" alt="Русский"></a>
-  <a href="docs/readme/README.en.md"><img src="https://img.shields.io/badge/English-1f883d?style=for-the-badge" height="30" alt="English"></a>
-  <a href="docs/readme/README.es.md"><img src="https://img.shields.io/badge/Español-d29922?style=for-the-badge" height="30" alt="Español"></a>
-  <a href="docs/readme/README.pt.md"><img src="https://img.shields.io/badge/Português-8250df?style=for-the-badge" height="30" alt="Português"></a>
-  <a href="docs/readme/README.de.md"><img src="https://img.shields.io/badge/Deutsch-cf222e?style=for-the-badge" height="30" alt="Deutsch"></a>
-  <a href="docs/readme/README.fr.md"><img src="https://img.shields.io/badge/Français-0550ae?style=for-the-badge" height="30" alt="Français"></a>
-  <a href="docs/readme/README.zh.md"><img src="https://img.shields.io/badge/中文-b35900?style=for-the-badge" height="30" alt="中文"></a>
-  <a href="docs/readme/README.hi.md"><img src="https://img.shields.io/badge/हिन्दी-9a6700?style=for-the-badge" height="30" alt="हिन्दी"></a>
-  <a href="docs/readme/README.ar.md"><img src="https://img.shields.io/badge/العربية-1a7f37?style=for-the-badge" height="30" alt="العربية"></a>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/github/package-json/v/Staks-sor/ai-free?style=flat-square&amp;label=version" alt="Версия">
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-8250df?style=flat-square" alt="macOS, Linux, Windows">
-  <img src="https://img.shields.io/badge/Node.js-18%2B-1f883d?style=flat-square" alt="Node.js 18+">
-  <img src="https://img.shields.io/badge/providers-DeepSeek%20%7C%20Qwen%20%7C%20ChatGPT-d29922?style=flat-square" alt="DeepSeek, Qwen, ChatGPT">
-</p>
-
-<p align="center"><strong>AI Free 0.4.25</strong></p>
-
-<p align="center">
-  <img src="docs/assets/ai-free-agent-0.4.13.png" width="100%" alt="AI Free 0.4.25: desktop code agent with compact tool timeline">
-</p>
-
-> Локальный AI-клиент, который превращает веб-чаты DeepSeek, Qwen и ChatGPT в инструмент для разработчика: окно чатов, CLI, совместимые API, `/code`-агент, память, skills и IDE-интеграции.
+Используй **DeepSeek**, **Qwen** и **ChatGPT** через единое графическое окно, фоновый сервис, OpenAI-совместимый API, расширение VS Code, а также в роли агента в **OpenCode Desktop** и других средах разработки.
 
 ---
 
-## ⭐ Понравилось? Поставь звезду
+## ✨ Что нового в этом форке:
 
-Если AI Free экономит тебе время, поставь звезду на GitHub — это помогает проекту появляться в поиске и рекомендациях.
-
-## 💳 Поддержать развитие
-
-Если хочется отблагодарить материально — любая сумма даёт сигнал, что проект имеет смысл, и мотивацию добавлять новые фичи (мультипровайдер Qwen/Kimi, attachments, стриминг ответов и т.д.).
-
-- **Карта (ОТП Банк):** `2201 9604 2500 7505`
-
-Спасибо!
+- 📦 **Готовый установщик в 1 клик (`AI-Free-Setup.exe`)**: портативный пакет для Windows со встроенным Node.js, автоматической загрузкой Chromium и автонастройкой ярлыков.
+- 🤖 **Полноценная работа Qwen в OpenCode Desktop**: исправлены системные запреты Qwen на выполнение bash/инструментов — теперь модель исправно пишет файлы, правит код и выполняет команды на ПК.
+- 🔍 **Улучшенный Web Search**: исправлена обработка поисковых запросов для веб-провайдеров, удалены мешающие системные префиксы, добавлено автоопределение намерения поиска через API.
+- 🔄 **Автовосстановление браузерного прокси**: защита от падения контекстов браузера при перезапусках и сбоях сессий.
+- ⚙️ **Автоматическая конфигурация OpenCode**: установщик сам прописывает профиль `AI-Free (Qwen / DeepSeek)` в `~/.opencode/opencode.json`.
 
 ---
 
-Архитектурно проект разделён на модули в `src/` (auth, browser, providers, code-agent, **memory**, **skills**, agent-orchestrator, state, window-app, api, cli). Точка входа — `bin/deepseek.mjs`. Юнит-тесты запускаются командой `npm test` во встроенном Node test runner; точное число зависит от текущей версии. Архитектура памяти и skills — [docs/AI_FREE_BRAINS_AND_SKILLS_PLAN.md](docs/AI_FREE_BRAINS_AND_SKILLS_PLAN.md). Сценарий для видео — [docs/VIDEO_SCRIPT.md](docs/VIDEO_SCRIPT.md).
+## 🚀 Быстрый старт на Windows
 
-## ✨ Что внутри
+### Способ 1 — Готовый установщик (AI-Free-Setup.exe)
+1. Скачай **`AI-Free-Setup.exe`** (из вкладки [Releases](https://github.com/j46871417-ui/ai-free/releases)).
+2. Запусти установщик — он автоматически:
+   - Распакует приложение в `C:\ai-free`;
+   - Скачает необходимый Chromium для Playwright;
+   - Создаст ярлыки на рабочем столе (**AI Free** и **AI Free Launcher**);
+   - Настроит конфиг OpenCode Desktop.
+3. Запусти с ярлыка, пройди авторизацию в нужных провайдерах (DeepSeek / Qwen) один раз — и пользуйся!
 
-- 💬 **Три провайдера:** DeepSeek, Qwen и ChatGPT в одном окне с выбором модели при создании беседы.
-- 🔑 **Авто-логин DeepSeek:** один вход через браузер, затем тихое восстановление сессии или окно re-login.
-- 🔐 **Авто-логин Qwen и ChatGPT:** отдельные профили и локальные сессии для каждого провайдера.
-- 🪟 **Окно чатов** (`localhost:4317`): несколько параллельных бесед, каждая привязана к своей папке-проекту.
-- ⌨️ **CLI-режим:** REPL в терминале для скриптовых сценариев и быстрых вопросов.
-- 🛠️ **`/code` агент:** доступ к файлам workspace и разрешённым командам.
-- **🧠 Memory:** долговременная память агента — SQLite FTS5 + Markdown vault (`~/.ai-free/memory/`). Переключатель в topbar, просмотр в Settings → Агент.
-- **`AGENTS.md`:** правила проекта загружаются перед каждой агентской задачей. Корневой файл действует на весь workspace, вложенный — на свою директорию и её подкаталоги и имеет приоритет над родительским.
-- **🔗 Memory graph:** связи task ↔ file ↔ bug ↔ fix; расширяет контекст при повторных задачах.
-- **⚡ Skills:** встроенные `code-review`, `bug-fix`, `video-script`; auto-match по задаче; `/skill <id> <task>`.
-- **Agent orchestrator:** перед `/code` собирает актуальные `AGENTS.md`, memory и skill в system prompt.
-- 🔌 **Совместимые API** (`localhost:4318`): OpenAI и Anthropic для Kilo Code, Continue и других IDE.
-- 🎙️ **Голосовой ввод:** Parakeet V3 скачивается отдельно только при первом использовании.
-- 📁 **Файловый браузер:** при создании чата можно выбрать папку или создать новую.
-
-### Версия продукта
-
-Текущий релиз desktop/CLI/API, расширения VS Code и плагина PyCharm — **AI Free 0.4.25**.
-
-Что вошло в `0.4.25`: [release notes](docs/RELEASE_NOTES_0.4.25.md).
-
----
-
-## 📋 Требования
-
-Везде нужно:
-
-- **Node.js ≥ 18** ([nodejs.org](https://nodejs.org)). Проверить: `node -v`.
-- **npm** (идёт в комплекте с Node).
-- Подключение к интернету и установки Chromium (~150 МБ).
-
-Опционально:
-
-- **Google Chrome.** Если установлен — программа использует его как «настоящий» браузер (свежий, со всеми обновлениями безопасности). Если нет — автоматически качается Playwright`овский Chromium.
-
----
-
-## 🚀 Установка
-
-### macOS / Linux
-
-```bash
-git clone https://github.com/Staks-sor/ai-free.git ai-free
-cd ai-free
-npm install
-```
-
-`npm install` сам качает Chromium (~150 МБ) через `postinstall`-хук — отдельная команда не нужна.
-
-Если ты на **Linux**, добавь зависимости системы для Chromium (один раз):
-
-```bash
-sudo npx playwright install-deps chromium
-```
-
-Это поставит `libnss3`, `libgbm`, `libasound2` и пр. — без них Chromium не запустится.
-
-### Windows
-
+### Способ 2 — Из исходного кода (Git)
 ```powershell
-git clone https://github.com/Staks-sor/ai-free.git ai-free
+git clone https://github.com/j46871417-ui/ai-free.git ai-free
 cd ai-free
 npm install
+npm start
 ```
 
 В PowerShell или Windows Terminal — обе оболочки работают. CMD тоже, но Windows Terminal удобнее для интерактивного ввода (например, при `npm run save-creds`).
