@@ -7,6 +7,7 @@
 <p align="center">
   <a href="https://github.com/j46871417-ui/ai-free/releases/latest/download/AI-Free-Setup.exe"><img src="https://img.shields.io/badge/Скачать_AI--Free--Setup.exe-2ea44f?style=for-the-badge&logo=windows&logoColor=white" alt="Скачать AI-Free-Setup.exe"></a>
   <a href="https://github.com/j46871417-ui/ai-free/releases"><img src="https://img.shields.io/github/v/release/j46871417-ui/ai-free?style=for-the-badge&label=Релиз" alt="Релизы"></a>
+  <a href="https://t.me/+8qU7020rMF84OWNi"><img src="https://img.shields.io/badge/Telegram-Сообщество-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Сообщество"></a>
 </p>
 
 AI Free превращает бесплатные веб-чаты AI в полноценный локальный инструмент разработчика.
@@ -520,9 +521,10 @@ Desktop и VS Code записывают единый структурирова�
 
 ---
 
-## 💬 Обратная связь
+## 💬 Сообщество и обратная связь
 
-Нашёл баг или есть идея? Открой [Issue](https://github.com/Staks-sor/ai-free/issues) — отвечу.
+- 📢 **Telegram-сообщество**: присоединяйся к группе, посвященной моим программам и проектам сообщества — **[t.me/+8qU7020rMF84OWNi](https://t.me/+8qU7020rMF84OWNi)**
+- 🐛 **Нашёл баг или есть идея?** Открой [Issue в репозитории](https://github.com/j46871417-ui/ai-free/issues).
 
 ## 📄 Лицензия
 

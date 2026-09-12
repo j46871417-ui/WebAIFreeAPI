@@ -1127,6 +1127,14 @@ export const STYLES = `
       --promo-mark-bg: rgba(77, 124, 255, 0.24);
       --promo-mark-color: #facc15;
     }
+    .sidebarPromoTelegram {
+      --promo-a: rgba(44, 165, 224, 0.20);
+      --promo-b: rgba(0, 136, 204, 0.12);
+      --promo-border: rgba(44, 165, 224, 0.48);
+      --promo-mark-bg: rgba(44, 165, 224, 0.28);
+      --promo-mark-color: #38bdf8;
+      animation-delay: -2s;
+    }
     .sidebarPromoAd {
       --promo-a: rgba(250, 204, 21, 0.12);
       --promo-b: rgba(244, 63, 94, 0.08);
