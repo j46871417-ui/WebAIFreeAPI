@@ -4102,25 +4102,21 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
 
         if (id === "cursor") {
           title.textContent = "Настройка Cursor";
-          steps.innerHTML = `
-            <li>Откройте <strong>Cursor Settings</strong> (шестерёнка в верхнем правом углу или сочетание клавиш <code>Ctrl+Shift+J</code>).</li>
-            <li>Перейдите во вкладку <strong>Models</strong>.</li>
-            <li>В секции <strong>OpenAI API Key</strong> укажите ваш сгенерированный ключ: <code>${qwenKey}</code>.</li>
-            <li>Включите тумблер <strong>Override OpenAI Base URL</strong> и введите: <code>${baseUrl}</code>.</li>
-            <li>Добавьте модели: <code>qwen3.7-max</code>, <code>deepseek-chat</code>, <code>deepseek-reasoner</code>.</li>
-          `;
-          codeContent = `# Настройки Cursor (вводятся в GUI Models):
-Base URL: ${baseUrl}
-API Key:  ${qwenKey}
-Models:   qwen3.7-max, deepseek-chat, deepseek-reasoner`;
+          steps.innerHTML = "<li>Откройте <strong>Cursor Settings</strong> (шестерёнка в верхнем правом углу или сочетание клавиш <code>Ctrl+Shift+J</code>).</li>"
+            + "<li>Перейдите во вкладку <strong>Models</strong>.</li>"
+            + "<li>В секции <strong>OpenAI API Key</strong> укажите ваш сгенерированный ключ: <code>" + qwenKey + "</code>.</li>"
+            + "<li>Включите тумблер <strong>Override OpenAI Base URL</strong> и введите: <code>" + baseUrl + "</code>.</li>"
+            + "<li>Добавьте модели: <code>qwen3.7-max</code>, <code>deepseek-chat</code>, <code>deepseek-reasoner</code>.</li>";
+          codeContent = "# Настройки Cursor (вводятся в GUI Models):\n"
+            + "Base URL: " + baseUrl + "\n"
+            + "API Key:  " + qwenKey + "\n"
+            + "Models:   qwen3.7-max, deepseek-chat, deepseek-reasoner";
         } else if (id === "cline") {
           title.textContent = "Настройка VS Code (Cline / Roo Code)";
-          steps.innerHTML = `
-            <li>В панели расширения <strong>Cline</strong> или <strong>Roo Code</strong> нажмите шестерёнку (Settings).</li>
-            <li>В поле <strong>API Provider</strong> выберите <strong>OpenAI-Compatible</strong>.</li>
-            <li>Укажите Base URL: <code>${baseUrl}</code> и ваш API-ключ.</li>
-            <li>Либо вставьте фрагмент конфигурации ниже в <code>settings.json</code> вашего VS Code.</li>
-          `;
+          steps.innerHTML = "<li>В панели расширения <strong>Cline</strong> или <strong>Roo Code</strong> нажмите шестерёнку (Settings).</li>"
+            + "<li>В поле <strong>API Provider</strong> выберите <strong>OpenAI-Compatible</strong>.</li>"
+            + "<li>Укажите Base URL: <code>" + baseUrl + "</code> и ваш API-ключ.</li>"
+            + "<li>Либо вставьте фрагмент конфигурации ниже в <code>settings.json</code> вашего VS Code.</li>";
           codeContent = JSON.stringify({
             "cline.apiProvider": "openai-compatible",
             "cline.openAiBaseUrl": baseUrl,
@@ -4135,58 +4131,50 @@ Models:   qwen3.7-max, deepseek-chat, deepseek-reasoner`;
           }, null, 2);
         } else if (id === "continue") {
           title.textContent = "Настройка Continue (VS Code & JetBrains)";
-          steps.innerHTML = `
-            <li>Откройте файл настроек Continue: <code>~/.continue/config.yaml</code> (или <code>config.json</code>).</li>
-            <li>Вставьте блок конфигурации ниже в список <code>models:</code>.</li>
-            <li>Сохраните файл — модели WebAIFreeAPI будут доступны для чата и редактирования кода.</li>
-          `;
-          codeContent = `models:
-  - name: "Qwen 3.7 Max (WebAIFreeAPI)"
-    provider: "openai"
-    model: "qwen3.7-max"
-    apiBase: "${baseUrl}"
-    apiKey: "${qwenKey}"
-  - name: "DeepSeek Chat (WebAIFreeAPI)"
-    provider: "openai"
-    model: "deepseek-chat"
-    apiBase: "${baseUrl}"
-    apiKey: "${deepseekKey}"
-  - name: "DeepSeek Reasoner (WebAIFreeAPI)"
-    provider: "openai"
-    model: "deepseek-reasoner"
-    apiBase: "${baseUrl}"
-    apiKey: "${deepseekKey}"`;
+          steps.innerHTML = "<li>Откройте файл настроек Continue: <code>~/.continue/config.yaml</code> (или <code>config.json</code>).</li>"
+            + "<li>Вставьте блок конфигурации ниже в список <code>models:</code>.</li>"
+            + "<li>Сохраните файл — модели WebAIFreeAPI будут доступны для чата и редактирования кода.</li>";
+          codeContent = "models:\n"
+            + "  - name: \"Qwen 3.7 Max (WebAIFreeAPI)\"\n"
+            + "    provider: \"openai\"\n"
+            + "    model: \"qwen3.7-max\"\n"
+            + "    apiBase: \"" + baseUrl + "\"\n"
+            + "    apiKey: \"" + qwenKey + "\"\n"
+            + "  - name: \"DeepSeek Chat (WebAIFreeAPI)\"\n"
+            + "    provider: \"openai\"\n"
+            + "    model: \"deepseek-chat\"\n"
+            + "    apiBase: \"" + baseUrl + "\"\n"
+            + "    apiKey: \"" + deepseekKey + "\"\n"
+            + "  - name: \"DeepSeek Reasoner (WebAIFreeAPI)\"\n"
+            + "    provider: \"openai\"\n"
+            + "    model: \"deepseek-reasoner\"\n"
+            + "    apiBase: \"" + baseUrl + "\"\n"
+            + "    apiKey: \"" + deepseekKey + "\"";
         } else if (id === "windsurf") {
           title.textContent = "Настройка Windsurf (Codeium Cascade)";
-          steps.innerHTML = `
-            <li>Откройте меню настроек <strong>Windsurf Settings</strong> -> <strong>Model Provider Settings</strong>.</li>
-            <li>Выберите <strong>Custom OpenAI API</strong>.</li>
-            <li>Вставьте Base URL и API Key, укажите модель <code>qwen3.7-max</code>.</li>
-          `;
-          codeContent = `Base URL: ${baseUrl}
-API Key:  ${qwenKey}
-Default Model: qwen3.7-max
-Supported Models: deepseek-chat, deepseek-reasoner`;
+          steps.innerHTML = "<li>Откройте меню настроек <strong>Windsurf Settings</strong> -> <strong>Model Provider Settings</strong>.</li>"
+            + "<li>Выберите <strong>Custom OpenAI API</strong>.</li>"
+            + "<li>Вставьте Base URL и API Key, укажите модель <code>qwen3.7-max</code>.</li>";
+          codeContent = "Base URL: " + baseUrl + "\n"
+            + "API Key:  " + qwenKey + "\n"
+            + "Default Model: qwen3.7-max\n"
+            + "Supported Models: deepseek-chat, deepseek-reasoner";
         } else if (id === "jetbrains") {
           title.textContent = "Настройка JetBrains (плагин CodeGPT)";
-          steps.innerHTML = `
-            <li>Установите плагин <strong>CodeGPT</strong> в IntelliJ / PyCharm / WebStorm.</li>
-            <li>Перейдите в <strong>Settings</strong> -> <strong>Tools</strong> -> <strong>CodeGPT</strong> -> <strong>Providers</strong> -> <strong>Custom (OpenAI)</strong>.</li>
-            <li>Задайте <strong>Base URL</strong>: <code>${baseUrl}</code> и ваш ключ.</li>
-            <li>В качестве модели укажите <code>qwen3.7-max</code> или <code>deepseek-chat</code>.</li>
-          `;
-          codeContent = `Provider: Custom OpenAI
-Base URL: ${baseUrl}
-API Key:  ${qwenKey}
-Chat Model: qwen3.7-max
-Code Model: deepseek-chat`;
+          steps.innerHTML = "<li>Установите плагин <strong>CodeGPT</strong> в IntelliJ / PyCharm / WebStorm.</li>"
+            + "<li>Перейдите в <strong>Settings</strong> -> <strong>Tools</strong> -> <strong>CodeGPT</strong> -> <strong>Providers</strong> -> <strong>Custom (OpenAI)</strong>.</li>"
+            + "<li>Задайте <strong>Base URL</strong>: <code>" + baseUrl + "</code> и ваш ключ.</li>"
+            + "<li>В качестве модели укажите <code>qwen3.7-max</code> или <code>deepseek-chat</code>.</li>";
+          codeContent = "Provider: Custom OpenAI\n"
+            + "Base URL: " + baseUrl + "\n"
+            + "API Key:  " + qwenKey + "\n"
+            + "Chat Model: qwen3.7-max\n"
+            + "Code Model: deepseek-chat";
         } else if (id === "opencode") {
           title.textContent = "Настройка OpenCode Desktop";
-          steps.innerHTML = `
-            <li>OpenCode считывает профили из файла <code>~/.opencode/opencode.json</code>.</li>
-            <li>Нажмите кнопку <strong>⚡ Настроить автоматически</strong> ниже, либо скопируйте JSON в файл.</li>
-            <li>Все инструменты (bash, чтение, поиск и правка файлов) будут работать без ограничений.</li>
-          `;
+          steps.innerHTML = "<li>OpenCode считывает профили из файла <code>~/.opencode/opencode.json</code>.</li>"
+            + "<li>Нажмите кнопку <strong>⚡ Настроить автоматически</strong> ниже, либо скопируйте JSON в файл.</li>"
+            + "<li>Все инструменты (bash, чтение, поиск и правка файлов) будут работать без ограничений.</li>";
           codeContent = JSON.stringify({
             "$schema": "https://opencode.ai/config.json",
             "model": "ai-free-qwen/qwen3.7-max",
@@ -4248,29 +4236,23 @@ Code Model: deepseek-chat`;
           extraAction = autoBtn;
         } else if (id === "aider") {
           title.textContent = "Настройка Aider (терминальный кодинг-агент)";
-          steps.innerHTML = `
-            <li>Задайте переменные окружения перед запуском Aider в терминале:</li>
-          `;
-          codeContent = `# Windows CMD:
-set OPENAI_API_BASE=${baseUrl}
-set OPENAI_API_KEY=${qwenKey}
-aider --model openai/qwen3.7-max
-
-# PowerShell:
-$env:OPENAI_API_BASE="${baseUrl}"
-$env:OPENAI_API_KEY="${qwenKey}"
-aider --model openai/qwen3.7-max
-
-# Linux / macOS Bash:
-export OPENAI_API_BASE="${baseUrl}"
-export OPENAI_API_KEY="${qwenKey}"
-aider --model openai/qwen3.7-max`;
+          steps.innerHTML = "<li>Задайте переменные окружения перед запуском Aider в терминале:</li>";
+          codeContent = "# Windows CMD:\n"
+            + "set OPENAI_API_BASE=" + baseUrl + "\n"
+            + "set OPENAI_API_KEY=" + qwenKey + "\n"
+            + "aider --model openai/qwen3.7-max\n\n"
+            + "# PowerShell:\n"
+            + "$env:OPENAI_API_BASE=\"" + baseUrl + "\"\n"
+            + "$env:OPENAI_API_KEY=\"" + qwenKey + "\"\n"
+            + "aider --model openai/qwen3.7-max\n\n"
+            + "# Linux / macOS Bash:\n"
+            + "export OPENAI_API_BASE=\"" + baseUrl + "\"\n"
+            + "export OPENAI_API_KEY=\"" + qwenKey + "\"\n"
+            + "aider --model openai/qwen3.7-max";
         } else if (id === "zed") {
           title.textContent = "Настройка Zed Editor";
-          steps.innerHTML = `
-            <li>Откройте <code>settings.json</code> в редакторе Zed (<code>Ctrl+,</code>).</li>
-            <li>Добавьте секцию <code>language_models</code> ниже в ваш конфиг.</li>
-          `;
+          steps.innerHTML = "<li>Откройте <code>settings.json</code> в редакторе Zed (<code>Ctrl+,</code>).</li>"
+            + "<li>Добавьте секцию <code>language_models</code> ниже в ваш конфиг.</li>";
           codeContent = JSON.stringify({
             "language_models": {
               "openai": {
