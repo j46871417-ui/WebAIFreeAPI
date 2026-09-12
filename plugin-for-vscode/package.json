@@ -1,8 +1,8 @@
 {
   "name": "ai-free-vscode",
-  "displayName": "AI Free Chat & Agent",
-  "description": "AI chat and coding agents for DeepSeek, Qwen and ChatGPT in the VS Code sidebar",
-  "version": "1.5.0",
+  "displayName": "AI Free (DeepSeek & Qwen)",
+  "description": "Free AI coding assistant powered by DeepSeek, Qwen and ChatGPT with zero-token-cost local automation.",
+  "version": "1.6.0",
   "publisher": "developers-daily-life",
   "license": "SEE LICENSE IN LICENSE",
   "icon": "media/marketplace-icon.png",

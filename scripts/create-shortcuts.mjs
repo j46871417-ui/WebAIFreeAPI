@@ -13,14 +13,17 @@ const desktopDirs = [
 const targetDir = process.argv[2] || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const iconFile = path.join(targetDir, "ai-free.ico");
 
+const nativeExe = path.join(targetDir, "bin", "WebAIFreeAPI.exe");
+const hasNativeExe = fs.existsSync(nativeExe);
+
 const shortcuts = [
   {
     name: "WebAIFreeAPI.lnk",
-    target: "wscript.exe",
-    args: `"${path.join(targetDir, "run-silent.vbs")}"`,
+    target: hasNativeExe ? nativeExe : "wscript.exe",
+    args: hasNativeExe ? "" : `"${path.join(targetDir, "run-silent.vbs")}"`,
     workingDir: targetDir,
-    icon: fs.existsSync(iconFile) ? iconFile : "",
-    description: "WebAIFreeAPI (Бесплатный DeepSeek, Qwen и ChatGPT API)",
+    icon: fs.existsSync(iconFile) ? iconFile : (hasNativeExe ? nativeExe : ""),
+    description: "WebAIFreeAPI — Нативный AI десктоп-клиент (DeepSeek, Qwen, ChatGPT)",
   },
   {
     name: "WebAIFreeAPI Launcher.lnk",
