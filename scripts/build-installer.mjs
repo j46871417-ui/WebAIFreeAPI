@@ -9,9 +9,16 @@ const sevenZipExe = "C:\\Program Files\\7-Zip\\7z.exe";
 const cscExe = "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe";
 const iconFile = path.join(rootDir, "ai-free.ico");
 const csFile = path.join(rootDir, "scripts", "Installer.cs");
+const runtimeCheck = path.join(rootDir, "scripts", "runtime-check.mjs");
+const nodeExe = path.join(rootDir, "node", "node.exe");
 
 if (!fs.existsSync(sevenZipExe)) {
   console.error("7-Zip not found in C:\\Program Files\\7-Zip");
+  process.exit(1);
+}
+
+if (!fs.existsSync(nodeExe) || !fs.existsSync(runtimeCheck)) {
+  console.error("Bundled Node.js runtime or runtime checker is missing");
   process.exit(1);
 }
 
@@ -24,11 +31,13 @@ if (fs.existsSync(archiveZip)) fs.unlinkSync(archiveZip);
 if (fs.existsSync(outputExe)) fs.unlinkSync(outputExe);
 
 console.log("0. Building native Windows GUI (WebAIFreeAPI.exe)...");
-const nodeExe = path.join(rootDir, "node", "node.exe");
 const buildNativeScript = path.join(rootDir, "scripts", "build-native-gui.mjs");
-if (fs.existsSync(nodeExe) && fs.existsSync(buildNativeScript)) {
+if (fs.existsSync(buildNativeScript)) {
   execSync(`"${nodeExe}" "${buildNativeScript}"`, { cwd: rootDir, stdio: "inherit" });
 }
+
+console.log("0.1. Verifying offline runtime contents...");
+execSync(`"${nodeExe}" "${runtimeCheck}" "${rootDir}"`, { cwd: rootDir, stdio: "inherit" });
 
 console.log("1. Creating ai-free.zip archive using 7-Zip...");
 const itemsToInclude = [
@@ -90,4 +99,3 @@ for (const d of desktops) {
   fs.copyFileSync(versionedExe, destVersioned);
   console.log(`Copied installer to: ${destSetup} and ${destVersioned}`);
 }
-

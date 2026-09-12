@@ -618,19 +618,40 @@ export function resolveWorkspacePath(workspaceRoot, requestedPath) {
   }
 
   const root = path.resolve(workspaceRoot);
-  const target = path.resolve(root, requestedPath);
-  const relative = path.relative(root, target);
+  const target = path.normalize(path.resolve(root, requestedPath));
+  const rootPrefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
 
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (target !== root && !target.startsWith(rootPrefix)) {
     throw new Error(`Path escapes workspace: ${requestedPath}`);
   }
+  const relative = path.relative(root, target);
 
   const parts = relative.split(path.sep);
   if (parts.includes(".git") || parts.includes("node_modules") || parts.includes(".env")) {
     throw new Error(`Path is blocked: ${requestedPath}`);
   }
 
+  if (fs.existsSync(root)) {
+    const existingPath = fs.existsSync(target) ? target : nearestExistingParent(target);
+    const realRoot = fs.realpathSync.native(root);
+    const realExisting = fs.realpathSync.native(existingPath);
+    const realRelative = path.relative(realRoot, realExisting);
+    if (realRelative.startsWith("..") || path.isAbsolute(realRelative)) {
+      throw new Error(`Path escapes workspace through a link: ${requestedPath}`);
+    }
+  }
+
   return target;
+}
+
+function nearestExistingParent(target) {
+  let current = path.dirname(target);
+  while (!fs.existsSync(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) return target;
+    current = parent;
+  }
+  return current;
 }
 
 

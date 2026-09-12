@@ -1270,6 +1270,19 @@ describe("resolveWorkspacePath", () => {
     assert.throws(() => resolveWorkspacePath(ws, null));
   });
 
+  it("rejects a symlink that resolves outside the workspace", () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "rw-outside-"));
+    fs.writeFileSync(path.join(outside, "secret.txt"), "secret");
+    const link = path.join(ws, "linked-outside");
+    try {
+      fs.symlinkSync(outside, link, "junction");
+      assert.throws(() => resolveWorkspacePath(ws, "linked-outside/secret.txt"), /escapes workspace through a link/);
+    } finally {
+      fs.rmSync(link, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
   it("cleanup", () => {
     fs.rmSync(ws, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
