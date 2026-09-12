@@ -11,11 +11,92 @@ namespace AiFreeInstaller
     static class Program
     {
         [STAThread]
-        static void Main()
+        static int Main(string[] args)
         {
+            bool isSilent = false;
+            string customDir = null;
+
+            foreach (var arg in args)
+            {
+                string a = arg.Trim();
+                if (a.Equals("/silent", StringComparison.OrdinalIgnoreCase) ||
+                    a.Equals("/update", StringComparison.OrdinalIgnoreCase) ||
+                    a.Equals("/s", StringComparison.OrdinalIgnoreCase) ||
+                    a.Equals("-s", StringComparison.OrdinalIgnoreCase) ||
+                    a.Equals("--silent", StringComparison.OrdinalIgnoreCase))
+                {
+                    isSilent = true;
+                }
+                else if (a.StartsWith("/dir=", StringComparison.OrdinalIgnoreCase) ||
+                         a.StartsWith("-dir=", StringComparison.OrdinalIgnoreCase) ||
+                         a.StartsWith("/target=", StringComparison.OrdinalIgnoreCase) ||
+                         a.StartsWith("--dir=", StringComparison.OrdinalIgnoreCase))
+                {
+                    int eq = a.IndexOf('=');
+                    customDir = a.Substring(eq + 1).Trim('"', '\'');
+                }
+            }
+
+            if (isSilent)
+            {
+                return RunSilent(customDir);
+            }
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new InstallerForm());
+            Application.Run(new InstallerForm(customDir));
+            return 0;
+        }
+
+        static int RunSilent(string targetDir)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(targetDir))
+                {
+                    targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WebAIFreeAPI");
+                }
+
+                // Wait 1.5 seconds for previous node instance to release files if restarting
+                Thread.Sleep(1500);
+
+                InstallerForm.KillRunningProcesses(targetDir);
+
+                if (!Directory.Exists(targetDir))
+                {
+                    Directory.CreateDirectory(targetDir);
+                }
+
+                Assembly asm = Assembly.GetExecutingAssembly();
+                using (Stream stream = asm.GetManifestResourceStream("ai-free.zip"))
+                {
+                    if (stream == null) return 1;
+
+                    string tempZip = Path.Combine(Path.GetTempPath(), "ai-free-" + Guid.NewGuid().ToString("N") + ".zip");
+                    try
+                    {
+                        using (FileStream fs = new FileStream(tempZip, FileMode.Create, FileAccess.Write))
+                        {
+                            stream.CopyTo(fs);
+                        }
+
+                        InstallerForm.ExtractArchiveFiles(tempZip, targetDir);
+                    }
+                    finally
+                    {
+                        try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch {}
+                    }
+                }
+
+                InstallerForm.CreateDesktopShortcuts(targetDir);
+                InstallerForm.RunSetup(targetDir);
+                InstallerForm.LaunchInstalledApp(targetDir);
+                return 0;
+            }
+            catch
+            {
+                return 2;
+            }
         }
     }
 
@@ -34,11 +115,14 @@ namespace AiFreeInstaller
         private bool isInstalled = false;
         private string targetDir;
 
-        public InstallerForm()
+        public InstallerForm(string initialDir = null)
         {
-            targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WebAIFreeAPI");
+            if (!string.IsNullOrEmpty(initialDir))
+                targetDir = initialDir;
+            else
+                targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WebAIFreeAPI");
 
-            this.Text = "Установка WebAIFreeAPI v1.3.2";
+            this.Text = "Установка WebAIFreeAPI v1.4.0";
             this.Size = new Size(540, 320);
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
@@ -49,7 +133,7 @@ namespace AiFreeInstaller
             } catch {}
 
             titleLabel = new Label() {
-                Text = "Мастер установки WebAIFreeAPI v1.3.2",
+                Text = "Мастер установки WebAIFreeAPI v1.4.0",
                 Font = new Font("Segoe UI", 12, FontStyle.Bold),
                 Location = new Point(25, 18),
                 AutoSize = true
@@ -151,34 +235,7 @@ namespace AiFreeInstaller
             {
                 if (launchCheckBox.Checked)
                 {
-                    try
-                    {
-                        string vbsPath = Path.Combine(targetDir, "run-silent.vbs");
-                        string trayPs1 = Path.Combine(targetDir, "scripts", "tray.ps1");
-                        if (File.Exists(vbsPath))
-                        {
-                            ProcessStartInfo psi = new ProcessStartInfo("wscript.exe", "\"" + vbsPath + "\"")
-                            {
-                                WorkingDirectory = targetDir,
-                                UseShellExecute = true
-                            };
-                            Process.Start(psi);
-                        }
-                        else if (File.Exists(trayPs1))
-                        {
-                            ProcessStartInfo psi = new ProcessStartInfo("powershell.exe", "-ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + trayPs1 + "\"")
-                            {
-                                WorkingDirectory = targetDir,
-                                UseShellExecute = false,
-                                CreateNoWindow = true
-                            };
-                            Process.Start(psi);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show("Не удалось запустить: " + ex.Message, "WebAIFreeAPI");
-                    }
+                    LaunchInstalledApp(targetDir);
                 }
                 this.Close();
                 return;
@@ -241,7 +298,7 @@ namespace AiFreeInstaller
             }
         }
 
-        private void KillRunningInstances(string dir)
+        public static void KillRunningProcesses(string dir)
         {
             try
             {
@@ -253,7 +310,7 @@ namespace AiFreeInstaller
                         if (pPath.StartsWith(dir, StringComparison.OrdinalIgnoreCase))
                         {
                             p.Kill();
-                            p.WaitForExit(1000);
+                            p.WaitForExit(1500);
                         }
                     }
                     catch {}
@@ -267,7 +324,7 @@ namespace AiFreeInstaller
             try
             {
                 SetStatus("Подготовка к установке...");
-                KillRunningInstances(targetDir);
+                KillRunningProcesses(targetDir);
 
                 if (!Directory.Exists(targetDir)) {
                     Directory.CreateDirectory(targetDir);
@@ -289,7 +346,7 @@ namespace AiFreeInstaller
                             stream.CopyTo(fs);
                         }
 
-                        ExtractArchive(tempZip, targetDir);
+                        ExtractArchiveFiles(tempZip, targetDir);
                     }
                     finally
                     {
@@ -298,10 +355,10 @@ namespace AiFreeInstaller
                 }
 
                 SetStatus("Создание ярлыков на Рабочем столе...");
-                CreateShortcuts();
+                CreateDesktopShortcuts(targetDir);
 
                 SetStatus("Настройка конфигурации OpenCode Desktop...");
-                RunSetupScript();
+                RunSetup(targetDir);
 
                 Finish(true, "Установка успешно завершена! Ярлыки созданы на Рабочем столе.");
             }
@@ -311,7 +368,7 @@ namespace AiFreeInstaller
             }
         }
 
-        private void ExtractArchive(string zipPath, string destDir)
+        public static void ExtractArchiveFiles(string zipPath, string destDir)
         {
             string tarExe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "tar.exe");
             if (File.Exists(tarExe))
@@ -357,17 +414,17 @@ namespace AiFreeInstaller
             }
         }
 
-        private void CreateShortcuts()
+        public static void CreateDesktopShortcuts(string dir)
         {
-            string nodeExe = Path.Combine(targetDir, "node", "node.exe");
-            string shortcutScript = Path.Combine(targetDir, "scripts", "create-shortcuts.mjs");
+            string nodeExe = Path.Combine(dir, "node", "node.exe");
+            string shortcutScript = Path.Combine(dir, "scripts", "create-shortcuts.mjs");
             if (File.Exists(nodeExe) && File.Exists(shortcutScript))
             {
                 ProcessStartInfo psi = new ProcessStartInfo()
                 {
                     FileName = nodeExe,
-                    Arguments = string.Format("\"{0}\" \"{1}\"", shortcutScript, targetDir),
-                    WorkingDirectory = targetDir,
+                    Arguments = string.Format("\"{0}\" \"{1}\"", shortcutScript, dir),
+                    WorkingDirectory = dir,
                     WindowStyle = ProcessWindowStyle.Hidden,
                     CreateNoWindow = true,
                     UseShellExecute = false
@@ -379,17 +436,17 @@ namespace AiFreeInstaller
             }
         }
 
-        private void RunSetupScript()
+        public static void RunSetup(string dir)
         {
-            string nodeExe = Path.Combine(targetDir, "node", "node.exe");
-            string setupScript = Path.Combine(targetDir, "scripts", "setup-opencode.mjs");
+            string nodeExe = Path.Combine(dir, "node", "node.exe");
+            string setupScript = Path.Combine(dir, "scripts", "setup-opencode.mjs");
             if (File.Exists(nodeExe) && File.Exists(setupScript))
             {
                 ProcessStartInfo psi = new ProcessStartInfo()
                 {
                     FileName = nodeExe,
-                    Arguments = string.Format("\"{0}\" \"{1}\"", setupScript, targetDir),
-                    WorkingDirectory = targetDir,
+                    Arguments = string.Format("\"{0}\" \"{1}\"", setupScript, dir),
+                    WorkingDirectory = dir,
                     WindowStyle = ProcessWindowStyle.Hidden,
                     CreateNoWindow = true,
                     UseShellExecute = false
@@ -399,6 +456,35 @@ namespace AiFreeInstaller
                     p.WaitForExit(30000);
                 }
             }
+        }
+
+        public static void LaunchInstalledApp(string dir)
+        {
+            try
+            {
+                string vbsPath = Path.Combine(dir, "run-silent.vbs");
+                string trayPs1 = Path.Combine(dir, "scripts", "tray.ps1");
+                if (File.Exists(vbsPath))
+                {
+                    ProcessStartInfo psi = new ProcessStartInfo("wscript.exe", "\"" + vbsPath + "\"")
+                    {
+                        WorkingDirectory = dir,
+                        UseShellExecute = true
+                    };
+                    Process.Start(psi);
+                }
+                else if (File.Exists(trayPs1))
+                {
+                    ProcessStartInfo psi = new ProcessStartInfo("powershell.exe", "-ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + trayPs1 + "\"")
+                    {
+                        WorkingDirectory = dir,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    Process.Start(psi);
+                }
+            }
+            catch {}
         }
     }
 }

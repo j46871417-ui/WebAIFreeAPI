@@ -79,6 +79,21 @@ export const COMMAND_CATALOG = {
       }
     },
   },
+  powershell: {
+    description: "Windows PowerShell: запуск командлетов, скриптов и системных команд",
+    risk: "medium",
+    enabledByDefault: true,
+  },
+  pwsh: {
+    description: "PowerShell Core 7+: современный шелл для Windows/Linux/macOS",
+    risk: "medium",
+    enabledByDefault: true,
+  },
+  cmd: {
+    description: "Windows Command Prompt (cmd.exe)",
+    risk: "medium",
+    enabledByDefault: true,
+  },
   mv: { description: "Перемещение/переименование", risk: "medium", enabledByDefault: true },
   sed: {
     description: "Замена/обработка текста",

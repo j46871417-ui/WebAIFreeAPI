@@ -177,6 +177,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           <button id="pipelinePanelBtn" class="iconBtn pipelinePanelBtn" type="button" title="${t("topbar.flowTitle")}">${t("topbar.flow")}</button>
         </div>
         <div class="topbarActions">
+          <button id="openTerminalBtn" class="iconBtn terminalBtn" type="button" title="Открыть консоль PowerShell в рабочей папке">⚡ Консоль</button>
           <button id="themeBtn" class="iconBtn themeBtn" type="button" title="${t("topbar.theme")}">◐</button>
           <button id="settingsBtn" class="iconBtn settingsBtn" type="button" title="${t("topbar.settings")}">⚙</button>
           <button id="quitBtn" class="iconBtn quitBtn" type="button" title="${t("topbar.quit")}">⏻</button>
@@ -269,6 +270,11 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
             <button type="button" id="toggleSearch" class="togglePill" title="${t("composer.searchTitle")}">${t("composer.search")}</button>
             <button type="button" id="attachBtn" class="togglePill attachBtn" title="${t("composer.attachTitle")}">${t("composer.attach")}</button>
             <button type="button" id="voiceBtn" class="togglePill voiceBtn" title="${t("composer.voiceTitle")}">${t("composer.voice")}</button>
+            <button type="button" id="cmdFileBtn" class="togglePill cmdPill" title="Вставить команду /file для чтения файла">📄 /file</button>
+            <button type="button" id="cmdFolderBtn" class="togglePill cmdPill" title="Вставить команду /folder для обзора папки">📁 /folder</button>
+            <button type="button" id="cmdTermBtn" class="togglePill cmdPill" title="Вставить команду /terminal для выполнения в терминале">💻 /terminal</button>
+            <button type="button" id="cmdPsBtn" class="togglePill cmdPill" title="Вставить команду /powershell для выполнения в Windows PowerShell">⚡ /ps</button>
+            <button type="button" id="cmdCodeBtn" class="togglePill cmdPill" title="Вставить команду /code для задачи программирования">🛠 /code</button>
             <div class="composerSpacer"></div>
             <button type="button" id="stopBtn" class="stopBtn hidden" title="${t("composer.stopTitle")}">${t("composer.stop")}</button>
             <button id="sendBtn" class="sendBtn" type="submit" disabled>↑</button>
@@ -761,6 +767,46 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
     const attachmentList = document.getElementById("attachmentList");
 
     attachBtn.addEventListener("click", () => fileInput.click());
+
+    function insertCommandPrefix(prefix) {
+      if (!messageInput) return;
+      const current = messageInput.value;
+      if (!current.trim()) {
+        messageInput.value = prefix + " ";
+      } else if (!current.trim().startsWith("/")) {
+        messageInput.value = prefix + " " + current.trim();
+      }
+      messageInput.focus();
+      const len = messageInput.value.length;
+      messageInput.setSelectionRange(len, len);
+    }
+    const cmdFileBtn = document.getElementById("cmdFileBtn");
+    const cmdFolderBtn = document.getElementById("cmdFolderBtn");
+    const cmdTermBtn = document.getElementById("cmdTermBtn");
+    const cmdPsBtn = document.getElementById("cmdPsBtn");
+    const cmdCodeBtn = document.getElementById("cmdCodeBtn");
+    if (cmdFileBtn) cmdFileBtn.addEventListener("click", () => insertCommandPrefix("/file"));
+    if (cmdFolderBtn) cmdFolderBtn.addEventListener("click", () => insertCommandPrefix("/folder"));
+    if (cmdTermBtn) cmdTermBtn.addEventListener("click", () => insertCommandPrefix("/terminal"));
+    if (cmdPsBtn) cmdPsBtn.addEventListener("click", () => insertCommandPrefix("/powershell"));
+    if (cmdCodeBtn) cmdCodeBtn.addEventListener("click", () => insertCommandPrefix("/code"));
+
+    const openTerminalBtn = document.getElementById("openTerminalBtn");
+    if (openTerminalBtn) {
+      openTerminalBtn.addEventListener("click", async () => {
+        const targetWorkspace = activeConversation?.workspace || appState.workspaceRoot || "";
+        try {
+          setStatus("Запускаю консоль PowerShell...", false);
+          await api("/api/terminal/open", {
+            method: "POST",
+            body: { workspace: targetWorkspace, shell: "powershell" },
+          });
+          setStatus("Консоль PowerShell открыта", false);
+        } catch (err) {
+          setStatus("Ошибка запуска консоли: " + err.message, true);
+        }
+      });
+    }
 
     let voiceAudioContext = null;
     let voiceSource = null;
@@ -2823,9 +2869,9 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       updateToastMeta.textContent = version
         ? t("update.available") + " " + version
         : t("update.available");
-      updateToastStatus.textContent = data.canUpdate ? (data.updateWarning || "") : "Доступна новая версия на GitHub";
+      updateToastStatus.textContent = data.updateWarning || "";
       updateToastDownload.disabled = false;
-      updateToastDownload.textContent = data.canUpdate ? "Обновить" : "Скачать";
+      updateToastDownload.textContent = "Обновить";
     }
 
     async function checkUpdateToast() {
@@ -2846,12 +2892,9 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
         setStatus(t("update.upToDate"), false);
         return null;
       }
-      if (!currentCheck.canUpdate) {
-        window.open(currentCheck.setupUrl || currentCheck.releasesUrl || "https://github.com/j46871417-ui/ai-free/releases/latest", "_blank");
-        return null;
-      }
       if (options.restart !== true && !await confirmAppUpdate()) return null;
-      setStatus(t("update.installing"), false);
+      if (updateToastDownload) updateToastDownload.disabled = true;
+      setStatus("Загрузка и установка обновления WebAIFreeAPI...", false);
       const result = await api("/api/update/run", {
         method: "POST",
         body: { restart: options.restart === true },
@@ -2859,7 +2902,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       renderUpdateToast(result.after || null);
       setStatus(
         result.restarting
-          ? "Обновление установлено. Перезапускаю AI Free..."
+          ? "Обновление установлено. Перезапускаю WebAIFreeAPI..."
           : (result.message || t("update.installed")),
         false,
       );
@@ -3913,16 +3956,13 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           status.className = "updateStatus";
         }
         installBtn.disabled = !data.updateAvailable;
-        if (data.updateAvailable && !data.canUpdate) {
-          installBtn.textContent = "Скачать установщик";
-          status.textContent = "Доступна новая версия на GitHub. Нажмите кнопку, чтобы скачать свежий установщик.";
-          status.className = "updateStatus ready";
-        } else if (data.updateAvailable && data.updateWarning) {
-          installBtn.textContent = t("update.install");
+        installBtn.textContent = t("update.install");
+        if (data.updateAvailable && data.updateWarning) {
           status.textContent = data.updateWarning;
           status.className = "updateStatus";
-        } else {
-          installBtn.textContent = t("update.install");
+        } else if (data.updateAvailable) {
+          status.textContent = t("update.available");
+          status.className = "updateStatus ready";
         }
       }
 

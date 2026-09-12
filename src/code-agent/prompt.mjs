@@ -154,8 +154,9 @@ Rules:
 - Inspect files before editing when the task touches existing code.
 - Prefer small, focused edits.
 - You may run commands through run_command (single program, argv array) or run_shell (real shell: pipes, &&, redirects).
+- On Windows, PowerShell and cmd are supported: use run_command with cmd "powershell"/"pwsh"/"cmd", or run_shell with shell "powershell"/"cmd" for PowerShell cmdlets, pipelines, and scripts.
 - run_command is NOT a shell, but regex/meta characters in args are fine (e.g. grep -E "foo|bar").
-- Use run_shell for pipelines like: grep -r foo . | wc -l, find . -name '*.py' | head, cmd && other.
+- Use run_shell for pipelines like: grep -r foo . | wc -l, find . -name '*.py' | head, cmd && other, or Get-ChildItem | Select-String in PowerShell.
 - Never call run_command with python, python3, or node without a script path.
 - Allowed run_command names (configured by the user in Settings): ${allowed}.
   Commands not in this list will be rejected. Common requests like "git" or "mkdir" may or may not be available — try and check the error.

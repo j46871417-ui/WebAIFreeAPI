@@ -1131,6 +1131,54 @@ export async function runWindowApp({
         return sendJson(res, { projects, defaultWorkspace: workspaceRoot, home: os.homedir() });
       }
 
+      if (req.method === "POST" && url.pathname === "/api/terminal/open") {
+        const body = await readJsonBody(req).catch(() => ({}));
+        let targetDir = typeof body.workspace === "string" && body.workspace.trim()
+          ? path.resolve(body.workspace.trim())
+          : workspaceRoot;
+        if (!fs.existsSync(targetDir) || !fs.statSync(targetDir).isDirectory()) {
+          targetDir = workspaceRoot;
+        }
+
+        const requestedShell = String(body.shell || "powershell").toLowerCase();
+        if (process.platform === "win32") {
+          try {
+            if (requestedShell === "cmd") {
+              const child = spawn("cmd.exe", ["/c", "start", "cmd.exe", "/k", `cd /d "${targetDir}"`], {
+                detached: true,
+                stdio: "ignore",
+              });
+              child.unref();
+            } else {
+              const psCmd = `Set-Location -LiteralPath '${targetDir.replace(/'/g, "''")}'`;
+              const child = spawn("cmd.exe", [
+                "/c",
+                "start",
+                "powershell.exe",
+                "-NoExit",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                psCmd,
+              ], {
+                detached: true,
+                stdio: "ignore",
+              });
+              child.unref();
+            }
+            return sendJson(res, { ok: true, shell: requestedShell, path: targetDir });
+          } catch (err) {
+            return sendJson(res, { error: `Не удалось запустить терминал: ${err.message}` }, 500);
+          }
+        } else if (process.platform === "darwin") {
+          spawn("open", ["-a", "Terminal", targetDir], { detached: true, stdio: "ignore" }).unref();
+          return sendJson(res, { ok: true, shell: requestedShell, path: targetDir });
+        } else {
+          spawn("x-terminal-emulator", ["--working-directory", targetDir], { detached: true, stdio: "ignore" }).unref();
+          return sendJson(res, { ok: true, shell: requestedShell, path: targetDir });
+        }
+      }
+
       if (req.method === "GET" && url.pathname === "/api/update/check") {
         return sendJson(res, await checkForUpdate());
       }
@@ -1138,6 +1186,14 @@ export async function runWindowApp({
       if (req.method === "POST" && url.pathname === "/api/update/run") {
         const body = await readJsonBody(req).catch(() => ({}));
         const result = await runUpdate();
+        if (result.updateMethod === "native-package") {
+          setTimeout(() => {
+            requestAppShutdown({ source: "native-package-update" }).finally(() => {
+              setTimeout(() => process.exit(0), 300).unref();
+            });
+          }, 500).unref();
+          return sendJson(res, { ...result, restarting: true });
+        }
         if (body.restart === true && result.updated && result.restartReady !== false) {
           scheduleWindowRestart({ port, workspaceRoot });
           setTimeout(() => {
@@ -2756,7 +2812,7 @@ function formatCodeProgressMessage(task, logs, { browserOnly = false } = {}) {
 
 export function shouldAutoRunCodeTask(prompt) {
   const text = String(prompt || "").trim();
-  if (!text || text === "/code" || text.startsWith("/code ") || text.startsWith("/skill ")) return false;
+  if (!text || /^\/(?:code|skill|file|read|folder|dir|terminal|term|cmd|sh|run|powershell|pwsh|ps)\b/i.test(text)) return false;
   const normalized = text.toLowerCase();
   const hasAny = (terms) => terms.some((term) => normalized.includes(term));
 

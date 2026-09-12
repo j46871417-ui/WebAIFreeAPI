@@ -516,6 +516,20 @@ export const STYLES = `
       min-width: 28px;
       padding: 0 8px;
     }
+    .terminalBtn {
+      font-size: 12px;
+      font-weight: 500;
+      gap: 4px;
+      padding: 0 8px;
+      border-radius: 6px;
+      color: var(--text-muted);
+      border: 1px solid var(--line-light);
+    }
+    .terminalBtn:hover {
+      color: var(--text-main);
+      background: var(--btn-hover);
+      border-color: var(--line-strong);
+    }
     .settingsBtn {
       font-size: 16px;
     }
@@ -2529,6 +2543,17 @@ export const STYLES = `
       background: rgba(77, 124, 255, 0.2);
       border-color: rgba(77, 124, 255, 0.45);
       box-shadow: 0 2px 8px rgba(77, 124, 255, 0.15);
+    }
+
+    .cmdPill {
+      font-family: var(--font-mono, monospace);
+      font-size: 11px;
+      letter-spacing: -0.2px;
+      padding: 5px 10px;
+    }
+    .cmdPill:hover {
+      border-color: rgba(77, 124, 255, 0.5);
+      color: var(--text);
     }
 
     /* Адаптивный дизайн для боковой панели VS Code (экраны до 480px) */

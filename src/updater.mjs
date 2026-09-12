@@ -1,8 +1,10 @@
-import fs from "node:fs";
+import fs, { createWriteStream } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { pipeline } from "node:stream/promises";
 
 import { AI_FREE_VERSION } from "./config.mjs";
 
@@ -244,6 +246,18 @@ async function readRemoteCommit(root, gitCommand) {
   }
 }
 
+async function downloadFile(url, destPath) {
+  const response = await fetch(url, {
+    headers: { "User-Agent": "WebAIFreeAPI-Native-Updater" },
+    redirect: "follow",
+  });
+  if (!response.ok) {
+    throw new Error(`Ошибка загрузки обновления: HTTP ${response.status} ${response.statusText}`);
+  }
+  const fileStream = createWriteStream(destPath);
+  await pipeline(response.body, fileStream);
+}
+
 export async function checkForUpdate() {
   const root = projectRoot();
   const currentVersion = readCurrentVersion(root);
@@ -258,8 +272,15 @@ export async function checkForUpdate() {
   ]);
   const latestVersion = remotePackage.version || "";
   const versionCompare = latestVersion ? compareVersions(currentVersion, latestVersion) : 0;
+  const isGit = Boolean(gitCommand) && fs.existsSync(path.join(root, ".git"));
   const updateAvailable =
-    versionCompare < 0 || (versionCompare === 0 && localCommit && remoteCommit && localCommit !== remoteCommit);
+    versionCompare < 0 || (versionCompare === 0 && isGit && localCommit && remoteCommit && localCommit !== remoteCommit);
+
+  const canUpdate = updateAvailable;
+  const updateMethod = isGit ? (npmCommand ? "git+npm" : "git") : "native-package";
+  const updateWarning = isGit && !npmCommand
+    ? "npm не найден. WebAIFreeAPI обновит код через git; если изменились зависимости, понадобится установить Node.js/npm и повторить обновление."
+    : "";
 
   return {
     ok: !remotePackage.error,
@@ -268,12 +289,10 @@ export async function checkForUpdate() {
     updateAvailable,
     localCommit,
     remoteCommit,
-    canUpdate: Boolean(gitCommand) && fs.existsSync(path.join(root, ".git")),
-    canInstallDependencies: Boolean(npmCommand),
-    updateMethod: npmCommand ? "git+npm" : "git",
-    updateWarning: npmCommand
-      ? ""
-      : "npm не найден. AI Free обновит код через git; если изменились зависимости, понадобится установить Node.js/npm и повторить обновление.",
+    canUpdate,
+    canInstallDependencies: isGit ? Boolean(npmCommand) : true,
+    updateMethod,
+    updateWarning,
     projectRoot: root,
     source: remotePackage.url,
     releasesUrl: RELEASES_URL,
@@ -297,17 +316,6 @@ async function runCommand(command, args, options = {}) {
 
 export async function runUpdate() {
   const root = projectRoot();
-  if (!fs.existsSync(path.join(root, ".git"))) {
-    throw new Error("Автообновление доступно только для установки из git clone.");
-  }
-  const [gitCommand, npmCommand] = await Promise.all([
-    resolveCommand("git"),
-    resolveNpmCommand(),
-  ]);
-  if (!gitCommand) {
-    throw new Error("Не найден git. Установи Git или скачай новую версию вручную со страницы релиза.");
-  }
-
   const before = await checkForUpdate();
   if (!before.updateAvailable) {
     return {
@@ -321,53 +329,98 @@ export async function runUpdate() {
   }
 
   const logs = [];
-  const beforeCommit = before.localCommit || await readLocalCommit(root, gitCommand);
-  logs.push(await runCommand(gitCommand, ["fetch", "--prune", "origin"], { cwd: root, timeout: 180_000 }));
-  logs.push(await runCommand(gitCommand, ["pull", "--ff-only", "origin", DEFAULT_BRANCH], { cwd: root, timeout: 180_000 }));
 
-  const afterPullCommit = await readLocalCommit(root, gitCommand);
-  let changedFiles = [];
-  if (beforeCommit && afterPullCommit && beforeCommit !== afterPullCommit) {
-    const changedOutput = await runCommand(gitCommand, ["diff", "--name-only", `${beforeCommit}..${afterPullCommit}`], {
-      cwd: root,
-      timeout: 60_000,
-      maxBuffer: 1_000_000,
-    }).catch(() => "");
-    changedFiles = String(changedOutput || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  }
-  const dependencyFilesChanged = changedFiles.some((file) =>
-    file === "package.json" || file === "package-lock.json" || file === "npm-shrinkwrap.json"
-  );
-  let skippedDependencyInstall = false;
-  if (dependencyFilesChanged && npmCommand) {
-    logs.push(await runCommand(npmCommand, ["install"], {
-      cwd: root,
-      timeout: 900_000,
-      maxBuffer: 12_000_000,
-    }));
-  } else if (dependencyFilesChanged) {
-    skippedDependencyInstall = true;
-    logs.push("npm не найден: установка зависимостей пропущена.");
-  } else {
-    logs.push("Зависимости не менялись: npm install не требуется.");
+  if (before.updateMethod.startsWith("git")) {
+    const [gitCommand, npmCommand] = await Promise.all([
+      resolveCommand("git"),
+      resolveNpmCommand(),
+    ]);
+    if (!gitCommand) {
+      throw new Error("Не найден git. Установи Git или используй нативное обновление.");
+    }
+
+    const beforeCommit = before.localCommit || await readLocalCommit(root, gitCommand);
+    logs.push(await runCommand(gitCommand, ["fetch", "--prune", "origin"], { cwd: root, timeout: 180_000 }));
+    logs.push(await runCommand(gitCommand, ["pull", "--ff-only", "origin", DEFAULT_BRANCH], { cwd: root, timeout: 180_000 }));
+
+    const afterPullCommit = await readLocalCommit(root, gitCommand);
+    let changedFiles = [];
+    if (beforeCommit && afterPullCommit && beforeCommit !== afterPullCommit) {
+      const changedOutput = await runCommand(gitCommand, ["diff", "--name-only", `${beforeCommit}..${afterPullCommit}`], {
+        cwd: root,
+        timeout: 60_000,
+        maxBuffer: 1_000_000,
+      }).catch(() => "");
+      changedFiles = String(changedOutput || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    }
+    const dependencyFilesChanged = changedFiles.some((file) =>
+      file === "package.json" || file === "package-lock.json" || file === "npm-shrinkwrap.json"
+    );
+    let skippedDependencyInstall = false;
+    if (dependencyFilesChanged && npmCommand) {
+      logs.push(await runCommand(npmCommand, ["install"], {
+        cwd: root,
+        timeout: 900_000,
+        maxBuffer: 12_000_000,
+      }));
+    } else if (dependencyFilesChanged) {
+      skippedDependencyInstall = true;
+      logs.push("npm не найден: установка зависимостей пропущена.");
+    } else {
+      logs.push("Зависимости не менялись: npm install не требуется.");
+    }
+
+    const after = await checkForUpdate();
+    const restartReady = !(skippedDependencyInstall && dependencyFilesChanged);
+    return {
+      ok: true,
+      updated: true,
+      restartReady,
+      skippedDependencyInstall,
+      dependencyFilesChanged,
+      message: skippedDependencyInstall
+        ? dependencyFilesChanged
+          ? "Код обновлён, но зависимости изменились, а npm не найден. Установи Node.js/npm и повтори обновление перед перезапуском."
+          : "Код обновлён. npm не найден, но зависимости не менялись, можно перезапустить WebAIFreeAPI."
+        : "Обновление установлено. WebAIFreeAPI будет перезапущен автоматически.",
+      before,
+      after,
+      logs: logs.filter(Boolean),
+    };
   }
 
-  const after = await checkForUpdate();
-  const restartReady = !(skippedDependencyInstall && dependencyFilesChanged);
+  // Нативное прямое обновление (Windows установщик в фоновом режиме)
+  const setupUrl = before.setupUrl || SETUP_DOWNLOAD_URL;
+  logs.push(`Фоновая загрузка установщика с ${setupUrl}...`);
+  const tempInstallerPath = path.join(os.tmpdir(), `WebAIFreeAPI-Setup-v${before.latestVersion || "latest"}.exe`);
+  await downloadFile(setupUrl, tempInstallerPath);
+  logs.push(`Установщик обновления успешно загружен: ${tempInstallerPath}`);
+
+  logs.push(`Запуск нативного фонового обновления в ${root}...`);
+  const child = spawn(tempInstallerPath, [
+    "/silent",
+    "/update",
+    `/dir=${root}`,
+  ], {
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
+
   return {
     ok: true,
     updated: true,
-    restartReady,
-    skippedDependencyInstall,
-    dependencyFilesChanged,
-    message: skippedDependencyInstall
-      ? dependencyFilesChanged
-        ? "Код обновлён, но зависимости изменились, а npm не найден. Установи Node.js/npm и повтори обновление перед перезапуском."
-        : "Код обновлён. npm не найден, но зависимости не менялись, можно перезапустить AI Free."
-      : "Обновление установлено. AI Free будет перезапущен автоматически.",
+    restarting: true,
+    restartReady: true,
+    updateMethod: "native-package",
+    message: `Обновление WebAIFreeAPI v${before.latestVersion} загружено. Перезапускаю приложение...`,
     before,
-    after,
-    logs: logs.filter(Boolean),
+    after: {
+      ...before,
+      currentVersion: before.latestVersion,
+      updateAvailable: false,
+    },
+    logs,
   };
 }
 

@@ -278,6 +278,10 @@ export function normalizePermissionCommand(command, workspaceRoot = "") {
   const normalized = cmd.replace(/\\/g, "/");
   const lower = normalized.toLowerCase();
   const basename = lower.split("/").pop() || "";
+  if (basename === "powershell.exe" || basename === "powershell") return "powershell";
+  if (basename === "pwsh.exe" || basename === "pwsh") return "pwsh";
+  if (basename === "cmd.exe" || basename === "cmd") return "cmd";
+
   const isPython = /^python(?:3(?:\.\d+)?)?(?:\.exe)?$/.test(basename) || basename === "py.exe";
   if (!isPython) return "";
 
@@ -329,8 +333,19 @@ export async function runWorkspaceShell(workspaceRoot, call) {
     60_000,
   );
 
-  const shellCmd = process.platform === "win32" ? "cmd.exe" : "sh";
-  const shellArgs = process.platform === "win32" ? ["/d", "/s", "/c", command] : ["-c", command];
+  const requestedShell = String(call.shell || "").toLowerCase();
+  let shellCmd;
+  let shellArgs;
+  if (requestedShell === "powershell" || requestedShell === "pwsh" || requestedShell === "ps") {
+    shellCmd = requestedShell === "pwsh" ? "pwsh" : (process.platform === "win32" ? "powershell.exe" : "pwsh");
+    shellArgs = ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command];
+  } else if (process.platform === "win32") {
+    shellCmd = "cmd.exe";
+    shellArgs = ["/d", "/s", "/c", command];
+  } else {
+    shellCmd = "sh";
+    shellArgs = ["-c", command];
+  }
 
   let result;
   try {
@@ -344,6 +359,7 @@ export async function runWorkspaceShell(workspaceRoot, call) {
       ok: false,
       command,
       shell: true,
+      shellType: requestedShell || (process.platform === "win32" ? "cmd" : "sh"),
       error: error.message,
     };
   }
@@ -352,6 +368,7 @@ export async function runWorkspaceShell(workspaceRoot, call) {
     ok: result.status === 0,
     command,
     shell: true,
+    shellType: requestedShell || (process.platform === "win32" ? "cmd" : "sh"),
     status: result.status,
     signal: result.signal,
     timedOut: result.timedOut,

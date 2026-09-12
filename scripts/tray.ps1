@@ -1,4 +1,4 @@
-﻿# WebAIFreeAPI - Windows System Tray Manager
+# WebAIFreeAPI - Windows System Tray Manager
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -54,9 +54,25 @@ function Stop-ServerProcess {
     }
 }
 
+function Wait-ServerReady {
+    param([int]$timeoutSec = 10)
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($sw.Elapsed.TotalSeconds -lt $timeoutSec) {
+        try {
+            $req = [System.Net.WebRequest]::Create("$url/health")
+            $req.Timeout = 1000
+            $res = $req.GetResponse()
+            $res.Close()
+            return $true
+        } catch {}
+        Start-Sleep -Milliseconds 300
+    }
+    return $false
+}
+
 function Open-AppWindow {
     Start-ServerProcess
-    Start-Sleep -Milliseconds 600
+    Wait-ServerReady -timeoutSec 8 | Out-Null
 
     $chromePaths = @(
         "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
@@ -114,6 +130,11 @@ $itemOpen.add_Click({ Open-AppWindow })
 $itemOpenCode = $contextMenu.Items.Add("Open OpenCode Desktop")
 $itemOpenCode.add_Click({ Open-OpenCode })
 
+$itemOpenTerminal = $contextMenu.Items.Add("Open PowerShell Console")
+$itemOpenTerminal.add_Click({
+    Start-Process "powershell.exe" -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", "Set-Location -LiteralPath '$appDir'"
+})
+
 $itemTelegram = $contextMenu.Items.Add("Telegram Community")
 $itemTelegram.add_Click({
     Start-Process "https://t.me/+8qU7020rMF84OWNi"
@@ -121,7 +142,22 @@ $itemTelegram.add_Click({
 
 $itemCheckUpdates = $contextMenu.Items.Add("Check for Updates")
 $itemCheckUpdates.add_Click({
-    Start-Process "https://github.com/j46871417-ui/WebAIFreeAPI/releases/latest"
+    try {
+        $checkJson = Invoke-RestMethod -Uri "$url/api/update/check" -Method Get -TimeoutSec 5 -ErrorAction Stop
+        if ($checkJson.updateAvailable) {
+            $msg = "Доступна новая версия: v$($checkJson.latestVersion)`nТекущая версия: v$($checkJson.currentVersion)`n`nУстановить обновление прямо сейчас?"
+            $choice = [System.Windows.Forms.MessageBox]::Show($msg, "WebAIFreeAPI Update", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Information)
+            if ($choice -eq [System.Windows.Forms.DialogResult]::Yes) {
+                $notifyIcon.ShowBalloonTip(4000, "WebAIFreeAPI", "Загрузка и установка обновления...", [System.Windows.Forms.ToolTipIcon]::Info)
+                $body = @{ restart = $true } | ConvertTo-Json
+                Invoke-RestMethod -Uri "$url/api/update/run" -Method Post -Body $body -ContentType "application/json" -TimeoutSec 60 | Out-Null
+            }
+        } else {
+            [System.Windows.Forms.MessageBox]::Show("У вас установлена актуальная версия (v$($checkJson.currentVersion)).", "WebAIFreeAPI", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+        }
+    } catch {
+        Start-Process "https://github.com/j46871417-ui/WebAIFreeAPI/releases/latest"
+    }
 })
 
 $contextMenu.Items.Add("-") | Out-Null
@@ -165,7 +201,7 @@ $notifyIcon.add_Click({
 })
 
 Start-ServerProcess
-Start-Sleep -Milliseconds 800
+Wait-ServerReady -timeoutSec 12 | Out-Null
 Open-AppWindow
 
 $notifyIcon.ShowBalloonTip(3000, "WebAIFreeAPI active", "Server running in background at 127.0.0.1:4317", [System.Windows.Forms.ToolTipIcon]::Info)
