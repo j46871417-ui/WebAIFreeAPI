@@ -2823,9 +2823,9 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       updateToastMeta.textContent = version
         ? t("update.available") + " " + version
         : t("update.available");
-      updateToastStatus.textContent = data.canUpdate ? (data.updateWarning || "") : t("update.gitRequired");
-      updateToastDownload.disabled = !data.canUpdate;
-      updateToastDownload.textContent = data.canUpdate ? "Скачать" : "Недоступно";
+      updateToastStatus.textContent = data.canUpdate ? (data.updateWarning || "") : "Доступна новая версия на GitHub";
+      updateToastDownload.disabled = false;
+      updateToastDownload.textContent = data.canUpdate ? "Обновить" : "Скачать";
     }
 
     async function checkUpdateToast() {
@@ -2847,7 +2847,8 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
         return null;
       }
       if (!currentCheck.canUpdate) {
-        throw new Error(t("update.gitRequired"));
+        window.open(currentCheck.setupUrl || currentCheck.releasesUrl || "https://github.com/j46871417-ui/ai-free/releases/latest", "_blank");
+        return null;
       }
       if (options.restart !== true && !await confirmAppUpdate()) return null;
       setStatus(t("update.installing"), false);
@@ -3911,13 +3912,17 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           status.textContent = t("update.upToDate");
           status.className = "updateStatus";
         }
-        installBtn.disabled = !data.updateAvailable || !data.canUpdate;
+        installBtn.disabled = !data.updateAvailable;
         if (data.updateAvailable && !data.canUpdate) {
-          status.textContent = t("update.gitRequired");
-          status.className = "updateStatus error";
+          installBtn.textContent = "Скачать установщик";
+          status.textContent = "Доступна новая версия на GitHub. Нажмите кнопку, чтобы скачать свежий установщик.";
+          status.className = "updateStatus ready";
         } else if (data.updateAvailable && data.updateWarning) {
+          installBtn.textContent = t("update.install");
           status.textContent = data.updateWarning;
           status.className = "updateStatus";
+        } else {
+          installBtn.textContent = t("update.install");
         }
       }
 
