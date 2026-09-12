@@ -17,7 +17,7 @@ function createRuntimeRoot() {
   ]) {
     const file = path.join(root, relativePath);
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, relativePath === "package.json" ? '{"version":"1.7.0"}' : "");
+    fs.writeFileSync(file, relativePath === "package.json" ? '{"version":"1.7.1"}' : "");
   }
   return root;
 }
@@ -27,7 +27,7 @@ describe("offline runtime checker", () => {
     const root = createRuntimeRoot();
     const status = getRuntimeStatus(root);
     assert.equal(status.ok, true);
-    assert.equal(status.version, "1.7.0");
+    assert.equal(status.version, "1.7.1");
     fs.rmSync(root, { recursive: true, force: true });
   });
 

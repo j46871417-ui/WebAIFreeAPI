@@ -1,5 +1,5 @@
 // Исполнитель tool-call'ов от /code-агента. Файловые операции + run_command.
-// Все пути валидируются через resolveWorkspacePath: за пределы workspace не выйти.
+// Пути разрешаются относительно workspace, но могут указывать и на внешние каталоги.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -610,8 +610,8 @@ function clampInteger(value, min, max, fallback) {
   return Math.min(Math.max(Math.floor(parsed), min), max);
 }
 
-// Резолв пути к файлу/папке внутри workspace. Гарантирует, что результат
-// НЕ выходит за пределы корня и не попадает в .git / node_modules / .env.
+// Резолв пути к файлу/папке относительно workspace. Внешние пути разрешены;
+// служебные и секретные каталоги по-прежнему блокируются.
 export function resolveWorkspacePath(workspaceRoot, requestedPath) {
   if (!requestedPath || typeof requestedPath !== "string") {
     throw new Error("Tool path is required.");
@@ -619,39 +619,14 @@ export function resolveWorkspacePath(workspaceRoot, requestedPath) {
 
   const root = path.resolve(workspaceRoot);
   const target = path.normalize(path.resolve(root, requestedPath));
-  const rootPrefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
-
-  if (target !== root && !target.startsWith(rootPrefix)) {
-    throw new Error(`Path escapes workspace: ${requestedPath}`);
-  }
   const relative = path.relative(root, target);
 
-  const parts = relative.split(path.sep);
+  const parts = path.resolve(target).split(path.sep);
   if (parts.includes(".git") || parts.includes("node_modules") || parts.includes(".env")) {
     throw new Error(`Path is blocked: ${requestedPath}`);
   }
 
-  if (fs.existsSync(root)) {
-    const existingPath = fs.existsSync(target) ? target : nearestExistingParent(target);
-    const realRoot = fs.realpathSync.native(root);
-    const realExisting = fs.realpathSync.native(existingPath);
-    const realRelative = path.relative(realRoot, realExisting);
-    if (realRelative.startsWith("..") || path.isAbsolute(realRelative)) {
-      throw new Error(`Path escapes workspace through a link: ${requestedPath}`);
-    }
-  }
-
   return target;
-}
-
-function nearestExistingParent(target) {
-  let current = path.dirname(target);
-  while (!fs.existsSync(current)) {
-    const parent = path.dirname(current);
-    if (parent === current) return target;
-    current = parent;
-  }
-  return current;
 }
 
 
