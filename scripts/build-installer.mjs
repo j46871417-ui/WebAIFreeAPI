@@ -23,6 +23,13 @@ const outputExe = path.join(distDir, "WebAIFreeAPI-Setup.exe");
 if (fs.existsSync(archiveZip)) fs.unlinkSync(archiveZip);
 if (fs.existsSync(outputExe)) fs.unlinkSync(outputExe);
 
+console.log("0. Building native Windows GUI (WebAIFreeAPI.exe)...");
+const nodeExe = path.join(rootDir, "node", "node.exe");
+const buildNativeScript = path.join(rootDir, "scripts", "build-native-gui.mjs");
+if (fs.existsSync(nodeExe) && fs.existsSync(buildNativeScript)) {
+  execSync(`"${nodeExe}" "${buildNativeScript}"`, { cwd: rootDir, stdio: "inherit" });
+}
+
 console.log("1. Creating ai-free.zip archive using 7-Zip...");
 const itemsToInclude = [
   "api",
@@ -33,6 +40,7 @@ const itemsToInclude = [
   "plugin-for-vscode",
   "scripts",
   "src",
+  "src-native",
   "package.json",
   "run.bat",
   "run-silent.vbs",

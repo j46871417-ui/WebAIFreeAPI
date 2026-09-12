@@ -122,7 +122,7 @@ namespace AiFreeInstaller
             else
                 targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WebAIFreeAPI");
 
-            this.Text = "Установка WebAIFreeAPI v1.5.0";
+            this.Text = "Установка WebAIFreeAPI v1.6.0";
             this.Size = new Size(540, 320);
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
@@ -133,7 +133,7 @@ namespace AiFreeInstaller
             } catch {}
 
             titleLabel = new Label() {
-                Text = "Мастер установки WebAIFreeAPI v1.5.0",
+                Text = "Мастер установки WebAIFreeAPI v1.6.0",
                 Font = new Font("Segoe UI", 12, FontStyle.Bold),
                 Location = new Point(25, 18),
                 AutoSize = true
@@ -462,9 +462,20 @@ namespace AiFreeInstaller
         {
             try
             {
+                string exePath = Path.Combine(dir, "bin", "WebAIFreeAPI.exe");
                 string vbsPath = Path.Combine(dir, "run-silent.vbs");
                 string trayPs1 = Path.Combine(dir, "scripts", "tray.ps1");
-                if (File.Exists(vbsPath))
+
+                if (File.Exists(exePath))
+                {
+                    ProcessStartInfo psi = new ProcessStartInfo(exePath)
+                    {
+                        WorkingDirectory = dir,
+                        UseShellExecute = true
+                    };
+                    Process.Start(psi);
+                }
+                else if (File.Exists(vbsPath))
                 {
                     ProcessStartInfo psi = new ProcessStartInfo("wscript.exe", "\"" + vbsPath + "\"")
                     {
