@@ -44,7 +44,7 @@ namespace WebAIFreeAPI.Native
         {
             this.apiClient = client;
 
-            Title = "WebAIFreeAPI — AI Desktop v1.6.1";
+            Title = "WebAIFreeAPI — AI Desktop v1.6.2";
             Width = 1120;
             Height = 740;
             MinWidth = 860;
@@ -123,7 +123,7 @@ namespace WebAIFreeAPI.Native
                 VerticalAlignment = VerticalAlignment.Center,
                 Child = new TextBlock
                 {
-                    Text = "v1.6.1",
+                    Text = "v1.6.2",
                     FontSize = 10,
                     FontWeight = FontWeights.Bold,
                     Foreground = Brushes.White
