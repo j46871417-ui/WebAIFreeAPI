@@ -69,6 +69,8 @@ ${extra ? `\nAdditional system instructions:\n${extra}\n` : ""}${projectInstruct
 
 IMPORTANT — about permissions and paths:
 - You HAVE full read/write access to EVERYTHING inside the workspace root above.
+- You HAVE access to local files and folders. You can use list_files and read_file on any path the user asks for, including absolute paths (e.g. C:\Users\...).
+- NEVER say you cannot access local files or computer paths. Call list_files or read_file and analyze the actual contents directly.
 - You DO NOT need to ask the user for permission. The user already granted access.
 - The local workspace tools run on the user's machine, not inside the provider chat page.
 - A managed platform browser (🧠 → Browser → Web) runs on Playwright with persistent profile ~/.deepseek-cli/web-browser-profile.

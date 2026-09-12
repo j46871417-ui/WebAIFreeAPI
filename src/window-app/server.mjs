@@ -2759,24 +2759,44 @@ export function shouldAutoRunCodeTask(prompt) {
   const normalized = text.toLowerCase();
   const hasAny = (terms) => terms.some((term) => normalized.includes(term));
 
+  const hasExplicitPath = /[a-zA-Z]:[\\/][^\s]+|(?:\.{1,2}[\\/]|[\\/])[^\s]+|\b(по пути|в папке|в файле|директори|содержимое|содержание)\b/u.test(normalized);
+
   if (/^(как|что|почему|зачем|объясни|расскажи|покажи пример|можешь объяснить)\b/u.test(normalized)) {
-    return false;
+    if (!hasExplicitPath) return false;
   }
   if (/^(how|what|why|explain|tell me|can you explain)\b/u.test(normalized)) {
-    return false;
+    if (!hasExplicitPath) return false;
+  }
+
+  if (hasExplicitPath && hasAny([
+    "проанализируй", "проанализировать", "анализ", "посмотри", "посмотреть", "прочитай",
+    "прочитать", "прочти", "изучи", "изучить", "исследуй", "исследовать", "найди", "найти",
+    "открой", "открыть", "покажи", "показать", "проверь", "проверить", "список", "структур",
+    "analyze", "inspect", "read", "examine", "explore", "find", "open", "show", "list",
+  ])) {
+    return true;
   }
 
   const directAction =
-    hasAny(["добавь", "добавить", "сделай", "сделать", "измени", "изменить", "исправь", "исправить", "почини", "починить", "обнови", "обновить", "удали", "удалить", "переименуй", "переименовать", "реализуй", "реализовать", "напиши", "написать", "создай", "создать", "встрой", "встраивай", "встроить", "подключи", "подключить", "проверь", "проверить", "запусти", "запустить", "собери", "собрать", "протестируй", "протестировать", "переведи", "перевести"])
-    || /\b(add|create|make|edit|update|change|fix|repair|remove|delete|rename|implement|write|modify|install|run|test|verify|check|build|refactor|wire|integrate)\b/u.test(normalized);
+    hasAny([
+      "добавь", "добавить", "сделай", "сделать", "измени", "изменить", "исправь", "исправить",
+      "почини", "починить", "обнови", "обновить", "удали", "удалить", "переименуй", "переименовать",
+      "реализуй", "реализовать", "напиши", "написать", "создай", "создать", "встрой", "встраивай",
+      "встроить", "подключи", "подключить", "проверь", "проверить", "запусти", "запустить", "собери",
+      "собрать", "протестируй", "протестировать", "переведи", "перевести",
+      "проанализируй", "проанализировать", "анализ", "посмотри", "посмотреть", "прочитай", "прочитать",
+      "прочти", "изучи", "изучить", "исследуй", "исследовать", "найди", "найти", "открой", "открыть",
+      "покажи", "показать"
+    ])
+    || /\b(add|create|make|edit|update|change|fix|repair|remove|delete|rename|implement|write|modify|install|run|test|verify|check|build|refactor|wire|integrate|analyze|inspect|read|examine|explore|find|open|show)\b/u.test(normalized);
 
   if (!directAction) return false;
 
   const strongCodeAction =
-    hasAny(["добавь", "измени", "исправь", "почини", "обнови", "удали", "переименуй", "реализуй", "встрой", "встраивай", "встроить", "подключи", "проверь", "запусти", "собери", "протестируй", "переведи"])
-    || /\b(add|edit|update|change|fix|repair|remove|delete|rename|implement|modify|install|run|test|verify|build|refactor|wire|integrate)\b/u.test(normalized);
+    hasAny(["добавь", "измени", "исправь", "почини", "обнови", "удали", "переименуй", "реализуй", "встрой", "встраивай", "встроить", "подключи", "проверь", "запусти", "собери", "протестируй", "переведи", "проанализируй", "проанализировать", "изучи", "исследуй", "прочитай", "посмотри"])
+    || /\b(add|edit|update|change|fix|repair|remove|delete|rename|implement|modify|install|run|test|verify|build|refactor|wire|integrate|analyze|inspect|read)\b/u.test(normalized);
   const projectSignal =
-    hasAny(["проект", "код", "файл", "папк", "репозитор", "интерфейс", "плагин", "десктоп", "настройк", "чат", "агент", "модель", "функц", "компонент"])
+    hasAny(["проект", "код", "файл", "папк", "репозитор", "интерфейс", "плагин", "десктоп", "настройк", "чат", "агент", "модель", "функц", "компонент", "содержим", "пути", "путь"])
     || /\b(api|memory|loop|ui|src|test|package|repo|repository|workspace|plugin|desktop|settings|agent|provider)\b/u.test(normalized)
     || /\.(mjs|js|ts|tsx|jsx|json|css|html|md|py|sh|yml|yaml)\b/u.test(normalized)
     || /[/\\]/u.test(normalized);

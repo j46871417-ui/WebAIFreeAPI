@@ -16,6 +16,8 @@ describe("shouldAutoRunCodeTask", () => {
     assert.equal(shouldAutoRunCodeTask("исправь интерфейс чата"), true);
     assert.equal(shouldAutoRunCodeTask("add Anthropic API settings"), true);
     assert.equal(shouldAutoRunCodeTask("создай файл notes.txt"), true);
+    assert.equal(shouldAutoRunCodeTask("Проанализируй содержание по пути C:\\Users\\gabov\\Documents\\antigravity\\happy-bose"), true);
+    assert.equal(shouldAutoRunCodeTask("посмотри файлы в папке C:\\project"), true);
   });
 
   it("keeps informational prompts in normal chat", () => {
