@@ -30,7 +30,7 @@ const opencodeConfig = {
   provider: {
     "ai-free-deepseek": {
       npm: "@ai-sdk/openai-compatible",
-      name: "AI Free (DeepSeek)",
+      name: "WebAIFreeAPI (DeepSeek)",
       options: {
         baseURL: "http://127.0.0.1:4317/v1",
         apiKey: settings.apiKeys.deepseek,
@@ -62,7 +62,7 @@ const opencodeConfig = {
     },
     "ai-free-qwen": {
       npm: "@ai-sdk/openai-compatible",
-      name: "AI Free (Qwen)",
+      name: "WebAIFreeAPI (Qwen)",
       options: {
         baseURL: "http://127.0.0.1:4317/v1",
         apiKey: settings.apiKeys.qwen,
@@ -94,7 +94,7 @@ const opencodeConfig = {
     },
     "ai-free-chatgpt": {
       npm: "@ai-sdk/openai-compatible",
-      name: "AI Free (ChatGPT)",
+      name: "WebAIFreeAPI (ChatGPT)",
       options: {
         baseURL: "http://127.0.0.1:4317/v1",
         apiKey: settings.apiKeys.chatgpt,

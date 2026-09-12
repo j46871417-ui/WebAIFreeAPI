@@ -9,12 +9,12 @@ import { AI_FREE_VERSION } from "./config.mjs";
 const execFileAsync = promisify(execFile);
 
 const REPO_OWNER = process.env.AI_FREE_REPO_OWNER || "j46871417-ui";
-const REPO_NAME = process.env.AI_FREE_REPO_NAME || "ai-free";
+const REPO_NAME = process.env.AI_FREE_REPO_NAME || "WebAIFreeAPI";
 const DEFAULT_BRANCH = process.env.AI_FREE_REPO_BRANCH || "main";
 const RAW_PACKAGE_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${DEFAULT_BRANCH}/package.json`;
 const RELEASES_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
 const RELEASES_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
-const SETUP_DOWNLOAD_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/AI-Free-Setup.exe`;
+const SETUP_DOWNLOAD_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/WebAIFreeAPI-Setup.exe`;
 
 function projectRoot() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
