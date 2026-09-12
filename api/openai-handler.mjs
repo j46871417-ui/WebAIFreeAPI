@@ -1,4 +1,6 @@
 import fs from 'fs';
+import os from 'node:os';
+import path from 'node:path';
 // Прототип OpenAI-совместимого /v1/chat/completions.
 //
 // Поддерживает:
@@ -141,6 +143,15 @@ async function handleChatCompletions(req, res) {
     return sendError(res, 400, `Invalid JSON: ${e.message}`);
   }
 
+  const abortController = new AbortController();
+  const onClientClose = () => {
+    if (!res.writableEnded) {
+      abortController.abort();
+    }
+  };
+  req.on("close", onClientClose);
+  res.on("close", onClientClose);
+
   const modelName = body?.model;
   if (!modelName) return sendError(res, 400, "Missing 'model' field");
 
@@ -225,6 +236,7 @@ async function handleChatCompletions(req, res) {
             search,
             tools: body.tools,
             parentId,
+            signal: abortController.signal,
             createChat: (currentClient) => currentClient.createChat({ model: mapping.model, title: "API request" }),
             refreshClient: async (error) => {
               const { isQwenTransientBrowserTransportError } = await import("../src/providers/qwen/client.mjs");
@@ -271,6 +283,7 @@ async function handleChatCompletions(req, res) {
           thinking,
           search,
           model: mapping.model,
+          signal: abortController.signal,
         });
 
         const effectiveChatId = result.recoveredChatId || chatId;
@@ -328,6 +341,7 @@ async function handleChatCompletions(req, res) {
           tools: body.tools,
           refFileIds,
           parentMessageId,
+          signal: abortController.signal,
         });
         if (streamResult?.sessionId) {
           globalChatSessionManager.saveSession({
@@ -350,6 +364,7 @@ async function handleChatCompletions(req, res) {
         thinkingEnabled: refFileIds.length ? false : thinking,
         searchEnabled: refFileIds.length ? false : search,
         refFileIds,
+        signal: abortController.signal,
       });
 
       globalChatSessionManager.saveSession({
@@ -366,17 +381,28 @@ async function handleChatCompletions(req, res) {
     if (mapping.provider === "chatgpt") {
       const client = await getChatGPTClient();
       if (body.stream === true) {
-        return handleChatGPTStream(client, prompt, modelName, mapping.model, res, { tools: body.tools });
+        return handleChatGPTStream(client, prompt, modelName, mapping.model, res, {
+          tools: body.tools,
+          signal: abortController.signal,
+        });
       }
       const result = await client.complete({
         prompt,
         model: mapping.model,
         images,
+        signal: abortController.signal,
       });
       return sendJson(res, toOpenAIResponse(modelName, result.text, body.tools));
     }
     return sendError(res, 500, `Unknown provider: ${mapping.provider}`);
   } catch (e) {
+    if (abortController.signal.aborted || e.name === "AbortError" || res.destroyed || res.writableEnded) {
+      compatLogger.info("api.chat.aborted", {
+        provider: mapping?.provider,
+        model: modelName,
+      });
+      return;
+    }
     if (activeSession) {
       globalChatSessionManager.deleteSession(activeSession.id);
     }
@@ -609,6 +635,13 @@ async function handleResponses(req, res) {
     return sendError(res, 400, `Invalid JSON: ${e.message}`);
   }
 
+  const abortController = new AbortController();
+  const onClientClose = () => {
+    if (!res.writableEnded) abortController.abort();
+  };
+  req.on("close", onClientClose);
+  res.on("close", onClientClose);
+
   const modelName = body?.model;
   if (!modelName) return sendError(res, 400, "Missing 'model' field");
 
@@ -629,18 +662,21 @@ async function handleResponses(req, res) {
   const options = {
     search: requestSearchEnabled(body),
     thinking: requestThinkingEnabled(body, mapping),
+    signal: abortController.signal,
   };
   const basePrompt = buildPromptFromChatBody({ messages, tools: toolsForModelPrompt(body.tools) }, modelName, mapping);
   const prompt = options.search ? withWebSearchInstruction(basePrompt) : basePrompt;
 
   try {
     const text = await completeText(mapping, prompt, options);
+    if (abortController.signal.aborted || res.destroyed || res.writableEnded) return;
     const response = toResponsesResponse(modelName, text);
     if (body.stream === true) {
       return sendResponsesStream(res, response);
     }
     return sendJson(res, response);
   } catch (e) {
+    if (abortController.signal.aborted || e.name === "AbortError" || res.destroyed || res.writableEnded) return;
     console.error("[API] Responses upstream error:", e.message);
     if (body.stream === true) return sendResponsesStreamError(res, modelName, e.message);
     return sendError(res, 500, humanizeUpstreamError(e.message));
@@ -654,6 +690,13 @@ async function handleAnthropicMessages(req, res) {
   } catch (e) {
     return sendAnthropicError(res, 400, `Invalid JSON: ${e.message}`);
   }
+
+  const abortController = new AbortController();
+  const onClientClose = () => {
+    if (!res.writableEnded) abortController.abort();
+  };
+  req.on("close", onClientClose);
+  res.on("close", onClientClose);
 
   const modelName = body?.model;
   if (!modelName) return sendAnthropicError(res, 400, "Missing 'model' field");
@@ -677,25 +720,28 @@ async function handleAnthropicMessages(req, res) {
   const options = {
     search: requestSearchEnabled(body),
     thinking: requestThinkingEnabled(body, mapping),
+    signal: abortController.signal,
   };
   const basePrompt = buildPromptFromChatBody({ messages, tools }, modelName, mapping);
   const prompt = options.search ? withWebSearchInstruction(basePrompt) : basePrompt;
 
   try {
     const text = await completeText(mapping, prompt, options);
+    if (abortController.signal.aborted || res.destroyed || res.writableEnded) return;
     const response = toAnthropicMessageResponse(modelName, text);
     if (body.stream === true) {
       return sendAnthropicMessageStream(res, response);
     }
     return sendJson(res, response);
   } catch (e) {
+    if (abortController.signal.aborted || e.name === "AbortError" || res.destroyed || res.writableEnded) return;
     console.error("[API] Anthropic upstream error:", e.message);
     if (body.stream === true) return sendAnthropicStreamError(res, e.message);
     return sendAnthropicError(res, 500, humanizeUpstreamError(e.message), "api_error");
   }
 }
 
-async function completeText(mapping, prompt, { thinking = false, search = false } = {}) {
+async function completeText(mapping, prompt, { thinking = false, search = false, signal = null } = {}) {
   if (mapping.provider === "qwen") {
     const runQwen = async (client) => {
       const chatId = await client.createChat({ model: mapping.model, title: "Responses API request" });
@@ -705,6 +751,7 @@ async function completeText(mapping, prompt, { thinking = false, search = false 
         thinking,
         search,
         model: mapping.model,
+        signal,
       });
       return result.text || "";
     };
@@ -736,6 +783,7 @@ async function completeText(mapping, prompt, { thinking = false, search = false 
       modelType: mapping.model,
       thinkingEnabled: thinking,
       searchEnabled: search,
+      signal,
     });
     return result.text || "";
   }
@@ -744,6 +792,7 @@ async function completeText(mapping, prompt, { thinking = false, search = false 
     const result = await client.complete({
       prompt,
       model: mapping.model,
+      signal,
     });
     return result.text || "";
   }
@@ -1003,6 +1052,7 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
   refreshClient = null,
   tools = [],
   parentId = null,
+  signal = null,
 } = {}) {
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/event-stream");
@@ -1015,6 +1065,10 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
   let sawDelta = false;
   let firstDeltaAt = 0;
   const heartbeat = setInterval(() => {
+    if (signal?.aborted || res.destroyed || res.writableEnded) {
+      clearInterval(heartbeat);
+      return;
+    }
     if (!sawDelta) writeSseRaw(res, `: qwen waiting ${elapsedMs(startedAt)}ms\n\n`);
   }, 3_000);
   writeSseRaw(res, `: qwen stream opened ${requestId}\n\n`);
@@ -1027,6 +1081,11 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
+        if (signal?.aborted || res.destroyed || res.writableEnded) {
+          const abortErr = new Error("Request aborted by client");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
         if (!activeChatId) {
           if (typeof createChat !== "function") throw new Error("Qwen stream requires chatId or createChat callback");
           const createStartedAt = Date.now();
@@ -1050,9 +1109,15 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
             thinking,
             search,
             model,
+            signal,
             onText: onDelta,
           }),
           onDelta: (textDelta) => {
+            if (signal?.aborted || res.destroyed || res.writableEnded) {
+              const abortErr = new Error("Request aborted by client");
+              abortErr.name = "AbortError";
+              throw abortErr;
+            }
             if (!sawDelta) {
               sawDelta = true;
               firstDeltaAt = Date.now();
@@ -1065,6 +1130,7 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
             parser.onText(textDelta);
           },
           beforeRetry: async ({ attempt: emptyAttempt, error }) => {
+            if (signal?.aborted || res.destroyed || res.writableEnded) throw error;
             if (typeof createChat !== "function") throw error;
             logQwenTiming(requestId, "empty_stream_retry", {
               attempt: emptyAttempt,
@@ -1083,6 +1149,7 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
         break;
       } catch (error) {
         lastError = error;
+        if (signal?.aborted || error?.name === "AbortError" || res.destroyed || res.writableEnded) throw error;
         if (error?.code === "EMPTY_UPSTREAM_STREAM") throw error;
         if (sawDelta || attempt >= 1 || typeof refreshClient !== "function") throw error;
         logQwenTiming(requestId, "retry_before_first_delta", {
@@ -1097,7 +1164,7 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
 
     if (lastError) throw lastError;
     clearInterval(heartbeat);
-    if (res.destroyed || res.writableEnded) return;
+    if (signal?.aborted || res.destroyed || res.writableEnded) return;
     parser.onEnd();
     writeSseRaw(res, "data: [DONE]\n\n");
     if (!res.destroyed && !res.writableEnded) res.end();
@@ -1108,6 +1175,12 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
     };
   } catch (e) {
     clearInterval(heartbeat);
+    if (signal?.aborted || e?.name === "AbortError" || res.destroyed || res.writableEnded) {
+      logQwenTiming(requestId, "stream_aborted", {
+        total_ms: elapsedMs(startedAt),
+      });
+      return;
+    }
     logQwenTiming(requestId, "stream_error", {
       total_ms: elapsedMs(startedAt),
       first_delta_ms: firstDeltaAt ? firstDeltaAt - startedAt : null,
@@ -1131,7 +1204,7 @@ function logQwenTiming(requestId, stage, fields = {}) {
 }
 
 // Обработка streaming-запроса к ChatGPT.
-async function handleChatGPTStream(client, prompt, modelName, model, res, { tools = [] } = {}) {
+async function handleChatGPTStream(client, prompt, modelName, model, res, { tools = [], signal = null } = {}) {
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -1139,19 +1212,31 @@ async function handleChatGPTStream(client, prompt, modelName, model, res, { tool
 
   const parser = new StreamParser(modelName, res, { tools });
   try {
-    await client.complete({
+    const completionResult = await client.complete({
       prompt,
       model,
-      onText: (textDelta) => parser.onText(textDelta),
+      signal,
+      onText: (textDelta) => {
+        if (signal?.aborted || res.destroyed || res.writableEnded) {
+          const abortErr = new Error("Request aborted by client");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
+        parser.onText(textDelta);
+      },
     });
+    if (signal?.aborted || res.destroyed || res.writableEnded) return;
     parser.onEnd();
     res.write("data: [DONE]\n\n");
     res.end();
     return {
-      sessionId: activeSessionId,
+      sessionId: null,
       lastAssistantMessageId: completionResult?.lastAssistantMessageId || null,
     };
   } catch (e) {
+    if (signal?.aborted || e?.name === "AbortError" || res.destroyed || res.writableEnded) {
+      return;
+    }
     console.error("[API] ChatGPT stream error:", e.message);
     sendStreamError(res, modelName, e.message);
   }
@@ -1164,6 +1249,7 @@ async function handleDeepSeekStream(client, sessionId, prompt, modelName, model,
   tools = [],
   refFileIds = [],
   parentMessageId = null,
+  signal = null,
 } = {}) {
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/event-stream");
@@ -1182,10 +1268,19 @@ async function handleDeepSeekStream(client, sessionId, prompt, modelName, model,
         thinkingEnabled: thinking,
         searchEnabled: search,
         refFileIds,
-        onText: onDelta,
+        signal,
+        onText: (textDelta) => {
+          if (signal?.aborted || res.destroyed || res.writableEnded) {
+            const abortErr = new Error("Request aborted by client");
+            abortErr.name = "AbortError";
+            throw abortErr;
+          }
+          onDelta(textDelta);
+        },
       }),
       onDelta: (textDelta) => parser.onText(textDelta),
       beforeRetry: async ({ attempt, error }) => {
+        if (signal?.aborted || res.destroyed || res.writableEnded) throw error;
         compatLogger.warn("api.deepseek.empty_stream_retry", {
           model: modelName,
           attempt,
@@ -1194,6 +1289,7 @@ async function handleDeepSeekStream(client, sessionId, prompt, modelName, model,
         activeSessionId = await client.createSession();
       },
     });
+    if (signal?.aborted || res.destroyed || res.writableEnded) return;
     parser.onEnd();
     res.write("data: [DONE]\n\n");
     res.end();
@@ -1202,6 +1298,10 @@ async function handleDeepSeekStream(client, sessionId, prompt, modelName, model,
       lastAssistantMessageId: completionResult?.lastAssistantMessageId || null,
     };
   } catch (e) {
+    if (signal?.aborted || e?.name === "AbortError" || res.destroyed || res.writableEnded) {
+      compatLogger.info("api.deepseek.aborted", { model: modelName });
+      return;
+    }
     console.error("[API] DeepSeek stream error:", e.message);
     sendStreamError(res, modelName, e.message);
   }
@@ -1737,7 +1837,8 @@ export class StreamParser {
           else this.sendChunk({ content: "[Error] Upstream model returned an empty tool call. Retry the request." });
         } catch (e2) {
           console.error("[API] Error parsing tool calls from streaming response:", e2.message);
-          fs.writeFileSync("/tmp/failed_json.txt", jsonStr); console.error("[API] Problematic JSON string was:\n", JSON.stringify(jsonStr));
+          try { fs.writeFileSync(path.join(os.tmpdir(), "failed_json.txt"), jsonStr); } catch {}
+          console.error("[API] Problematic JSON string was:\n", JSON.stringify(jsonStr));
           // Fallback: send as normal text so the UI doesn't hang completely
           this.sendChunk({ content: "\n[Error parsing tool call JSON from model]\n" + jsonStr });
         }

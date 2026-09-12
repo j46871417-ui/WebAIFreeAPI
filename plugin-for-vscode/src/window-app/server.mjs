@@ -93,6 +93,7 @@ import {
 import { createFileLogger } from "../logging/logger.mjs";
 
 const appLogger = createFileLogger({ component: "window-server" });
+const STREAM_SAVE_THROTTLE_MS = 1000;
 
 export function isChatGPTLoginRecoveryRequired(error) {
   const message = String(error?.message || error || "");
@@ -1809,7 +1810,7 @@ export async function runWindowApp({
               streamMessage.updatedAt = new Date().toISOString();
               conversation.updatedAt = streamMessage.updatedAt;
               const now = Date.now();
-              if (now - lastSave >= 180) {
+              if (now - lastSave >= STREAM_SAVE_THROTTLE_MS) {
                 lastSave = now;
                 saveWindowState(workspaceRoot, state);
               }
@@ -2060,7 +2061,7 @@ export async function runWindowApp({
               streamMessage.updatedAt = new Date().toISOString();
               conversation.updatedAt = streamMessage.updatedAt;
               const now = Date.now();
-              if (now - lastSave >= 180) {
+              if (now - lastSave >= STREAM_SAVE_THROTTLE_MS) {
                 lastSave = now;
                 saveWindowState(workspaceRoot, state);
               }
@@ -2322,7 +2323,7 @@ export async function runWindowApp({
           streamMessage.updatedAt = new Date().toISOString();
           conversation.updatedAt = streamMessage.updatedAt;
           const now = Date.now();
-          if (now - lastSave >= 180) {
+          if (now - lastSave >= STREAM_SAVE_THROTTLE_MS) {
             lastSave = now;
             saveWindowState(workspaceRoot, state);
           }

@@ -3,7 +3,7 @@
 // Цель: собрать все дельты в финальную строку + знать lastAssistantMessageId
 // (для parent_message_id в следующем запросе цепочки).
 
-export async function streamSse(res, debug, onText = null) {
+export async function streamSse(res, debug, onText = null, signal = null) {
   const decoder = new TextDecoder();
   const reader = res.body.getReader();
   let buffer = "";
@@ -12,6 +12,19 @@ export async function streamSse(res, debug, onText = null) {
   const fragments = new Map();
   let eventCount = 0;
   const eventTypes = new Set();
+
+  const onAbort = () => {
+    try { reader.cancel(); } catch {}
+  };
+  if (signal) {
+    if (signal.aborted) {
+      onAbort();
+      const err = new Error("This operation was aborted");
+      err.name = "AbortError";
+      throw err;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+  }
 
   const processEvent = (rawEvent) => {
     const event = parseSseEvent(rawEvent);
@@ -39,30 +52,46 @@ export async function streamSse(res, debug, onText = null) {
     }
   };
 
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  try {
+    for (;;) {
+      if (signal?.aborted) {
+        const err = new Error("This operation was aborted");
+        err.name = "AbortError";
+        throw err;
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    let boundary;
-    while ((boundary = buffer.match(/\r?\n\r?\n/))) {
-      const boundaryIndex = boundary.index ?? 0;
-      const rawEvent = buffer.slice(0, boundaryIndex);
-      buffer = buffer.slice(boundaryIndex + boundary[0].length);
-      processEvent(rawEvent);
+      let boundary;
+      while ((boundary = buffer.match(/\r?\n\r?\n/))) {
+        const boundaryIndex = boundary.index ?? 0;
+        const rawEvent = buffer.slice(0, boundaryIndex);
+        buffer = buffer.slice(boundaryIndex + boundary[0].length);
+        processEvent(rawEvent);
+      }
+    }
+
+    buffer += decoder.decode();
+    if (buffer.trim()) processEvent(buffer);
+    if (signal?.aborted) {
+      const err = new Error("This operation was aborted");
+      err.name = "AbortError";
+      throw err;
+    }
+    if (!fullText) {
+      const types = [...eventTypes].join(", ") || "message";
+      const error = new Error(`DeepSeek stream ended without response content (events=${eventCount}, types=${types}).`);
+      error.code = "EMPTY_UPSTREAM_STREAM";
+      throw error;
+    }
+
+    return { lastAssistantMessageId, text: fullText };
+  } finally {
+    if (signal) {
+      signal.removeEventListener("abort", onAbort);
     }
   }
-
-  buffer += decoder.decode();
-  if (buffer.trim()) processEvent(buffer);
-  if (!fullText) {
-    const types = [...eventTypes].join(", ") || "message";
-    const error = new Error(`DeepSeek stream ended without response content (events=${eventCount}, types=${types}).`);
-    error.code = "EMPTY_UPSTREAM_STREAM";
-    throw error;
-  }
-
-  return { lastAssistantMessageId, text: fullText };
 }
 
 function extractStreamError(value) {

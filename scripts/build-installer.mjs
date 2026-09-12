@@ -63,7 +63,7 @@ const cmdCsc = `"${cscExe}" /target:winexe /win32manifest:"${manifestFile}" /out
 execSync(cmdCsc, { cwd: rootDir, stdio: "inherit" });
 
 const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8"));
-const version = pkg.version || "1.3.1";
+const version = pkg.version || "1.3.2";
 const versionedExe = path.join(distDir, `WebAIFreeAPI_v${version}.exe`);
 fs.copyFileSync(outputExe, versionedExe);
 
