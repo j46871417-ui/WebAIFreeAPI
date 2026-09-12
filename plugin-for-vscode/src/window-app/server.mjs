@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 
 import { openAppWindow } from "../browser/launch.mjs";
 import { AGENT_ROLES, getAgentRole, normalizeRoleId } from "../agent-runtime/roles.mjs";
-import { getCommandExecutionEnv } from "../code-agent/executor.mjs";
+import { getCommandExecutionEnv, resolveWorkspacePath } from "../code-agent/executor.mjs";
 import { runAgentTask } from "../agent-orchestrator/index.mjs";
 import { CODE_AGENT_PROMPT_VERSION } from "../code-agent/prompt.mjs";
 import {
@@ -1133,11 +1133,16 @@ export async function runWindowApp({
 
       if (req.method === "POST" && url.pathname === "/api/terminal/open") {
         const body = await readJsonBody(req).catch(() => ({}));
-        let targetDir = typeof body.workspace === "string" && body.workspace.trim()
-          ? path.resolve(body.workspace.trim())
-          : workspaceRoot;
-        if (!fs.existsSync(targetDir) || !fs.statSync(targetDir).isDirectory()) {
-          targetDir = workspaceRoot;
+        let targetDir = workspaceRoot;
+        if (typeof body.workspace === "string" && body.workspace.trim()) {
+          try {
+            targetDir = resolveWorkspacePath(workspaceRoot, body.workspace.trim());
+            if (!fs.existsSync(targetDir) || !fs.statSync(targetDir).isDirectory()) {
+              targetDir = workspaceRoot;
+            }
+          } catch {
+            return sendJson(res, { error: "Терминал можно открыть только внутри текущего workspace." }, 400);
+          }
         }
 
         const requestedShell = String(body.shell || "powershell").toLowerCase();

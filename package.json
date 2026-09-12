@@ -1,6 +1,6 @@
 {
   "name": "WebAIFreeAPI",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "description": "Free local AI client for DeepSeek, Qwen and ChatGPT with OpenAI-compatible API, CLI, code agent, memory and skills.",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
@@ -48,7 +48,6 @@
     "ai-free-browser-mcp": "./bin/ai-free-browser-mcp.mjs"
   },
   "scripts": {
-    "postinstall": "patchright install chromium && playwright install chromium",
     "start": "node ./bin/deepseek.mjs --window",
     "window": "node ./bin/deepseek.mjs --window",
     "server": "node ./bin/deepseek.mjs --no-window",
@@ -65,6 +64,8 @@
     "check": "node ./bin/deepseek.mjs --check",
     "precheck:ci": "node plugin-for-vscode/build.mjs",
     "check:ci": "node ./scripts/check-ci-invariants.mjs",
+    "audit:deps": "node ./scripts/audit-deps.mjs",
+    "check:runtime": "node ./scripts/runtime-check.mjs .",
     "build:gui": "node ./scripts/build-native-gui.mjs",
     "build:installer": "node ./scripts/build-installer.mjs",
     "pretest": "node plugin-for-vscode/build.mjs",

@@ -158,11 +158,6 @@ namespace WebAIFreeAPI.Native
                     }
                 }
 
-                if (string.IsNullOrEmpty(nodePath))
-                {
-                    nodePath = "node";
-                }
-
                 // Find bin/deepseek.mjs
                 string scriptPath = null;
                 string[] possibleScriptPaths = new string[]
@@ -183,6 +178,23 @@ namespace WebAIFreeAPI.Native
 
                 if (string.IsNullOrEmpty(scriptPath))
                 {
+                    MessageBox.Show(
+                        "В установке отсутствует bundled runtime WebAIFreeAPI (node\\node.exe или bin\\deepseek.mjs). Переустановите приложение из полного offline-инсталлятора.",
+                        "WebAIFreeAPI — Ошибка runtime",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(nodePath))
+                {
+                    MessageBox.Show(
+                        "В установке отсутствует bundled Node.js runtime. Системный Node.js не используется. Переустановите приложение из полного offline-инсталлятора.",
+                        "WebAIFreeAPI — Ошибка runtime",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
                     return;
                 }
 

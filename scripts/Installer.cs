@@ -81,6 +81,7 @@ namespace AiFreeInstaller
                         }
 
                         InstallerForm.ExtractArchiveFiles(tempZip, targetDir);
+                        InstallerForm.VerifyOfflineRuntime(targetDir);
                     }
                     finally
                     {
@@ -122,7 +123,7 @@ namespace AiFreeInstaller
             else
                 targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WebAIFreeAPI");
 
-            this.Text = "Установка WebAIFreeAPI v1.6.2";
+            this.Text = "Установка WebAIFreeAPI v1.6.3";
             this.Size = new Size(540, 320);
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
@@ -133,7 +134,7 @@ namespace AiFreeInstaller
             } catch {}
 
             titleLabel = new Label() {
-                Text = "Мастер установки WebAIFreeAPI v1.6.2",
+                Text = "Мастер установки WebAIFreeAPI v1.6.3",
                 Font = new Font("Segoe UI", 12, FontStyle.Bold),
                 Location = new Point(25, 18),
                 AutoSize = true
@@ -347,6 +348,7 @@ namespace AiFreeInstaller
                         }
 
                         ExtractArchiveFiles(tempZip, targetDir);
+                        VerifyOfflineRuntime(targetDir);
                     }
                     finally
                     {
@@ -410,6 +412,24 @@ namespace AiFreeInstaller
                 if (p.ExitCode != 0)
                 {
                     throw new Exception("Ошибка Expand-Archive: " + err);
+                }
+            }
+        }
+
+        public static void VerifyOfflineRuntime(string dir)
+        {
+            string nodeExe = Path.Combine(dir, "node", "node.exe");
+            string packageJson = Path.Combine(dir, "package.json");
+            string entrypoint = Path.Combine(dir, "bin", "deepseek.mjs");
+            string patchright = Path.Combine(dir, "node_modules", "patchright", "package.json");
+            string playwright = Path.Combine(dir, "node_modules", "playwright", "package.json");
+
+            string[] required = new string[] { nodeExe, packageJson, entrypoint, patchright, playwright };
+            foreach (string file in required)
+            {
+                if (!File.Exists(file))
+                {
+                    throw new Exception("Offline runtime is incomplete: " + file);
                 }
             }
         }
