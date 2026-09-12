@@ -16,6 +16,7 @@ import { runAgentTask } from "../agent-orchestrator/index.mjs";
 import { CODE_AGENT_PROMPT_VERSION } from "../code-agent/prompt.mjs";
 import {
   COMMAND_CATALOG,
+  ensureAllOpenAICompatApiKeys,
   ensureOpenAICompatApiKey,
   loadSettings,
   resolveOpenAICompatApiKey,
@@ -1153,6 +1154,7 @@ export async function runWindowApp({
       if (req.method === "GET" && url.pathname === "/api/settings") {
         const { modelsList } = await import("../../api/models.mjs");
         const { listProviders } = await import("../providers/registry.mjs");
+        ensureAllOpenAICompatApiKeys();
         const current = loadSettings();
         const catalog = Object.entries(COMMAND_CATALOG).map(([name, meta]) => ({
           name,
@@ -1180,7 +1182,7 @@ export async function runWindowApp({
             embeddedBaseUrl: `http://127.0.0.1:${port}/v1`,
             anthropicBaseUrl: `http://127.0.0.1:${port}`,
             anthropicMessagesUrl: `http://127.0.0.1:${port}/v1/messages`,
-            apiKeys: current.openAICompat?.apiKeys || { deepseek: "", qwen: "" },
+            apiKeys: current.openAICompat?.apiKeys || { deepseek: "", qwen: "", chatgpt: "" },
             models: modelsList().data.map((m) => m.id),
             providers,
           },
@@ -1200,6 +1202,83 @@ export async function runWindowApp({
         const provider = String(body.provider || "");
         const apiKey = ensureOpenAICompatApiKey(provider);
         return sendJson(res, { provider, apiKey });
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/settings/setup-opencode") {
+        try {
+          const homedir = os.homedir();
+          const appData = process.env.APPDATA || path.join(homedir, "AppData", "Roaming");
+          const opencodeDirs = [
+            path.join(homedir, ".opencode"),
+            path.join(appData, "opencode"),
+          ];
+          const keys = ensureAllOpenAICompatApiKeys();
+          const opencodeConfig = {
+            $schema: "https://opencode.ai/config.json",
+            model: "ai-free-qwen/qwen3.7-max",
+            small_model: "ai-free-deepseek/deepseek-chat",
+            provider: {
+              "ai-free-qwen": {
+                npm: "@ai-sdk/openai-compatible",
+                name: "WebAIFreeAPI (Qwen)",
+                options: {
+                  baseURL: `http://127.0.0.1:${port}/v1`,
+                  apiKey: keys.qwen,
+                },
+                models: {
+                  "qwen3.7-max": {
+                    name: "Qwen 3.7 Max",
+                    tools: true,
+                    limit: { context: 128000, output: 8192 },
+                  },
+                  "qwen3.7-plus": {
+                    name: "Qwen 3.7 Plus",
+                    limit: { context: 128000, output: 8192 },
+                  },
+                  "qwen3-coder-plus": {
+                    name: "Qwen 3 Coder Plus",
+                    tools: true,
+                    limit: { context: 128000, output: 8192 },
+                  },
+                },
+              },
+              "ai-free-deepseek": {
+                npm: "@ai-sdk/openai-compatible",
+                name: "WebAIFreeAPI (DeepSeek)",
+                options: {
+                  baseURL: `http://127.0.0.1:${port}/v1`,
+                  apiKey: keys.deepseek,
+                },
+                models: {
+                  "deepseek-chat": {
+                    name: "DeepSeek Chat",
+                    tools: true,
+                    limit: { context: 128000, output: 8192 },
+                  },
+                  "deepseek-reasoner": {
+                    name: "DeepSeek Reasoner (R1)",
+                    reasoning: true,
+                    tools: true,
+                    limit: { context: 128000, output: 8192 },
+                  },
+                },
+              },
+            },
+          };
+
+          const configuredPaths = [];
+          for (const dir of opencodeDirs) {
+            try {
+              fs.mkdirSync(dir, { recursive: true });
+              const cfgPath = path.join(dir, "opencode.json");
+              fs.writeFileSync(cfgPath, JSON.stringify(opencodeConfig, null, 2), "utf8");
+              configuredPaths.push(cfgPath);
+            } catch {}
+          }
+          return sendJson(res, { ok: true, paths: configuredPaths });
+        } catch (err) {
+          return sendJson(res, { ok: false, error: err.message }, 500);
+        }
       }
 
       if (req.method === "PUT" && url.pathname === "/api/settings") {

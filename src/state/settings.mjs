@@ -421,6 +421,25 @@ export function ensureOpenAICompatApiKey(provider) {
   return apiKey;
 }
 
+export function ensureAllOpenAICompatApiKeys() {
+  const current = loadSettings();
+  let updated = false;
+  const apiKeys = { ...emptyProviderApiKeys(), ...(current.openAICompat?.apiKeys || {}) };
+  for (const provider of getProviderIds()) {
+    if (!apiKeys[provider] || apiKeys[provider].includes("GhC8UKD")) {
+      apiKeys[provider] = `sk-${randomBytes(32).toString("base64url")}`;
+      updated = true;
+    }
+  }
+  if (updated) {
+    saveSettings({
+      allowedCommands: current.allowedCommands,
+      openAICompat: { apiKeys },
+    });
+  }
+  return apiKeys;
+}
+
 export function resolveOpenAICompatApiKey(req) {
   const keys = loadSettings().openAICompat?.apiKeys || {};
   const configured = Object.entries(keys).filter(([, key]) => key);
