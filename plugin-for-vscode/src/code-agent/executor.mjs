@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import { COMMAND_CATALOG, loadSettings } from "../state/settings.mjs";
 
 export class WorkspaceToolError extends Error {
@@ -500,6 +500,21 @@ export function looksLikePath(value) {
   );
 }
 
+export function killChildProcessTree(child) {
+  if (!child || !child.pid) return;
+  if (process.platform === "win32") {
+    try {
+      execSync(`taskkill /F /T /PID ${child.pid}`, { stdio: "ignore" });
+    } catch {
+      try { child.kill("SIGTERM"); } catch {}
+    }
+  } else {
+    try {
+      child.kill("SIGTERM");
+    } catch {}
+  }
+}
+
 export function spawnSyncSafe(cmd, args, options) {
   const child = spawn(cmd, args, {
     cwd: options.cwd,
@@ -516,7 +531,7 @@ export function spawnSyncSafe(cmd, args, options) {
     onStderr: (chunk) => { stderr += chunk; },
     onTimeout: () => {
       timedOut = true;
-      child.kill("SIGTERM");
+      killChildProcessTree(child);
     },
     onClose: (status, signal) => ({ status, signal, timedOut, stdout, stderr }),
   });

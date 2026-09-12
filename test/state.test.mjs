@@ -132,7 +132,7 @@ describe("conversationList", () => {
 
 import { COMMAND_CATALOG, loadSettings } from "../src/state/settings.mjs";
 import { getProviderIds } from "../src/providers/model-catalog.mjs";
-import { mergeWindowStates, normalizeWindowState } from "../src/state/window-state.mjs";
+import { loadWindowState, mergeWindowStates, normalizeWindowState, saveWindowState } from "../src/state/window-state.mjs";
 
 describe("COMMAND_CATALOG integrity", () => {
   it("has at least the legacy 7 base commands enabled by default", () => {
@@ -271,3 +271,31 @@ describe("normalizeWindowState", () => {
     assert.equal(normalized.pipeline.mainAgentId, null);
   });
 });
+
+describe("saveWindowState atomic write", () => {
+  it("saves state and produces valid readable state", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-free-state-test-"));
+    try {
+      const state = {
+        version: 2,
+        workspaceRoot: tmpDir,
+        activeConversationId: "test-conv-1",
+        conversations: [
+          {
+            id: "test-conv-1",
+            title: "Test Chat",
+            updatedAt: new Date().toISOString(),
+            messages: [{ role: "user", content: "hello" }],
+          },
+        ],
+      };
+      saveWindowState(tmpDir, state);
+      const loaded = loadWindowState(tmpDir);
+      assert.ok(loaded);
+      assert.equal(loaded.conversations.some((c) => c.id === "test-conv-1"), true);
+    } finally {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  });
+});
+

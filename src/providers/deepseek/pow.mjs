@@ -3,6 +3,7 @@
 // Это анти-бот защита; нет PoW — нет completion.
 
 import { DEEPSEEK_SHA3_WASM } from "../../config.mjs";
+import { fetchWithTlsFallback } from "./fetch-safe.mjs";
 
 // Module-level singleton: WASM грузится один раз за жизнь процесса.
 let wasmSolverPromise = null;
@@ -50,7 +51,7 @@ export class DeepSeekHash {
   }
 
   static async create(wasmUrl) {
-    const res = await fetch(wasmUrl);
+    const res = await fetchWithTlsFallback(wasmUrl);
     if (!res.ok) throw new Error(`Failed to load PoW WASM: HTTP ${res.status}`);
     const wasmBuffer = await res.arrayBuffer();
     const { instance } = await WebAssembly.instantiate(wasmBuffer, { wbg: {} });

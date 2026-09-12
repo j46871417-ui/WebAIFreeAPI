@@ -6,6 +6,7 @@ import { BASE_URL, COMPLETION_PATH, DEFAULT_AUTH_FILE } from "../../config.mjs";
 import { baseHeaders } from "./headers.mjs";
 import { solvePow } from "./pow.mjs";
 import { streamSse } from "./sse.mjs";
+import { fetchWithTlsFallback } from "./fetch-safe.mjs";
 import { createFileLogger } from "../../logging/logger.mjs";
 
 const providerLogger = createFileLogger({ component: "provider.deepseek" });
@@ -135,7 +136,7 @@ export class DeepSeekChatClient {
   async _jsonOnce(path, { method = "GET", body, headers = {} } = {}) {
     const startedAt = Date.now();
     providerLogger.debug("provider.deepseek.request", { operation: "json", method, path });
-    const res = await fetch(`${BASE_URL}${path}`, {
+    const res = await fetchWithTlsFallback(`${BASE_URL}${path}`, {
       method,
       headers: { ...baseHeaders(this.cookieHeader, this.token, { hifLeim: this.hifLeim }), ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -254,7 +255,7 @@ export class DeepSeekChatClient {
     // Фронт DeepSeek шлёт x-file-size — без него upload может вернуть id, но ref_file_ids даст biz_code 9.
     headers["x-file-size"] = String(buffer?.byteLength ?? buffer?.length ?? 0);
 
-    const res = await fetch(`${BASE_URL}${path}`, {
+    const res = await fetchWithTlsFallback(`${BASE_URL}${path}`, {
       method: "POST",
       headers,
       body: form,
@@ -507,28 +508,29 @@ export class DeepSeekChatClient {
     throw lastError;
   }
 
-async _completeOnce({
-     sessionId,
-     prompt,
-     parentMessageId = null,
-     modelType = null,
-     thinkingEnabled = false,
-     searchEnabled = false,
-     onText = null,
-     refFileIds = [],
-   }) {
-     await this._ensureSearchFeatureToken(searchEnabled);
-     const pow = await this.createPowHeader(COMPLETION_PATH);
-     const body = {
-       chat_session_id: sessionId,
-       parent_message_id: parentMessageId,
-       preempt: false, // отдаёт прерывание предыдущего стрима; их фронт шлёт всегда
-       prompt,
-       ref_file_ids: Array.isArray(refFileIds) ? refFileIds : [],
-       thinking_enabled: thinkingEnabled,
-       search_enabled: searchEnabled,
-     };
-     if (modelType != null) body.model_type = modelType;
+  async _completeOnce({
+    sessionId,
+    prompt,
+    parentMessageId = null,
+    modelType = null,
+    thinkingEnabled = false,
+    searchEnabled = false,
+    onText = null,
+    refFileIds = [],
+    signal = null,
+  }) {
+    await this._ensureSearchFeatureToken(searchEnabled);
+    const pow = await this.createPowHeader(COMPLETION_PATH);
+    const body = {
+      chat_session_id: sessionId,
+      parent_message_id: parentMessageId,
+      preempt: false, // отдаёт прерывание предыдущего стрима; их фронт шлёт всегда
+      prompt,
+      ref_file_ids: Array.isArray(refFileIds) ? refFileIds : [],
+      thinking_enabled: thinkingEnabled,
+      search_enabled: searchEnabled,
+    };
+    if (modelType != null) body.model_type = modelType;
 
     // Безусловный лог флагов — чтоб видеть, что реально уходит в API.
     // Полезно для отладки «почему режимы не работают».
@@ -536,13 +538,14 @@ async _completeOnce({
       `[complete] model_type=${modelType} thinking=${thinkingEnabled} search=${searchEnabled} ref_files=${body.ref_file_ids.length}`,
     );
 
-    const res = await fetch(`${BASE_URL}${COMPLETION_PATH}`, {
+    const res = await fetchWithTlsFallback(`${BASE_URL}${COMPLETION_PATH}`, {
       method: "POST",
       headers: {
         ...baseHeaders(this.cookieHeader, this.token, { hifLeim: this.hifLeim }),
         "X-DS-PoW-Response": pow,
       },
       body: JSON.stringify(body),
+      signal,
     });
     providerLogger.info("provider.deepseek.response", {
       operation: "completion",
@@ -587,6 +590,6 @@ async _completeOnce({
       throw new Error(`Completion failed: HTTP ${res.status}: ${text.slice(0, 1000)}`);
     }
 
-    return streamSse(res, this.debug, onText);
+    return streamSse(res, this.debug, onText, signal);
   }
 }
