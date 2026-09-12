@@ -24,6 +24,28 @@ WebAIFreeAPI превращает бесплатные веб-чаты AI в п�
 - 🔄 **Автообновление прямо из интерфейса и трея**: проверка свежих версий с GitHub и установка обновления в один клик.
 - 🔍 **Улучшенный Web Search**: встроенный веб-поиск и автоопределение намерений.
 - ⚙️ **Автоматическая конфигурация OpenCode**: установщик сам прописывает профили WebAIFreeAPI в конфиг OpenCode Desktop.
+- 🔌 **Интеграция с любой IDE**: встроенный генератор шаблонов и автогенерация API-ключей для Cursor, VS Code (Cline, Continue), Windsurf, JetBrains, OpenCode, Aider и Zed.
+
+---
+
+## 💻 Подключение к IDE и кодовым агентам (API)
+
+WebAIFreeAPI работает как локальный OpenAI/Anthropic-совместимый сервер (`http://127.0.0.1:4317/v1`) с динамической генерацией уникальных локальных API-ключей.
+
+В окне **Настройки -> API / IDE** доступен интерактивный конфигуратор под любую IDE с кнопками копирования и автонастройки:
+
+| Среда разработки | Способ интеграции | Поддерживаемые функции |
+|---|---|---|
+| **Cursor** | Custom OpenAI Base URL (`http://127.0.0.1:4317/v1`) + ключ | Composer, чат, инлайн-правки |
+| **VS Code (Cline / Roo Code)** | OpenAI-Compatible Provider в настройках | Автономный агент, терминал, чтение и правка файлов |
+| **VS Code & JetBrains (Continue)** | `~/.continue/config.yaml` | Чат с контекстом, автокомплит кода, `Ctrl+I` |
+| **Windsurf (Cascade)** | Model Provider Settings -> Custom OpenAI | Агент Cascade, генерация кода |
+| **JetBrains (CodeGPT)** | Tools -> CodeGPT -> Custom (OpenAI) | Чат, рефакторинг в IDEA, PyCharm, WebStorm |
+| **OpenCode Desktop** | Кнопка «⚡ Настроить автоматически» в 1 клик | Полный автономный агент со всеми инструментами |
+| **Aider** | Консоль / переменные `OPENAI_API_BASE` и `OPENAI_API_KEY` | Парное программирование в терминале |
+| **Zed** | `settings.json` -> `language_models.openai` | Встроенный ассистент Zed |
+
+> 📖 **[Подробные пошаговые инструкции со всеми конфигурациями смотрите в docs/IDE_INTEGRATION.md](docs/IDE_INTEGRATION.md)**
 
 ---
 

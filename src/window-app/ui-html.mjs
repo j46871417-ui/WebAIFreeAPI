@@ -4020,6 +4020,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
 
       target.appendChild(groupEl);
       renderAnthropicSettings(target, info);
+      renderIdeIntegration(target, info);
     }
 
     function renderAnthropicSettings(target, info) {
@@ -4045,6 +4046,300 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       target.appendChild(groupEl);
     }
 
+    function renderIdeIntegration(target, info) {
+      const keys = info.apiKeys || {};
+      const baseUrl = info.embeddedBaseUrl || "http://127.0.0.1:4317/v1";
+      const qwenKey = keys.qwen || "sk-qwen-user-key";
+      const deepseekKey = keys.deepseek || "sk-deepseek-user-key";
+
+      const groupEl = document.createElement("div");
+      groupEl.className = "settingsGroup apiSettings";
+
+      const heading = document.createElement("h3");
+      heading.textContent = "Интеграция с IDE и кодовыми агентами";
+      groupEl.appendChild(heading);
+
+      const subtitle = document.createElement("div");
+      subtitle.style.fontSize = "12px";
+      subtitle.style.color = "var(--muted)";
+      subtitle.style.marginBottom = "8px";
+      subtitle.textContent = "Выберите вашу среду разработки — ниже сформируются пошаговые инструкции и готовые конфигурации с вашими актуальными локальными ключами.";
+      groupEl.appendChild(subtitle);
+
+      const ides = [
+        { id: "cursor", name: "Cursor" },
+        { id: "cline", name: "VS Code (Cline / Roo)" },
+        { id: "continue", name: "VS Code / JetBrains (Continue)" },
+        { id: "windsurf", name: "Windsurf (Cascade)" },
+        { id: "jetbrains", name: "JetBrains (CodeGPT)" },
+        { id: "opencode", name: "OpenCode Desktop" },
+        { id: "aider", name: "Aider (CLI)" },
+        { id: "zed", name: "Zed" },
+      ];
+
+      const selector = document.createElement("div");
+      selector.className = "ideSelector";
+
+      const card = document.createElement("div");
+      card.className = "ideCard";
+
+      function updateCard(id) {
+        selector.querySelectorAll(".ideBtn").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.id === id);
+        });
+        card.innerHTML = "";
+
+        const header = document.createElement("div");
+        header.className = "ideCardHeader";
+        const title = document.createElement("div");
+        title.className = "ideCardTitle";
+
+        const steps = document.createElement("ol");
+        steps.className = "ideSteps";
+
+        let codeContent = "";
+        let extraAction = null;
+
+        if (id === "cursor") {
+          title.textContent = "Настройка Cursor";
+          steps.innerHTML = `
+            <li>Откройте <strong>Cursor Settings</strong> (шестерёнка в верхнем правом углу или сочетание клавиш <code>Ctrl+Shift+J</code>).</li>
+            <li>Перейдите во вкладку <strong>Models</strong>.</li>
+            <li>В секции <strong>OpenAI API Key</strong> укажите ваш сгенерированный ключ: <code>${qwenKey}</code>.</li>
+            <li>Включите тумблер <strong>Override OpenAI Base URL</strong> и введите: <code>${baseUrl}</code>.</li>
+            <li>Добавьте модели: <code>qwen3.7-max</code>, <code>deepseek-chat</code>, <code>deepseek-reasoner</code>.</li>
+          `;
+          codeContent = `# Настройки Cursor (вводятся в GUI Models):
+Base URL: ${baseUrl}
+API Key:  ${qwenKey}
+Models:   qwen3.7-max, deepseek-chat, deepseek-reasoner`;
+        } else if (id === "cline") {
+          title.textContent = "Настройка VS Code (Cline / Roo Code)";
+          steps.innerHTML = `
+            <li>В панели расширения <strong>Cline</strong> или <strong>Roo Code</strong> нажмите шестерёнку (Settings).</li>
+            <li>В поле <strong>API Provider</strong> выберите <strong>OpenAI-Compatible</strong>.</li>
+            <li>Укажите Base URL: <code>${baseUrl}</code> и ваш API-ключ.</li>
+            <li>Либо вставьте фрагмент конфигурации ниже в <code>settings.json</code> вашего VS Code.</li>
+          `;
+          codeContent = JSON.stringify({
+            "cline.apiProvider": "openai-compatible",
+            "cline.openAiBaseUrl": baseUrl,
+            "cline.openAiApiKey": qwenKey,
+            "cline.openAiModelId": "qwen3.7-max",
+            "cline.openAiCustomModelInfo": {
+              "maxTokens": 8192,
+              "contextWindow": 128000,
+              "supportsImages": true,
+              "supportsComputerUse": true
+            }
+          }, null, 2);
+        } else if (id === "continue") {
+          title.textContent = "Настройка Continue (VS Code & JetBrains)";
+          steps.innerHTML = `
+            <li>Откройте файл настроек Continue: <code>~/.continue/config.yaml</code> (или <code>config.json</code>).</li>
+            <li>Вставьте блок конфигурации ниже в список <code>models:</code>.</li>
+            <li>Сохраните файл — модели WebAIFreeAPI будут доступны для чата и редактирования кода.</li>
+          `;
+          codeContent = `models:
+  - name: "Qwen 3.7 Max (WebAIFreeAPI)"
+    provider: "openai"
+    model: "qwen3.7-max"
+    apiBase: "${baseUrl}"
+    apiKey: "${qwenKey}"
+  - name: "DeepSeek Chat (WebAIFreeAPI)"
+    provider: "openai"
+    model: "deepseek-chat"
+    apiBase: "${baseUrl}"
+    apiKey: "${deepseekKey}"
+  - name: "DeepSeek Reasoner (WebAIFreeAPI)"
+    provider: "openai"
+    model: "deepseek-reasoner"
+    apiBase: "${baseUrl}"
+    apiKey: "${deepseekKey}"`;
+        } else if (id === "windsurf") {
+          title.textContent = "Настройка Windsurf (Codeium Cascade)";
+          steps.innerHTML = `
+            <li>Откройте меню настроек <strong>Windsurf Settings</strong> -> <strong>Model Provider Settings</strong>.</li>
+            <li>Выберите <strong>Custom OpenAI API</strong>.</li>
+            <li>Вставьте Base URL и API Key, укажите модель <code>qwen3.7-max</code>.</li>
+          `;
+          codeContent = `Base URL: ${baseUrl}
+API Key:  ${qwenKey}
+Default Model: qwen3.7-max
+Supported Models: deepseek-chat, deepseek-reasoner`;
+        } else if (id === "jetbrains") {
+          title.textContent = "Настройка JetBrains (плагин CodeGPT)";
+          steps.innerHTML = `
+            <li>Установите плагин <strong>CodeGPT</strong> в IntelliJ / PyCharm / WebStorm.</li>
+            <li>Перейдите в <strong>Settings</strong> -> <strong>Tools</strong> -> <strong>CodeGPT</strong> -> <strong>Providers</strong> -> <strong>Custom (OpenAI)</strong>.</li>
+            <li>Задайте <strong>Base URL</strong>: <code>${baseUrl}</code> и ваш ключ.</li>
+            <li>В качестве модели укажите <code>qwen3.7-max</code> или <code>deepseek-chat</code>.</li>
+          `;
+          codeContent = `Provider: Custom OpenAI
+Base URL: ${baseUrl}
+API Key:  ${qwenKey}
+Chat Model: qwen3.7-max
+Code Model: deepseek-chat`;
+        } else if (id === "opencode") {
+          title.textContent = "Настройка OpenCode Desktop";
+          steps.innerHTML = `
+            <li>OpenCode считывает профили из файла <code>~/.opencode/opencode.json</code>.</li>
+            <li>Нажмите кнопку <strong>⚡ Настроить автоматически</strong> ниже, либо скопируйте JSON в файл.</li>
+            <li>Все инструменты (bash, чтение, поиск и правка файлов) будут работать без ограничений.</li>
+          `;
+          codeContent = JSON.stringify({
+            "$schema": "https://opencode.ai/config.json",
+            "model": "ai-free-qwen/qwen3.7-max",
+            "small_model": "ai-free-deepseek/deepseek-chat",
+            "provider": {
+              "ai-free-qwen": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "WebAIFreeAPI (Qwen)",
+                "options": {
+                  "baseURL": baseUrl,
+                  "apiKey": qwenKey
+                },
+                "models": {
+                  "qwen3.7-max": { "name": "Qwen 3.7 Max", "tools": true },
+                  "qwen3.7-plus": { "name": "Qwen 3.7 Plus" },
+                  "qwen3-coder-plus": { "name": "Qwen 3 Coder Plus", "tools": true }
+                }
+              },
+              "ai-free-deepseek": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "WebAIFreeAPI (DeepSeek)",
+                "options": {
+                  "baseURL": baseUrl,
+                  "apiKey": deepseekKey
+                },
+                "models": {
+                  "deepseek-chat": { "name": "DeepSeek Chat", "tools": true },
+                  "deepseek-reasoner": { "name": "DeepSeek Reasoner", "tools": true }
+                }
+              }
+            }
+          }, null, 2);
+
+          const autoBtn = document.createElement("button");
+          autoBtn.type = "button";
+          autoBtn.className = "apiKeyBtn primaryUpdateBtn";
+          autoBtn.textContent = "⚡ Настроить OpenCode автоматически в 1 клик";
+          autoBtn.addEventListener("click", async () => {
+            try {
+              autoBtn.disabled = true;
+              autoBtn.textContent = "Настройка...";
+              const res = await api("/api/settings/setup-opencode", { method: "POST" });
+              if (res.ok) {
+                autoBtn.textContent = "✓ Успешно настроено!";
+                setStatus("Конфигурация OpenCode Desktop успешно обновлена!", false);
+              } else {
+                throw new Error(res.error || "Ошибка конфигурации");
+              }
+            } catch (err) {
+              autoBtn.textContent = "Ошибка настройки";
+              setStatus("Не удалось настроить OpenCode: " + err.message, true);
+            } finally {
+              setTimeout(() => {
+                autoBtn.disabled = false;
+                autoBtn.textContent = "⚡ Настроить OpenCode автоматически в 1 клик";
+              }, 3000);
+            }
+          });
+          extraAction = autoBtn;
+        } else if (id === "aider") {
+          title.textContent = "Настройка Aider (терминальный кодинг-агент)";
+          steps.innerHTML = `
+            <li>Задайте переменные окружения перед запуском Aider в терминале:</li>
+          `;
+          codeContent = `# Windows CMD:
+set OPENAI_API_BASE=${baseUrl}
+set OPENAI_API_KEY=${qwenKey}
+aider --model openai/qwen3.7-max
+
+# PowerShell:
+$env:OPENAI_API_BASE="${baseUrl}"
+$env:OPENAI_API_KEY="${qwenKey}"
+aider --model openai/qwen3.7-max
+
+# Linux / macOS Bash:
+export OPENAI_API_BASE="${baseUrl}"
+export OPENAI_API_KEY="${qwenKey}"
+aider --model openai/qwen3.7-max`;
+        } else if (id === "zed") {
+          title.textContent = "Настройка Zed Editor";
+          steps.innerHTML = `
+            <li>Откройте <code>settings.json</code> в редакторе Zed (<code>Ctrl+,</code>).</li>
+            <li>Добавьте секцию <code>language_models</code> ниже в ваш конфиг.</li>
+          `;
+          codeContent = JSON.stringify({
+            "language_models": {
+              "openai": {
+                "version": "1",
+                "api_url": baseUrl,
+                "available_models": [
+                  {
+                    "name": "qwen3.7-max",
+                    "display_name": "Qwen 3.7 Max",
+                    "max_tokens": 8192
+                  },
+                  {
+                    "name": "deepseek-chat",
+                    "display_name": "DeepSeek Chat",
+                    "max_tokens": 8192
+                  }
+                ]
+              }
+            }
+          }, null, 2);
+        }
+
+        header.appendChild(title);
+        card.appendChild(header);
+        card.appendChild(steps);
+
+        const codeWrap = document.createElement("div");
+        codeWrap.className = "ideCodeBlock";
+        const pre = document.createElement("pre");
+        pre.textContent = codeContent;
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "ideCopyBtn";
+        copyBtn.textContent = "📋 Скопировать";
+        copyBtn.addEventListener("click", () => {
+          navigator.clipboard.writeText(codeContent).then(() => {
+            copyBtn.textContent = "✓ Скопировано!";
+            setTimeout(() => { copyBtn.textContent = "📋 Скопировать"; }, 1500);
+          }).catch(() => {});
+        });
+        codeWrap.appendChild(pre);
+        codeWrap.appendChild(copyBtn);
+        card.appendChild(codeWrap);
+
+        if (extraAction) {
+          const actWrap = document.createElement("div");
+          actWrap.className = "ideActions";
+          actWrap.appendChild(extraAction);
+          card.appendChild(actWrap);
+        }
+      }
+
+      for (const ide of ides) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ideBtn";
+        btn.dataset.id = ide.id;
+        btn.textContent = ide.name;
+        btn.addEventListener("click", () => updateCard(ide.id));
+        selector.appendChild(btn);
+      }
+
+      groupEl.appendChild(selector);
+      groupEl.appendChild(card);
+      target.appendChild(groupEl);
+
+      updateCard("cursor");
+    }
+
     function makeApiKeyRow(provider, label, key) {
       const row = document.createElement("div");
       row.className = "apiKeyRow";
@@ -4056,11 +4351,27 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       const code = document.createElement("code");
       code.textContent = key || t("settings.noKey");
 
+      if (key) {
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "apiKeyBtn";
+        copyBtn.textContent = "📋 Скопировать";
+        copyBtn.addEventListener("click", () => {
+          navigator.clipboard.writeText(key).then(() => {
+            copyBtn.textContent = "✓ Скопировано!";
+            setTimeout(() => { copyBtn.textContent = "📋 Скопировать"; }, 1500);
+          }).catch(() => {});
+        });
+        row.appendChild(title);
+        row.appendChild(code);
+        row.appendChild(copyBtn);
+        return row;
+      }
+
       const createBtn = document.createElement("button");
       createBtn.type = "button";
       createBtn.className = "apiKeyBtn";
-      createBtn.textContent = key ? t("settings.keyCreated") : t("settings.createKey");
-      createBtn.disabled = Boolean(key);
+      createBtn.textContent = t("settings.createKey");
       createBtn.addEventListener("click", async () => {
         try {
           await api("/api/settings/openai-key", { method: "POST", body: { provider } });

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import crypto from "node:crypto";
 
 const homedir = os.homedir();
 const appData = process.env.APPDATA || path.join(homedir, "AppData", "Roaming");
@@ -14,14 +15,15 @@ try {
   settings = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
 } catch {}
 
-if (!settings.apiKeys) {
-  settings.apiKeys = {
-    deepseek: "sk-GhC8UKDvowNsCwI6llvSJE7a1jOiQg2KF8CRhTIh6iU",
-    qwen: "sk-Vy-Uq7kO1EUCCQN3z7_cY66SABw3NMiA3mCWg71mp-s",
-    chatgpt: "sk-DAj-3YAb8OVwaiAE1sBbqbiz-NR-tw-I8aXgq6zZPrE",
-  };
-  fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2), "utf8");
+if (!settings.apiKeys || typeof settings.apiKeys !== "object") {
+  settings.apiKeys = {};
 }
+for (const p of ["deepseek", "qwen", "chatgpt"]) {
+  if (!settings.apiKeys[p] || settings.apiKeys[p].includes("GhC8UKD")) {
+    settings.apiKeys[p] = `sk-${crypto.randomBytes(32).toString("base64url")}`;
+  }
+}
+fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2), "utf8");
 
 const opencodeConfig = {
   $schema: "https://opencode.ai/config.json",

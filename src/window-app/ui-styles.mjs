@@ -890,6 +890,99 @@ export const STYLES = `
       cursor: default;
       opacity: 0.8;
     }
+    .ideSelector {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 10px 0 12px;
+    }
+    .ideBtn {
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.15s ease;
+    }
+    .ideBtn:hover {
+      border-color: var(--line-strong);
+      background: var(--button-bg);
+    }
+    .ideBtn.active {
+      border-color: #22c55e;
+      background: rgba(34, 197, 94, 0.15);
+      color: #22c55e;
+      font-weight: 600;
+    }
+    .ideCard {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-1);
+      padding: 12px;
+      margin-top: 8px;
+    }
+    .ideCardHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .ideCardTitle {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .ideSteps {
+      margin: 0 0 10px;
+      padding-left: 18px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .ideSteps li strong {
+      color: var(--text);
+    }
+    .ideCodeBlock {
+      position: relative;
+      margin: 8px 0;
+    }
+    .ideCodeBlock pre {
+      margin: 0;
+      padding: 10px 12px;
+      background: var(--code-bg, #1a1a1a);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 11.5px;
+      overflow-x: auto;
+      font-family: Consolas, "Courier New", monospace;
+      color: #e2e8f0;
+      line-height: 1.45;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+    .ideCopyBtn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      padding: 4px 8px;
+      font-size: 11px;
+      border-radius: 4px;
+      background: var(--button-bg);
+      border: 1px solid var(--line);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .ideCopyBtn:hover {
+      border-color: var(--line-strong);
+    }
+    .ideActions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
     .primaryUpdateBtn {
       border-color: rgba(34, 197, 94, 0.35);
       background: rgba(34, 197, 94, 0.12);
