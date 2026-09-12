@@ -34,18 +34,18 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       </div>
       <button id="openNewChat" class="iconBtn newChatBtn" type="button">${t("app.newChat")}</button>
       <div class="sidebarPromos" aria-label="Project links">
-        <a class="sidebarPromo sidebarPromoGithub" href="https://github.com/Staks-sor/ai-free" target="_blank" rel="noreferrer">
+        <a class="sidebarPromo sidebarPromoTelegram" href="https://t.me/+8qU7020rMF84OWNi" target="_blank" rel="noreferrer" aria-label="Telegram-группа сообщества">
+          <span class="sidebarPromoMark">TG</span>
+          <span class="sidebarPromoText">
+            <strong>Telegram сообщество</strong>
+            <small>Мои программы и проекты</small>
+          </span>
+        </a>
+        <a class="sidebarPromo sidebarPromoGithub" href="https://github.com/j46871417-ui/ai-free" target="_blank" rel="noreferrer">
           <span class="sidebarPromoMark">★</span>
           <span class="sidebarPromoText">
             <strong>AI Free на GitHub</strong>
             <small>Поставить звезду и поддержать проект</small>
-          </span>
-        </a>
-        <a class="sidebarPromo sidebarPromoAd" href="https://t.me/Staks_sor" target="_blank" rel="noreferrer" aria-label="Разместить рекламу в AI Free — написать @Staks_sor в Telegram">
-          <span class="sidebarPromoMark">AD</span>
-          <span class="sidebarPromoText">
-            <strong>Разместить рекламу</strong>
-            <small>Написать @Staks_sor в Telegram</small>
           </span>
         </a>
       </div>

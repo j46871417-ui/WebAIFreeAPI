@@ -1,4 +1,4 @@
-﻿# AI Free - Windows System Tray Manager
+# AI Free - Windows System Tray Manager
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -108,6 +108,11 @@ $itemOpen.add_Click({ Open-AppWindow })
 
 $itemOpenCode = $contextMenu.Items.Add("Открыть OpenCode Desktop")
 $itemOpenCode.add_Click({ Open-OpenCode })
+
+$itemTelegram = $contextMenu.Items.Add("Telegram сообщество")
+$itemTelegram.add_Click({
+    Start-Process "https://t.me/+8qU7020rMF84OWNi"
+})
 
 $contextMenu.Items.Add("-") | Out-Null
 

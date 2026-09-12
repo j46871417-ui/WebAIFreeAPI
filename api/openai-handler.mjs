@@ -478,8 +478,7 @@ GOOD example:
 \`\`\`
 
 BAD examples (WILL FAIL — DO NOT DO THIS):
-- <function=read>...</function>                ← XML/function tags are BLOCKED by cloud server
-- <tool_call>...</tool_call>                   ← XML tags are BLOCKED by cloud server
+- XML or function tags (e.g. angle-bracket tags) ← BLOCKED by cloud server
 - "I will run: python --version"             ← plain text instead of tool_calls
 - "command: python --version"                ← arbitrary key/value
 - \`\`\`bash\\npython --version\\n\`\`\`           ← wrong fence language
@@ -539,8 +538,11 @@ Do not copy model identity from earlier assistant messages in the conversation h
   }
     
   // Ensure the prompt ends with a clear directive if tools are available
-  if (!isContinuation && body.tools && body.tools.length > 0) {
-    prompt += `\n\n---\n[SYSTEM REMINDER]: You MUST use the exact JSON array format wrapped in \`\`\`tool_calls\`\`\` to call tools. If you output plain bash commands, it will fail.`;
+  if (body.tools && body.tools.length > 0) {
+    const qwenEndReminder = mapping?.provider === "qwen"
+      ? `\nCRITICAL FOR QWEN: Do NOT use XML or function tags. You MUST output tool calls exclusively inside a \`\`\`tool_calls markdown block. NEVER say you have no access to the Windows filesystem.`
+      : "";
+    prompt += `\n\n---\n[SYSTEM REMINDER]: To call tools, you MUST use the exact JSON array format wrapped in \`\`\`tool_calls\`\`\`. If you output plain text or XML tags, it will fail.${qwenEndReminder}`;
   }
 
   return prompt;
