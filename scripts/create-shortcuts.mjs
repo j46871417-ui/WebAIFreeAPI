@@ -35,21 +35,27 @@ const shortcuts = [
 for (const desktop of desktopDirs) {
   for (const s of shortcuts) {
     const lnkPath = path.join(desktop, s.name);
-    const psScript = `
-$WshShell = New-Object -comObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut("${lnkPath.replace(/\\/g, "\\\\")}")
-$Shortcut.TargetPath = "${s.target.replace(/\\/g, "\\\\")}"
-$Shortcut.Arguments = '${s.args}'
-$Shortcut.WorkingDirectory = "${s.workingDir.replace(/\\/g, "\\\\")}"
-$Shortcut.Description = "${s.description}"
-if ("${s.icon}") { $Shortcut.IconLocation = "${s.icon.replace(/\\/g, "\\\\")}" }
-$Shortcut.Save()
-    `.trim();
+    const vbsFile = path.join(os.tmpdir(), `create-lnk-${Date.now()}-${Math.random().toString(36).slice(2)}.vbs`);
+    const vbsContent = [
+      'Set oWS = WScript.CreateObject("WScript.Shell")',
+      `sLinkFile = "${lnkPath.replace(/"/g, '""')}"`,
+      'Set oLink = oWS.CreateShortcut(sLinkFile)',
+      `oLink.TargetPath = "${s.target.replace(/"/g, '""')}"`,
+      `oLink.Arguments = "${s.args.replace(/"/g, '""')}"`,
+      `oLink.WorkingDirectory = "${s.workingDir.replace(/"/g, '""')}"`,
+      `oLink.Description = "${s.description.replace(/"/g, '""')}"`,
+      s.icon ? `oLink.IconLocation = "${s.icon.replace(/"/g, '""')}"` : "",
+      "oLink.Save",
+    ].filter(Boolean).join("\r\n");
+
     try {
-      execSync(`powershell -ExecutionPolicy Bypass -Command "${psScript.replace(/\n/g, "; ")}"`, { stdio: "ignore" });
+      fs.writeFileSync(vbsFile, vbsContent, "utf8");
+      execSync(`cscript //nologo "${vbsFile}"`, { stdio: "ignore" });
       console.log(`Created shortcut: ${lnkPath}`);
     } catch (e) {
       console.error(`Failed to create shortcut ${lnkPath}: ${e.message}`);
+    } finally {
+      try { fs.unlinkSync(vbsFile); } catch {}
     }
   }
 }

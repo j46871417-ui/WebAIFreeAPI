@@ -32,23 +32,23 @@ if (cliArgs.length > 0) {
 function showMenu() {
   console.clear();
   console.log(`${C.cyan}${C.bold}======================================================${C.reset}`);
-  console.log(`${C.cyan}${C.bold}              AI Free - Главное Меню                  ${C.reset}`);
+  console.log(`${C.cyan}${C.bold}              WebAIFreeAPI - Main Menu                ${C.reset}`);
   console.log(`${C.cyan}${C.bold}======================================================${C.reset}`);
-  console.log(`\n${C.bold}Основные действия:${C.reset}`);
-  console.log(`  ${C.green}1${C.reset} - Запустить AI Free (с поддержкой трея и фоновым сервером)`);
-  console.log(`  ${C.green}2${C.reset} - Запустить фоновый сервер API (для OpenCode / Cursor)`);
-  console.log(`\n${C.bold}Авторизация аккаунтов (откроется окно браузера):${C.reset}`);
-  console.log(`  ${C.yellow}3${C.reset} - Войти в DeepSeek (chat.deepseek.com)`);
-  console.log(`  ${C.yellow}4${C.reset} - Войти в Qwen (chat.qwen.ai)`);
-  console.log(`  ${C.yellow}5${C.reset} - Войти в ChatGPT (chatgpt.com)`);
-  console.log(`\n${C.bold}Интеграция и утилиты:${C.reset}`);
-  console.log(`  ${C.magenta}6${C.reset} - Настроить конфигурацию для OpenCode Desktop`);
-  console.log(`  ${C.magenta}7${C.reset} - Создать / обновить ярлыки на Рабочем столе`);
-  console.log(`  ${C.magenta}8${C.reset} - Проверить статус сессий и токенов`);
-  console.log(`\n  ${C.dim}0 - Выход${C.reset}\n`);
+  console.log(`\n${C.bold}Core Actions:${C.reset}`);
+  console.log(`  ${C.green}1${C.reset} - Start WebAIFreeAPI (Window & Background Server)`);
+  console.log(`  ${C.green}2${C.reset} - Start Headless API Server (127.0.0.1:4317 / OpenAI)`);
+  console.log(`\n${C.bold}Provider Authentication (Browser Window):${C.reset}`);
+  console.log(`  ${C.yellow}3${C.reset} - Login to DeepSeek (chat.deepseek.com)`);
+  console.log(`  ${C.yellow}4${C.reset} - Login to Qwen (chat.qwen.ai)`);
+  console.log(`  ${C.yellow}5${C.reset} - Login to ChatGPT (chatgpt.com)`);
+  console.log(`\n${C.bold}Integration & Utilities:${C.reset}`);
+  console.log(`  ${C.magenta}6${C.reset} - Configure OpenCode Desktop integration`);
+  console.log(`  ${C.magenta}7${C.reset} - Create / Refresh Desktop shortcuts`);
+  console.log(`  ${C.magenta}8${C.reset} - Check sessions and API status`);
+  console.log(`\n  ${C.dim}0 - Exit${C.reset}\n`);
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  rl.question(`${C.bold}Выберите пункт (0-8): ${C.reset}`, (answer) => {
+  rl.question(`${C.bold}Choose an option (0-8): ${C.reset}`, (answer) => {
     rl.close();
     handleChoice(answer.trim());
   });
@@ -57,7 +57,7 @@ function showMenu() {
 function handleChoice(choice) {
   switch (choice) {
     case "1":
-      runPowershell("scripts/tray.ps1");
+      startApp();
       break;
     case "2":
       runCommand(["--no-window"]);
@@ -83,28 +83,30 @@ function handleChoice(choice) {
     case "0":
     case "exit":
     case "q":
-      console.log(`\n${C.green}До встречи!${C.reset}\n`);
+      console.log(`\n${C.green}Bye!${C.reset}\n`);
       process.exit(0);
       break;
     default:
-      console.log(`\n${C.red}Неверный выбор. Повторите ввод.${C.reset}`);
+      console.log(`\n${C.red}Invalid choice. Please try again.${C.reset}`);
       setTimeout(showMenu, 1200);
       break;
   }
 }
 
-function runPowershell(relScript) {
-  const scriptPath = path.join(APP_DIR, relScript);
-  console.log(`\n${C.cyan}▶ Запуск в системном трее: ${relScript}...${C.reset}\n`);
-  const child = spawn("cmd.exe", ["/c", "powershell", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", scriptPath], { cwd: APP_DIR, detached: true, stdio: "ignore" });
+function startApp() {
+  const vbsPath = path.join(APP_DIR, "run-silent.vbs");
+  console.log(`\n${C.cyan}[*] Launching WebAIFreeAPI background service and app window...${C.reset}\n`);
+  const child = spawn("wscript.exe", [vbsPath], { cwd: APP_DIR, detached: true, stdio: "ignore" });
   child.unref();
-  console.log(`${C.green}✔ Приложение запущено и свернуто в системный трей возле часов.${C.reset}`);
+  console.log(`${C.green}[OK] WebAIFreeAPI launched successfully!${C.reset}`);
+  console.log(`     - Web Interface: http://127.0.0.1:4317`);
+  console.log(`     - System Tray  : Icon active near Windows clock\n`);
   promptReturn();
 }
 
 function runScript(relScript) {
   const scriptPath = path.join(APP_DIR, relScript);
-  console.log(`\n${C.cyan}▶ Выполнение: ${relScript}...${C.reset}\n`);
+  console.log(`\n${C.cyan}[*] Running: ${relScript}...${C.reset}\n`);
   const nodePath = fs.existsSync(NODE_EXE) ? NODE_EXE : process.execPath;
   const child = spawn(nodePath, [scriptPath], { cwd: APP_DIR, stdio: "inherit" });
   child.on("exit", () => {
@@ -113,14 +115,14 @@ function runScript(relScript) {
 }
 
 function runCommand(args) {
-  console.log(`\n${C.cyan}▶ Запуск: node bin/deepseek.mjs ${args.join(" ")}${C.reset}\n`);
+  console.log(`\n${C.cyan}[*] Running: node bin/deepseek.mjs ${args.join(" ")}${C.reset}\n`);
   const nodePath = fs.existsSync(NODE_EXE) ? NODE_EXE : process.execPath;
   const child = spawn(nodePath, [ENTRY_FILE, ...args], { cwd: APP_DIR, stdio: "inherit" });
   child.on("exit", (code) => {
     if (code !== 0 && code !== null) {
-      console.log(`\n${C.yellow}⚠ Процесс завершился с кодом: ${code}${C.reset}`);
+      console.log(`\n${C.yellow}[!] Process exited with code: ${code}${C.reset}`);
     } else {
-      console.log(`\n${C.green}✔ Завершено успешно.${C.reset}`);
+      console.log(`\n${C.green}[OK] Completed successfully.${C.reset}`);
     }
     promptReturn();
   });
@@ -128,7 +130,7 @@ function runCommand(args) {
 
 function promptReturn() {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  rl.question("\nНажмите Enter, чтобы вернуться в главное меню...", () => {
+  rl.question("\nPress Enter to return to main menu...", () => {
     rl.close();
     showMenu();
   });

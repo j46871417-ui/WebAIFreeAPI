@@ -26,6 +26,10 @@ WebAIFreeAPI превращает бесплатные веб-чаты AI в п�
 - ⚙️ **Автоматическая конфигурация OpenCode**: установщик сам прописывает профили WebAIFreeAPI в конфиг OpenCode Desktop.
 - 🔌 **Интеграция с любой IDE**: встроенный генератор шаблонов и автогенерация API-ключей для Cursor, VS Code (Cline, Continue), Windsurf, JetBrains, OpenCode, Aider и Zed.
 
+<p align="center">
+  <img src="docs/assets/ai-free-agent-0.4.13.png" alt="WebAIFreeAPI Interface" width="800">
+</p>
+
 ---
 
 ## 💻 Подключение к IDE и кодовым агентам (API)

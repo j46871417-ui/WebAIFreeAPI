@@ -622,6 +622,10 @@ export async function runWindowApp({
     try {
       const url = new URL(req.url, `http://${req.headers.host}`);
 
+      if (req.method === "GET" && (url.pathname === "/health" || url.pathname === "/api/health")) {
+        return sendJson(res, { status: "ok", app: "WebAIFreeAPI", uptime: process.uptime() });
+      }
+
       if (req.method === "GET" && url.pathname === "/") {
         const settings = loadSettings();
         return sendHtml(res, renderWindowHtml({
