@@ -18,7 +18,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AI Free v${AI_FREE_VERSION}</title>
+  <title>WebAIFreeAPI v${AI_FREE_VERSION}</title>
   <style>${STYLES}</style>
 </head>
 <body>

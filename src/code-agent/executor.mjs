@@ -27,13 +27,25 @@ export async function executeWorkspaceTool(workspaceRoot, call, executionOptions
   }
 
   if (tool === "list_files") {
-    const target = resolveWorkspacePath(workspaceRoot, call.path || ".");
+    const rawPath = String(call.path || ".");
+    let target;
+    const isAbs = path.isAbsolute(rawPath);
+    if (isAbs && fs.existsSync(rawPath)) {
+      const parts = path.resolve(rawPath).split(path.sep);
+      if (parts.includes(".git") || parts.includes(".env")) {
+        throw new Error(`Path is blocked: ${rawPath}`);
+      }
+      target = path.resolve(rawPath);
+    } else {
+      target = resolveWorkspacePath(workspaceRoot, rawPath);
+    }
     const maxDepth = clampInteger(call.maxDepth, 0, 8, 4);
     const maxEntries = clampInteger(call.maxEntries, 20, 1000, 500);
-    const listing = listFiles(target, workspaceRoot, { maxDepth, maxEntries });
+    const effectiveRoot = isAbs ? target : workspaceRoot;
+    const listing = listFiles(target, effectiveRoot, { maxDepth, maxEntries });
     return {
       ok: true,
-      path: path.relative(workspaceRoot, target) || ".",
+      path: isAbs ? target : (path.relative(workspaceRoot, target) || "."),
       ...listing,
     };
   }
@@ -68,7 +80,7 @@ export async function executeWorkspaceTool(workspaceRoot, call, executionOptions
     const content = buffer.subarray(0, maxBytes).toString("utf8");
     return {
       ok: true,
-      path: path.relative(workspaceRoot, target),
+      path: path.isAbsolute(requestedPath) ? target : path.relative(workspaceRoot, target),
       bytes: stat.size,
       readBytes: Math.min(buffer.length, maxBytes),
       truncated,
@@ -591,6 +603,14 @@ export function resolveWorkspacePath(workspaceRoot, requestedPath) {
 
 
 export function resolveReadableWorkspacePath(workspaceRoot, requestedPath) {
+  if (requestedPath && path.isAbsolute(requestedPath) && fs.existsSync(requestedPath)) {
+    const parts = path.resolve(requestedPath).split(path.sep);
+    if (parts.includes(".git") || parts.includes(".env") || path.basename(requestedPath).startsWith("id_rsa")) {
+      throw new Error(`Path is blocked: ${requestedPath}`);
+    }
+    return path.resolve(requestedPath);
+  }
+
   const target = resolveWorkspacePath(workspaceRoot, requestedPath);
   if (fs.existsSync(target)) return target;
 

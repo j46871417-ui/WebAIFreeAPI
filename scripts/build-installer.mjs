@@ -62,7 +62,13 @@ console.log("2. Compiling native Windows GUI installer with csc.exe (with UAC ma
 const cmdCsc = `"${cscExe}" /target:winexe /win32manifest:"${manifestFile}" /out:"${outputExe}" /win32icon:"${iconFile}" /resource:"${archiveZip}",ai-free.zip /reference:System.Windows.Forms.dll /reference:System.Drawing.dll "${csFile}"`;
 execSync(cmdCsc, { cwd: rootDir, stdio: "inherit" });
 
+const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8"));
+const version = pkg.version || "1.3.1";
+const versionedExe = path.join(distDir, `WebAIFreeAPI_v${version}.exe`);
+fs.copyFileSync(outputExe, versionedExe);
+
 console.log(`\nNative GUI Installer created: ${outputExe} (${(fs.statSync(outputExe).size / (1024 * 1024)).toFixed(1)} MB)`);
+console.log(`Versioned installer created: ${versionedExe}`);
 
 const desktops = [
   path.join(os.homedir(), "Desktop"),
@@ -70,8 +76,10 @@ const desktops = [
 ].filter((d) => fs.existsSync(d));
 
 for (const d of desktops) {
-  const dest = path.join(d, "WebAIFreeAPI-Setup.exe");
-  fs.copyFileSync(outputExe, dest);
-  console.log(`Copied installer to: ${dest}`);
+  const destSetup = path.join(d, "WebAIFreeAPI-Setup.exe");
+  const destVersioned = path.join(d, `WebAIFreeAPI_v${version}.exe`);
+  fs.copyFileSync(outputExe, destSetup);
+  fs.copyFileSync(versionedExe, destVersioned);
+  console.log(`Copied installer to: ${destSetup} and ${destVersioned}`);
 }
 
