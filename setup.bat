@@ -1,36 +1,35 @@
 @echo off
-chcp 65001 >nul
-title Установка AI Free
+title WebAIFreeAPI Setup
 cd /d "%~dp0"
 echo ========================================================
-echo        Установка AI Free на ваш компьютер
+echo             WebAIFreeAPI Setup
 echo ========================================================
 echo.
 
 set "TARGET_DIR=C:\ai-free"
 
 if /i "%CD%" NEQ "%TARGET_DIR%" (
-    echo [1/4] Копирование файлов в %TARGET_DIR%...
+    echo [1/4] Copying files to %TARGET_DIR%...
     if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"
     robocopy . "%TARGET_DIR%" /E /XC /XN /XO /NFL /NDL /NJH /NJS >nul
     cd /d "%TARGET_DIR%"
 )
 
-echo [2/4] Проверка браузерных компонентов Chromium для Playwright...
+echo [2/4] Verifying browser components...
 call "%TARGET_DIR%\node\node.exe" "%TARGET_DIR%\node_modules\playwright\cli.js" install chromium
 call "%TARGET_DIR%\node\node.exe" "%TARGET_DIR%\node_modules\patchright\cli.js" install chromium
 
-echo [3/4] Создание ярлыков на Рабочем столе...
+echo [3/4] Creating desktop shortcuts...
 call "%TARGET_DIR%\node\node.exe" "%TARGET_DIR%\scripts\create-shortcuts.mjs"
 
-echo [4/4] Настройка конфигурации для OpenCode Desktop...
+echo [4/4] Configuring OpenCode Desktop integration...
 call "%TARGET_DIR%\node\node.exe" "%TARGET_DIR%\scripts\setup-opencode.mjs"
 
 echo.
 echo ========================================================
-echo          Установка успешно завершена!
+echo             Installation completed!
 echo ========================================================
 echo.
-echo Запуск AI Free Launcher...
+echo Launching WebAIFreeAPI Launcher...
 start "" "%TARGET_DIR%\launcher.bat"
 exit

@@ -1,10 +1,15 @@
-# AI Free - Windows System Tray Manager
+﻿# WebAIFreeAPI - Windows System Tray Manager
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $appDir = Split-Path -Parent $PSScriptRoot
 if (-not (Test-Path (Join-Path $appDir "bin\deepseek.mjs"))) {
-    $appDir = Join-Path $env:ProgramFiles "AI-Free"
+    $altDir = Join-Path $env:ProgramFiles "WebAIFreeAPI"
+    if (Test-Path (Join-Path $altDir "bin\deepseek.mjs")) {
+        $appDir = $altDir
+    } else {
+        $appDir = "C:\ai-free"
+    }
 }
 Set-Location $appDir
 
@@ -51,7 +56,7 @@ function Stop-ServerProcess {
 
 function Open-AppWindow {
     Start-ServerProcess
-    Start-Sleep -Milliseconds 400
+    Start-Sleep -Milliseconds 600
 
     $chromePaths = @(
         "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
@@ -97,51 +102,51 @@ if (Test-Path $iconPath) {
 } else {
     $notifyIcon.Icon = [System.Drawing.SystemIcons]::Application
 }
-$notifyIcon.Text = "AI Free (127.0.0.1:4317)"
+$notifyIcon.Text = "WebAIFreeAPI (127.0.0.1:4317)"
 $notifyIcon.Visible = $true
 
 $contextMenu = New-Object System.Windows.Forms.ContextMenuStrip
 
-$itemOpen = $contextMenu.Items.Add("Открыть AI Free")
+$itemOpen = $contextMenu.Items.Add("Open WebAIFreeAPI")
 $itemOpen.Font = New-Object System.Drawing.Font($itemOpen.Font, [System.Drawing.FontStyle]::Bold)
 $itemOpen.add_Click({ Open-AppWindow })
 
-$itemOpenCode = $contextMenu.Items.Add("Открыть OpenCode Desktop")
+$itemOpenCode = $contextMenu.Items.Add("Open OpenCode Desktop")
 $itemOpenCode.add_Click({ Open-OpenCode })
 
-$itemTelegram = $contextMenu.Items.Add("Telegram сообщество")
+$itemTelegram = $contextMenu.Items.Add("Telegram Community")
 $itemTelegram.add_Click({
     Start-Process "https://t.me/+8qU7020rMF84OWNi"
 })
 
-$itemCheckUpdates = $contextMenu.Items.Add("Проверить обновления")
+$itemCheckUpdates = $contextMenu.Items.Add("Check for Updates")
 $itemCheckUpdates.add_Click({
-    Start-Process "https://github.com/j46871417-ui/ai-free/releases/latest"
+    Start-Process "https://github.com/j46871417-ui/WebAIFreeAPI/releases/latest"
 })
 
 $contextMenu.Items.Add("-") | Out-Null
 
-$itemRestart = $contextMenu.Items.Add("Перезапустить сервер")
+$itemRestart = $contextMenu.Items.Add("Restart Server")
 $itemRestart.add_Click({
     Stop-ServerProcess
     Start-Sleep -Milliseconds 600
     Start-ServerProcess
-    $notifyIcon.ShowBalloonTip(2000, "AI Free", "Сервер успешно перезапущен на порту 4317", [System.Windows.Forms.ToolTipIcon]::Info)
+    $notifyIcon.ShowBalloonTip(2000, "WebAIFreeAPI", "Server restarted on port 4317", [System.Windows.Forms.ToolTipIcon]::Info)
 })
 
-$itemLogs = $contextMenu.Items.Add("Показать логи")
+$itemLogs = $contextMenu.Items.Add("View Logs")
 $itemLogs.add_Click({
     $logPath = "$env:USERPROFILE\.ai-free\logs\ai-free.log"
     if (Test-Path $logPath) {
         Start-Process "notepad.exe" $logPath
     } else {
-        [System.Windows.Forms.MessageBox]::Show("Файл логов пока не создан.", "AI Free")
+        [System.Windows.Forms.MessageBox]::Show("Log file not found yet.", "WebAIFreeAPI")
     }
 })
 
 $contextMenu.Items.Add("-") | Out-Null
 
-$itemExit = $contextMenu.Items.Add("Выход из AI Free")
+$itemExit = $contextMenu.Items.Add("Exit WebAIFreeAPI")
 $itemExit.add_Click({
     Stop-ServerProcess
     $notifyIcon.Visible = $false
@@ -163,6 +168,6 @@ Start-ServerProcess
 Start-Sleep -Milliseconds 800
 Open-AppWindow
 
-$notifyIcon.ShowBalloonTip(3000, "AI Free активен", "Сервер работает в фоне. При закрытии окна сервис остается в трее возле часов.", [System.Windows.Forms.ToolTipIcon]::Info)
+$notifyIcon.ShowBalloonTip(3000, "WebAIFreeAPI active", "Server running in background at 127.0.0.1:4317", [System.Windows.Forms.ToolTipIcon]::Info)
 
 [System.Windows.Forms.Application]::Run()

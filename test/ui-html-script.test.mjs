@@ -75,11 +75,10 @@ describe("ui-html inline script", () => {
   it("does not render the expired EconomyOS giveaway", () => {
     for (const html of [renderWindowHtml({ language: "ru" }), renderPluginWindowHtml({ language: "ru" })]) {
       assert.match(html, /class="sidebarPromos"/);
-      assert.match(html, /https:\/\/github\.com\/Staks-sor\/ai-free/);
-      assert.match(html, /AI Free на GitHub/);
-      assert.match(html, /Разместить рекламу/);
-      assert.match(html, /Написать @Staks_sor в Telegram/);
-      assert.match(html, /https:\/\/t\.me\/Staks_sor/);
+      assert.match(html, /https:\/\/github\.com\/j46871417-ui\/WebAIFreeAPI/);
+      assert.match(html, /WebAIFreeAPI на GitHub/);
+      assert.match(html, /Telegram сообщество/);
+      assert.match(html, /https:\/\/t\.me\/\+8qU7020rMF84OWNi/);
       assert.doesNotMatch(html, /mailto:hello@stas-sor\.ru/);
       assert.doesNotMatch(html, /Розыгрыш API-ключа EconomyOS/);
       assert.doesNotMatch(html, /\$200 на 7 дней/);
