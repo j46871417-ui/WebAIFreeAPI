@@ -114,6 +114,11 @@ $itemTelegram.add_Click({
     Start-Process "https://t.me/+8qU7020rMF84OWNi"
 })
 
+$itemCheckUpdates = $contextMenu.Items.Add("Проверить обновления")
+$itemCheckUpdates.add_Click({
+    Start-Process "https://github.com/j46871417-ui/ai-free/releases/latest"
+})
+
 $contextMenu.Items.Add("-") | Out-Null
 
 $itemRestart = $contextMenu.Items.Add("Перезапустить сервер")

@@ -8,11 +8,13 @@ import { AI_FREE_VERSION } from "./config.mjs";
 
 const execFileAsync = promisify(execFile);
 
-const REPO_OWNER = "Staks-sor";
-const REPO_NAME = "ai-free";
-const DEFAULT_BRANCH = "main";
+const REPO_OWNER = process.env.AI_FREE_REPO_OWNER || "j46871417-ui";
+const REPO_NAME = process.env.AI_FREE_REPO_NAME || "ai-free";
+const DEFAULT_BRANCH = process.env.AI_FREE_REPO_BRANCH || "main";
 const RAW_PACKAGE_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${DEFAULT_BRANCH}/package.json`;
 const RELEASES_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
+const RELEASES_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
+const SETUP_DOWNLOAD_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/AI-Free-Setup.exe`;
 
 function projectRoot() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -189,6 +191,26 @@ async function runGit(args, options = {}) {
 }
 
 async function readRemotePackage() {
+  try {
+    const apiRes = await fetch(RELEASES_API_URL, {
+      headers: { "User-Agent": "AI-Free-Updater", "Accept": "application/vnd.github+json" },
+      cache: "no-store",
+    });
+    if (apiRes.ok) {
+      const release = await apiRes.json();
+      const rawTag = release.tag_name || "";
+      const version = normalizeVersion(rawTag);
+      const exeAsset = (release.assets || []).find((a) => String(a?.name || "").endsWith(".exe"));
+      if (version) {
+        return {
+          version,
+          url: release.html_url || RELEASES_URL,
+          setupUrl: exeAsset?.browser_download_url || SETUP_DOWNLOAD_URL,
+        };
+      }
+    }
+  } catch {}
+
   const response = await fetch(RAW_PACKAGE_URL, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`GitHub вернул HTTP ${response.status}`);
@@ -197,6 +219,7 @@ async function readRemotePackage() {
   return {
     version: typeof pkg.version === "string" ? pkg.version : "",
     url: RAW_PACKAGE_URL,
+    setupUrl: SETUP_DOWNLOAD_URL,
   };
 }
 
@@ -229,7 +252,7 @@ export async function checkForUpdate() {
     resolveNpmCommand(),
   ]);
   const [remotePackage, localCommit, remoteCommit] = await Promise.all([
-    readRemotePackage().catch((error) => ({ version: "", error: error.message, url: RAW_PACKAGE_URL })),
+    readRemotePackage().catch((error) => ({ version: "", error: error.message, url: RAW_PACKAGE_URL, setupUrl: SETUP_DOWNLOAD_URL })),
     gitCommand ? readLocalCommit(root, gitCommand) : "",
     gitCommand ? readRemoteCommit(root, gitCommand) : "",
   ]);
@@ -254,6 +277,7 @@ export async function checkForUpdate() {
     projectRoot: root,
     source: remotePackage.url,
     releasesUrl: RELEASES_URL,
+    setupUrl: remotePackage.setupUrl || SETUP_DOWNLOAD_URL,
     gitCommand: executableDisplayName(gitCommand, "git"),
     npmCommand: npmCommand ? executableDisplayName(npmCommand, "npm") : "",
     error: remotePackage.error || "",
