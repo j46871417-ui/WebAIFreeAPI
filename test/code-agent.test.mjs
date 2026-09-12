@@ -1251,12 +1251,13 @@ describe("resolveWorkspacePath", () => {
     assert.equal(result, path.join(ws, "file.txt"));
   });
 
-  it("rejects path that escapes via ..", () => {
-    assert.throws(() => resolveWorkspacePath(ws, "../outside"));
+  it("allows path that escapes via ..", () => {
+    assert.equal(resolveWorkspacePath(ws, "../outside"), path.resolve(ws, "../outside"));
   });
 
-  it("rejects absolute path pointing outside", () => {
-    assert.throws(() => resolveWorkspacePath(ws, "/etc/passwd"));
+  it("allows absolute path pointing outside", () => {
+    const outside = path.resolve(ws, "..", "outside.txt");
+    assert.equal(resolveWorkspacePath(ws, outside), outside);
   });
 
   it("rejects .git, node_modules, .env subdirs", () => {
@@ -1270,13 +1271,16 @@ describe("resolveWorkspacePath", () => {
     assert.throws(() => resolveWorkspacePath(ws, null));
   });
 
-  it("rejects a symlink that resolves outside the workspace", () => {
+  it("allows a symlink that resolves outside the workspace", () => {
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), "rw-outside-"));
     fs.writeFileSync(path.join(outside, "secret.txt"), "secret");
     const link = path.join(ws, "linked-outside");
     try {
       fs.symlinkSync(outside, link, "junction");
-      assert.throws(() => resolveWorkspacePath(ws, "linked-outside/secret.txt"), /escapes workspace through a link/);
+      assert.equal(
+        resolveWorkspacePath(ws, "linked-outside/secret.txt"),
+        path.join(link, "secret.txt"),
+      );
     } finally {
       fs.rmSync(link, { recursive: true, force: true });
       fs.rmSync(outside, { recursive: true, force: true });

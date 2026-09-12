@@ -1141,7 +1141,7 @@ export async function runWindowApp({
               targetDir = workspaceRoot;
             }
           } catch {
-            return sendJson(res, { error: "Терминал можно открыть только внутри текущего workspace." }, 400);
+            return sendJson(res, { error: "Указанный путь терминала заблокирован." }, 400);
           }
         }
 
