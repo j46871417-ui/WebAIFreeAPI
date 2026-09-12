@@ -14,6 +14,7 @@ import { DeepSeekChatClient } from "../providers/deepseek/client.mjs";
 import { executeWorkspaceTool } from "../code-agent/executor.mjs";
 import { runAgentTask } from "../agent-orchestrator/index.mjs";
 import { parseAgentTaskPrompt } from "../code-agent/task-input.mjs";
+import { AGENT_TASK_EMPTY_HELP } from "../window-app/agent-task.mjs";
 import { runWindowApp } from "../window-app/server.mjs";
 import { askLine, printAssistantMessage, printWelcome } from "./repl.mjs";
 
@@ -126,6 +127,10 @@ export async function run() {
     const skillParsed = parseAgentTaskPrompt(args.prompt);
     const directCodePrefix = "/code ";
     if (args.prompt.startsWith(directCodePrefix) || skillParsed) {
+      if (skillParsed?.empty) {
+        console.log(`\n${AGENT_TASK_EMPTY_HELP}\n`);
+        return;
+      }
       const task = skillParsed ? skillParsed.task : args.prompt.slice(directCodePrefix.length).trim();
       await runAgentTask(client, {
         sessionId,
@@ -186,9 +191,13 @@ export async function run() {
       }
       continue;
     }
-    if (prompt.startsWith("/code ") || prompt.startsWith("/skill ")) {
-      const parsed = parseAgentTaskPrompt(prompt);
-      const task = parsed?.task || prompt.slice(6).trim();
+    const parsed = parseAgentTaskPrompt(prompt);
+    if (parsed) {
+      if (parsed.empty) {
+        console.log(`\n${AGENT_TASK_EMPTY_HELP}\n`);
+        continue;
+      }
+      const task = parsed.task;
       const codeResult = await runAgentTask(client, {
         sessionId,
         modelType: args.model,

@@ -3,10 +3,13 @@
 import { resolveAgentTaskInput } from "../code-agent/task-input.mjs";
 
 export const AGENT_TASK_EMPTY_HELP =
-  "Напиши задачу после /code или /skill <id>. Примеры:\n" +
-  "• /code создай файл notes.txt\n" +
-  "• /skill bug-fix исправь падение при старте\n" +
-  "• /skill code-review проверь src/code-agent/";
+  "Команды агента для работы с кодом, файлами и терминалом:\n" +
+  "• /file <путь> [вопрос] — прочитать и разобрать конкретный файл проекта\n" +
+  "• /folder <путь> [вопрос] — изучить структуру директории и файлов\n" +
+  "• /terminal <команда> (или /cmd, /term) — выполнить команду терминала\n" +
+  "• /powershell <команда> (или /ps, /pwsh) — выполнить команду или скрипт в Windows PowerShell\n" +
+  "• /code <задача> — комплексная автономная задача по кодовой базе\n" +
+  "• /skill <id> <задача> — запустить задачу со специализированным навыком";
 
 const PERSISTENT_CODE_CONTEXT_PROVIDERS = new Set(["chatgpt", "qwen", "deepseek"]);
 

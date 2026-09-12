@@ -12,7 +12,7 @@ const definitions = [
   ["delete_dir", "Delete one directory recursively.", object({ path: string("Relative directory path") }, ["path"])],
   ["mkdir", "Create a directory.", object({ path: string("Relative directory path") }, ["path"])],
   ["run_command", "Run one allowed executable without a shell.", object({ cmd: string("Executable"), args: { type: "array", items: { type: "string" } }, timeoutMs: integer("Timeout milliseconds") }, ["cmd", "args"])],
-  ["run_shell", "Run an allowed shell command or pipeline.", object({ command: string("Shell command"), timeoutMs: integer("Timeout milliseconds") }, ["command"])],
+  ["run_shell", "Run an allowed shell command or pipeline (supports cmd and powershell on Windows).", object({ command: string("Shell command"), shell: { type: "string", enum: ["cmd", "powershell", "pwsh", "sh"] }, timeoutMs: integer("Timeout milliseconds") }, ["command"])],
   ["list_serial_ports", "List connected serial ports.", object({})],
   ["github_status", "Inspect repository and GitHub authentication status.", object({})],
   ["github_repo", "Read GitHub repository metadata.", object({})],
