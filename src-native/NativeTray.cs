@@ -2,22 +2,45 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
-using System.Windows;
 using System.Windows.Forms;
 
 namespace WebAIFreeAPI.Native
 {
     public class NativeTray : IDisposable
     {
-        private readonly Window mainWindow;
+        private readonly Action onOpenApp;
         private readonly Action onOpenSettings;
         private readonly Action onOpenTerminal;
         private readonly Action onExit;
         private NotifyIcon notifyIcon;
 
-        public NativeTray(Window mainWindow, Action onOpenSettings, Action onOpenTerminal, Action onExit)
+        public NativeTray(Action onOpenApp, Action onOpenSettings, Action onOpenTerminal, Action onExit)
         {
-            this.mainWindow = mainWindow;
+            this.onOpenApp = onOpenApp;
+            this.onOpenSettings = onOpenSettings;
+            this.onOpenTerminal = onOpenTerminal;
+            this.onExit = onExit;
+
+            InitializeTray();
+        }
+
+        public NativeTray(System.Windows.Window mainWindow, Action onOpenSettings, Action onOpenTerminal, Action onExit)
+        {
+            this.onOpenApp = () =>
+            {
+                if (mainWindow != null)
+                {
+                    mainWindow.Dispatcher.Invoke((Action)(() =>
+                    {
+                        if (mainWindow.WindowState == System.Windows.WindowState.Minimized)
+                        {
+                            mainWindow.WindowState = System.Windows.WindowState.Normal;
+                        }
+                        mainWindow.Show();
+                        mainWindow.Activate();
+                    }));
+                }
+            };
             this.onOpenSettings = onOpenSettings;
             this.onOpenTerminal = onOpenTerminal;
             this.onExit = onExit;
@@ -28,7 +51,7 @@ namespace WebAIFreeAPI.Native
         private void InitializeTray()
         {
             notifyIcon = new NotifyIcon();
-            notifyIcon.Text = "WebAIFreeAPI";
+            notifyIcon.Text = "WebAIFreeAPI v1.6.0";
 
             try
             {
@@ -42,7 +65,15 @@ namespace WebAIFreeAPI.Native
                 }
                 else
                 {
-                    notifyIcon.Icon = Icon.ExtractAssociatedIcon(exePath) ?? SystemIcons.Application;
+                    string parentIco = Path.Combine(dir, "..", "ai-free.ico");
+                    if (File.Exists(parentIco))
+                    {
+                        notifyIcon.Icon = new Icon(parentIco);
+                    }
+                    else
+                    {
+                        notifyIcon.Icon = Icon.ExtractAssociatedIcon(exePath) ?? SystemIcons.Application;
+                    }
                 }
             }
             catch
@@ -51,34 +82,20 @@ namespace WebAIFreeAPI.Native
             }
 
             var menu = new ContextMenuStrip();
-            var itemOpen = new ToolStripMenuItem("Открыть WebAIFreeAPI", null, (s, e) => RestoreWindow());
+            var itemOpen = new ToolStripMenuItem("Открыть WebAIFreeAPI", null, (s, e) => { if (onOpenApp != null) onOpenApp(); });
+            var itemTerminal = new ToolStripMenuItem("⚡ Консоль PowerShell", null, (s, e) => { if (onOpenTerminal != null) onOpenTerminal(); });
             var itemSettings = new ToolStripMenuItem("Настройки...", null, (s, e) => { if (onOpenSettings != null) onOpenSettings(); });
-            var itemTerminal = new ToolStripMenuItem("Открыть терминал", null, (s, e) => { if (onOpenTerminal != null) onOpenTerminal(); });
             var itemExit = new ToolStripMenuItem("Выход", null, (s, e) => { if (onExit != null) onExit(); });
 
             menu.Items.Add(itemOpen);
-            menu.Items.Add(itemSettings);
             menu.Items.Add(itemTerminal);
+            menu.Items.Add(itemSettings);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(itemExit);
 
             notifyIcon.ContextMenuStrip = menu;
-            notifyIcon.DoubleClick += (s, e) => RestoreWindow();
+            notifyIcon.DoubleClick += (s, e) => { if (onOpenApp != null) onOpenApp(); };
             notifyIcon.Visible = true;
-        }
-
-        public void RestoreWindow()
-        {
-            if (mainWindow == null) return;
-            mainWindow.Dispatcher.Invoke((Action)(() =>
-            {
-                if (mainWindow.WindowState == WindowState.Minimized)
-                {
-                    mainWindow.WindowState = WindowState.Normal;
-                }
-                mainWindow.Show();
-                mainWindow.Activate();
-            }));
         }
 
         public void ShowNotification(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
