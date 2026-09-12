@@ -325,6 +325,52 @@ describe("OpenAI-compatible handler", () => {
     assert.match(prompt, /missing required argument/i);
     assert.match(prompt, /No changes detected/i);
   });
+
+  it("omits full tool definitions and system header on multi-turn continuation", () => {
+    const tools = [{
+      type: "function",
+      function: {
+        name: "ReadFile",
+        parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+      },
+    }];
+    const initialPrompt = buildPromptFromChatBody({
+      tools,
+      messages: [{ role: "user", content: "read file foo" }],
+    }, "qwen3.7-max", { provider: "qwen", model: "qwen3.7-max" }, { isContinuation: false });
+
+    assert.match(initialPrompt, /TOOL INSTRUCTIONS/);
+    assert.match(initialPrompt, /ReadFile/);
+
+    const continuationPrompt = buildPromptFromChatBody({
+      tools,
+      messages: [{ role: "tool", name: "ReadFile", content: "file content hello" }],
+    }, "qwen3.7-max", { provider: "qwen", model: "qwen3.7-max" }, { isContinuation: true });
+
+    assert.equal(continuationPrompt.includes("TOOL INSTRUCTIONS"), false);
+    assert.equal(continuationPrompt.includes("ReadFile"), true);
+    assert.match(continuationPrompt, /\[TOOL RESULT FOR ReadFile\]:\nfile content hello/);
+  });
+
+  it("passes parentId to client.complete during continuation stream and returns it", async () => {
+    const res = makeWritableResponse();
+    let passedParentId = null;
+    const client = {
+      async complete({ parentId, onText }) {
+        passedParentId = parentId;
+        onText("delta turn 2");
+        return { text: "delta turn 2", lastMessageId: "msg-turn-2" };
+      },
+    };
+
+    const result = await handleQwenStream(client, "chat-existing", "continuation message", "qwen3.7-max", "qwen3.7-max", res, {
+      parentId: "msg-turn-1",
+    });
+
+    assert.equal(passedParentId, "msg-turn-1");
+    assert.equal(result.chatId, "chat-existing");
+    assert.equal(result.lastMessageId, "msg-turn-2");
+  });
 });
 
 async function callHandler({ method, url, body }) {

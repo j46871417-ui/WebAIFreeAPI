@@ -33,6 +33,7 @@ import { CHATGPT_AUTH_FILE } from "../src/providers/chatgpt/config.mjs";
 import { ChatGPTChatClient } from "../src/providers/chatgpt/client.mjs";
 import { createFileLogger } from "../src/logging/logger.mjs";
 import { runWithEmptyStreamRetry } from "./stream-retry.mjs";
+import { globalChatSessionManager } from "./chat-session-manager.mjs";
 
 const compatLogger = createFileLogger({ component: "openai-handler" });
 
@@ -183,10 +184,21 @@ async function handleChatCompletions(req, res) {
     toolCount: Array.isArray(body.tools) ? body.tools.length : 0,
   });
 
+  const sessionResolution = globalChatSessionManager.resolveSession({
+    req,
+    body,
+    provider: mapping.provider,
+    model: modelName,
+  });
+  const isContinuation = sessionResolution.isContinuation;
+  const activeSession = sessionResolution.session;
+  const messagesToFormat = isContinuation ? sessionResolution.newMessages : messages;
+
   const basePrompt = buildPromptFromChatBody(
-    { ...body, tools: toolsForModelPrompt(body.tools) },
+    { ...body, messages: messagesToFormat, allMessages: messages, tools: toolsForModelPrompt(body.tools) },
     modelName,
     mapping,
+    { isContinuation },
   );
   const search = requestSearchEnabled(body);
   const prompt = search ? withWebSearchInstruction(basePrompt) : basePrompt;
@@ -203,12 +215,16 @@ async function handleChatCompletions(req, res) {
 
   try {
     if (mapping.provider === "qwen") {
+      let chatId = activeSession?.serverChatId || null;
+      let parentId = activeSession?.lastParentId || null;
+
       const runQwen = async (client) => {
         if (body.stream === true) {
-          return handleQwenStream(client, null, prompt, modelName, mapping.model, res, {
+          const streamResult = await handleQwenStream(client, chatId, prompt, modelName, mapping.model, res, {
             thinking,
             search,
             tools: body.tools,
+            parentId,
             createChat: (currentClient) => currentClient.createChat({ model: mapping.model, title: "API request" }),
             refreshClient: async (error) => {
               const { isQwenTransientBrowserTransportError } = await import("../src/providers/qwen/client.mjs");
@@ -231,15 +247,42 @@ async function handleChatCompletions(req, res) {
               throw error;
             },
           });
+
+          if (streamResult?.chatId) {
+            globalChatSessionManager.saveSession({
+              sessionId: sessionResolution.desiredSessionId || activeSession?.id,
+              provider: "qwen",
+              model: modelName,
+              serverChatId: streamResult.chatId,
+              lastParentId: streamResult.lastMessageId,
+              messages,
+            });
+          }
+          return streamResult;
         }
-        const chatId = await client.createChat({ model: mapping.model, title: "API request" });
+
+        if (!chatId) {
+          chatId = await client.createChat({ model: mapping.model, title: "API request" });
+        }
         const result = await client.complete({
           chatId,
           prompt,
+          parentId,
           thinking,
           search,
           model: mapping.model,
         });
+
+        const effectiveChatId = result.recoveredChatId || chatId;
+        globalChatSessionManager.saveSession({
+          sessionId: sessionResolution.desiredSessionId || activeSession?.id,
+          provider: "qwen",
+          model: modelName,
+          serverChatId: effectiveChatId,
+          lastParentId: result.lastMessageId,
+          messages,
+        });
+
         return sendJson(res, toOpenAIResponse(modelName, result.text, body.tools));
       };
 
@@ -262,8 +305,11 @@ async function handleChatCompletions(req, res) {
     }
     if (mapping.provider === "deepseek") {
       const client = await getDeepSeekClient();
-      // DeepSeek: создаём сессию и отправляем completion.
-      const sessionId = await client.createSession();
+      let sessionId = activeSession?.serverChatId || null;
+      let parentMessageId = activeSession?.lastParentId || null;
+      if (!sessionId) {
+        sessionId = await client.createSession();
+      }
       const refFileIds = [];
       for (const image of images) {
         refFileIds.push(await client.uploadFile(
@@ -276,22 +322,45 @@ async function handleChatCompletions(req, res) {
       const deepSeekModel = refFileIds.length ? "vision" : mapping.model;
 
       if (body.stream === true) {
-        return handleDeepSeekStream(client, sessionId, prompt, modelName, deepSeekModel, res, {
+        const streamResult = await handleDeepSeekStream(client, sessionId, prompt, modelName, deepSeekModel, res, {
           thinking: refFileIds.length ? false : thinking,
           search: refFileIds.length ? false : search,
           tools: body.tools,
           refFileIds,
+          parentMessageId,
         });
+        if (streamResult?.sessionId) {
+          globalChatSessionManager.saveSession({
+            sessionId: sessionResolution.desiredSessionId || activeSession?.id,
+            provider: "deepseek",
+            model: modelName,
+            serverChatId: streamResult.sessionId,
+            lastParentId: streamResult.lastAssistantMessageId,
+            messages,
+          });
+        }
+        return streamResult;
       }
 
       const result = await client.complete({
         sessionId,
         prompt,
+        parentMessageId,
         modelType: deepSeekModel,
         thinkingEnabled: refFileIds.length ? false : thinking,
         searchEnabled: refFileIds.length ? false : search,
         refFileIds,
       });
+
+      globalChatSessionManager.saveSession({
+        sessionId: sessionResolution.desiredSessionId || activeSession?.id,
+        provider: "deepseek",
+        model: modelName,
+        serverChatId: sessionId,
+        lastParentId: result.lastAssistantMessageId,
+        messages,
+      });
+
       return sendJson(res, toOpenAIResponse(modelName, result.text, body.tools));
     }
     if (mapping.provider === "chatgpt") {
@@ -308,6 +377,9 @@ async function handleChatCompletions(req, res) {
     }
     return sendError(res, 500, `Unknown provider: ${mapping.provider}`);
   } catch (e) {
+    if (activeSession) {
+      globalChatSessionManager.deleteSession(activeSession.id);
+    }
     compatLogger.error("api.chat.upstream_error", e, {
       provider: mapping.provider,
       model: modelName,
@@ -332,13 +404,13 @@ function withWebSearchInstruction(prompt) {
   return String(prompt || "");
 }
 
-export function buildPromptFromChatBody(body, modelName, mapping) {
+export function buildPromptFromChatBody(body, modelName, mapping, { isContinuation = false } = {}) {
   // OpenAI присылает ВСЮ историю каждый раз. Мы её сжимаем в один prompt —
   // конкатенируем с лейблами ролей. Это упрощение прототипа; для качества контекста
   // потом сделаем proper multi-turn через persistent sessionId + parent_id chain.
   const messages = Array.isArray(body?.messages) ? body.messages : [];
   let prompt = "";
-  if (body.tools && body.tools.length > 0) {
+  if (!isContinuation && body.tools && body.tools.length > 0) {
     // DeepSeek-Reasoner (R1) и Qwen QwQ часто игнорируют мягкие инструкции —
     // вставляют свои bash-команды, придуманный синтаксис, или прячут tool-вызовы
     // в <think>. Поэтому промпт жёсткий: positive + negative few-shot,
@@ -429,7 +501,7 @@ ${formatCompactTools(body.tools)}
   }
 
   const toolNameByCallId = new Map();
-  for (const message of messages) {
+  for (const message of (body?.allMessages || messages)) {
     for (const call of message?.tool_calls || []) {
       if (call?.id && call?.function?.name) toolNameByCallId.set(call.id, call.function.name);
     }
@@ -459,13 +531,15 @@ ${formatCompactTools(body.tools)}
     })
     .join("\n\n---\n\n");
 
-  prompt += `\n\n---\n[CURRENT API ROUTING — AUTHORITATIVE]:
+  if (!isContinuation) {
+    prompt += `\n\n---\n[CURRENT API ROUTING — AUTHORITATIVE]:
 The current OpenAI-compatible request is routed to provider "${mapping.provider}" with requested model id "${modelName}".
 If the user asks what model you are, answer using this current requested model id and provider.
 Do not copy model identity from earlier assistant messages in the conversation history; those may have come from a different provider before the user switched models.`;
+  }
     
   // Ensure the prompt ends with a clear directive if tools are available
-  if (body.tools && body.tools.length > 0) {
+  if (!isContinuation && body.tools && body.tools.length > 0) {
     prompt += `\n\n---\n[SYSTEM REMINDER]: You MUST use the exact JSON array format wrapped in \`\`\`tool_calls\`\`\` to call tools. If you output plain bash commands, it will fail.`;
   }
 
@@ -926,6 +1000,7 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
   createChat = null,
   refreshClient = null,
   tools = [],
+  parentId = null,
 } = {}) {
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/event-stream");
@@ -946,6 +1021,7 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
     let activeClient = client;
     let activeChatId = chatId;
     let lastError = null;
+    let completionResult = null;
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
@@ -963,11 +1039,12 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
 
         const completionStartedAt = Date.now();
         logQwenTiming(requestId, "completion_start", { attempt: attempt + 1, total_ms: elapsedMs(startedAt) });
-        await runWithEmptyStreamRetry({
+        completionResult = await runWithEmptyStreamRetry({
           requireDelta: true,
           operation: ({ onDelta }) => activeClient.complete({
             chatId: activeChatId,
             prompt,
+            parentId,
             thinking,
             search,
             model,
@@ -1023,6 +1100,10 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
     writeSseRaw(res, "data: [DONE]\n\n");
     if (!res.destroyed && !res.writableEnded) res.end();
     logQwenTiming(requestId, "stream_done", { total_ms: elapsedMs(startedAt) });
+    return {
+      chatId: completionResult?.recoveredChatId || activeChatId,
+      lastMessageId: completionResult?.lastMessageId || null,
+    };
   } catch (e) {
     clearInterval(heartbeat);
     logQwenTiming(requestId, "stream_error", {
@@ -1064,6 +1145,10 @@ async function handleChatGPTStream(client, prompt, modelName, model, res, { tool
     parser.onEnd();
     res.write("data: [DONE]\n\n");
     res.end();
+    return {
+      sessionId: activeSessionId,
+      lastAssistantMessageId: completionResult?.lastAssistantMessageId || null,
+    };
   } catch (e) {
     console.error("[API] ChatGPT stream error:", e.message);
     sendStreamError(res, modelName, e.message);
@@ -1076,6 +1161,7 @@ async function handleDeepSeekStream(client, sessionId, prompt, modelName, model,
   search = false,
   tools = [],
   refFileIds = [],
+  parentMessageId = null,
 } = {}) {
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/event-stream");
@@ -1085,10 +1171,11 @@ async function handleDeepSeekStream(client, sessionId, prompt, modelName, model,
   const parser = new StreamParser(modelName, res, { tools });
   try {
     let activeSessionId = sessionId;
-    await runWithEmptyStreamRetry({
+    const completionResult = await runWithEmptyStreamRetry({
       operation: ({ onDelta }) => client.complete({
         sessionId: activeSessionId,
         prompt,
+        parentMessageId,
         modelType: model,
         thinkingEnabled: thinking,
         searchEnabled: search,
@@ -1108,6 +1195,10 @@ async function handleDeepSeekStream(client, sessionId, prompt, modelName, model,
     parser.onEnd();
     res.write("data: [DONE]\n\n");
     res.end();
+    return {
+      sessionId: activeSessionId,
+      lastAssistantMessageId: completionResult?.lastAssistantMessageId || null,
+    };
   } catch (e) {
     console.error("[API] DeepSeek stream error:", e.message);
     sendStreamError(res, modelName, e.message);
