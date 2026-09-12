@@ -15,20 +15,20 @@ const iconFile = path.join(targetDir, "ai-free.ico");
 
 const shortcuts = [
   {
-    name: "AI Free.lnk",
+    name: "WebAIFreeAPI.lnk",
     target: "wscript.exe",
     args: `"${path.join(targetDir, "run-silent.vbs")}"`,
     workingDir: targetDir,
     icon: fs.existsSync(iconFile) ? iconFile : "",
-    description: "AI Free (Бесплатный DeepSeek, Qwen и ChatGPT)",
+    description: "WebAIFreeAPI (Бесплатный DeepSeek, Qwen и ChatGPT API)",
   },
   {
-    name: "AI Free Launcher.lnk",
+    name: "WebAIFreeAPI Launcher.lnk",
     target: path.join(targetDir, "launcher.bat"),
     args: "",
     workingDir: targetDir,
     icon: fs.existsSync(iconFile) ? iconFile : "",
-    description: "AI Free - Меню настроек и авторизации",
+    description: "WebAIFreeAPI - Меню настроек и авторизации",
   },
 ];
 

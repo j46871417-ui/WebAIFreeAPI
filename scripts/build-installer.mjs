@@ -18,7 +18,7 @@ if (!fs.existsSync(sevenZipExe)) {
 fs.mkdirSync(distDir, { recursive: true });
 
 const archiveZip = path.join(distDir, "ai-free.zip");
-const outputExe = path.join(distDir, "AI-Free-Setup.exe");
+const outputExe = path.join(distDir, "WebAIFreeAPI-Setup.exe");
 
 if (fs.existsSync(archiveZip)) fs.unlinkSync(archiveZip);
 if (fs.existsSync(outputExe)) fs.unlinkSync(outputExe);
@@ -70,7 +70,7 @@ const desktops = [
 ].filter((d) => fs.existsSync(d));
 
 for (const d of desktops) {
-  const dest = path.join(d, "AI-Free-Setup.exe");
+  const dest = path.join(d, "WebAIFreeAPI-Setup.exe");
   fs.copyFileSync(outputExe, dest);
   console.log(`Copied installer to: ${dest}`);
 }

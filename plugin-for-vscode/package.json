@@ -8,7 +8,7 @@
   "icon": "media/marketplace-icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Staks-sor/ai-free.git",
+    "url": "https://github.com/j46871417-ui/WebAIFreeAPI.git",
     "directory": "plugin-for-vscode"
   },
   "engines": {

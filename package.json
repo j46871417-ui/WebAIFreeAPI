@@ -1,5 +1,5 @@
 {
-  "name": "ai-free",
+  "name": "WebAIFreeAPI",
   "version": "0.4.25",
   "description": "Free local AI client for DeepSeek, Qwen and ChatGPT with OpenAI-compatible API, CLI, code agent, memory and skills.",
   "private": true,
@@ -10,11 +10,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Staks-sor/ai-free.git"
+    "url": "https://github.com/j46871417-ui/WebAIFreeAPI.git"
   },
-  "homepage": "https://github.com/Staks-sor/ai-free#readme",
+  "homepage": "https://github.com/j46871417-ui/WebAIFreeAPI#readme",
   "bugs": {
-    "url": "https://github.com/Staks-sor/ai-free/issues"
+    "url": "https://github.com/j46871417-ui/WebAIFreeAPI/issues"
   },
   "keywords": [
     "ai",

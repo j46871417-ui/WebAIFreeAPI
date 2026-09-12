@@ -36,9 +36,9 @@ namespace AiFreeInstaller
 
         public InstallerForm()
         {
-            targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "AI-Free");
+            targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WebAIFreeAPI");
 
-            this.Text = "Установка AI Free";
+            this.Text = "Установка WebAIFreeAPI";
             this.Size = new Size(540, 320);
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
@@ -49,7 +49,7 @@ namespace AiFreeInstaller
             } catch {}
 
             titleLabel = new Label() {
-                Text = "Мастер установки AI Free",
+                Text = "Мастер установки WebAIFreeAPI",
                 Font = new Font("Segoe UI", 12, FontStyle.Bold),
                 Location = new Point(25, 18),
                 AutoSize = true
@@ -98,7 +98,7 @@ namespace AiFreeInstaller
             this.Controls.Add(statusLabel);
 
             launchCheckBox = new CheckBox() {
-                Text = "Запустить AI Free сейчас",
+                Text = "Запустить WebAIFreeAPI сейчас",
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 Location = new Point(26, 188),
                 Size = new Size(320, 24),
@@ -130,15 +130,15 @@ namespace AiFreeInstaller
         {
             using (FolderBrowserDialog fbd = new FolderBrowserDialog())
             {
-                fbd.Description = "Выберите папку для установки AI Free:";
+                fbd.Description = "Выберите папку для установки WebAIFreeAPI:";
                 fbd.SelectedPath = pathTextBox.Text;
                 fbd.ShowNewFolderButton = true;
                 if (fbd.ShowDialog() == DialogResult.OK)
                 {
                     string selected = fbd.SelectedPath;
-                    if (!selected.EndsWith("AI-Free", StringComparison.OrdinalIgnoreCase))
+                    if (!selected.EndsWith("WebAIFreeAPI", StringComparison.OrdinalIgnoreCase))
                     {
-                        selected = Path.Combine(selected, "AI-Free");
+                        selected = Path.Combine(selected, "WebAIFreeAPI");
                     }
                     pathTextBox.Text = selected;
                 }
@@ -177,7 +177,7 @@ namespace AiFreeInstaller
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show("Не удалось запустить: " + ex.Message, "AI Free");
+                        MessageBox.Show("Не удалось запустить: " + ex.Message, "WebAIFreeAPI");
                     }
                 }
                 this.Close();
@@ -187,7 +187,7 @@ namespace AiFreeInstaller
             targetDir = pathTextBox.Text.Trim();
             if (string.IsNullOrEmpty(targetDir))
             {
-                MessageBox.Show("Укажите папку для установки.", "AI Free Setup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Укажите папку для установки.", "WebAIFreeAPI Setup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 

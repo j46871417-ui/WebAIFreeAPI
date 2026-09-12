@@ -1,46 +1,46 @@
-<h1 align="center">AI Free (Fork)</h1>
+<h1 align="center">WebAIFreeAPI</h1>
 
 <p align="center">
-  <strong>Локальный AI-клиент для DeepSeek, Qwen и ChatGPT с API, автономными кодовыми агентами (OpenCode / CLI), памятью и поиском</strong>
+  <strong>Бесплатный локальный AI-клиент и API для DeepSeek, Qwen и ChatGPT с поддержкой автономных кодовых агентов (OpenCode / CLI), памяти и веб-поиска</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/j46871417-ui/ai-free/releases/latest/download/AI-Free-Setup.exe"><img src="https://img.shields.io/badge/Скачать_AI--Free--Setup.exe-2ea44f?style=for-the-badge&logo=windows&logoColor=white" alt="Скачать AI-Free-Setup.exe"></a>
-  <a href="https://github.com/j46871417-ui/ai-free/releases"><img src="https://img.shields.io/github/v/release/j46871417-ui/ai-free?style=for-the-badge&label=Релиз" alt="Релизы"></a>
+  <a href="https://github.com/j46871417-ui/WebAIFreeAPI/releases/latest/download/WebAIFreeAPI-Setup.exe"><img src="https://img.shields.io/badge/Скачать_WebAIFreeAPI--Setup.exe-2ea44f?style=for-the-badge&logo=windows&logoColor=white" alt="Скачать WebAIFreeAPI-Setup.exe"></a>
+  <a href="https://github.com/j46871417-ui/WebAIFreeAPI/releases"><img src="https://img.shields.io/github/v/release/j46871417-ui/WebAIFreeAPI?style=for-the-badge&label=Релиз" alt="Релизы"></a>
   <a href="https://t.me/+8qU7020rMF84OWNi"><img src="https://img.shields.io/badge/Telegram-Сообщество-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Сообщество"></a>
 </p>
 
-AI Free превращает бесплатные веб-чаты AI в полноценный локальный инструмент разработчика.
+WebAIFreeAPI превращает бесплатные веб-чаты AI в полноценный локальный инструмент разработчика.
 
 Используй **DeepSeek**, **Qwen** и **ChatGPT** через единое графическое окно, фоновый сервис, OpenAI-совместимый API, расширение VS Code, а также в роли агента в **OpenCode Desktop** и других средах разработки.
 
 ---
 
-## ✨ Что нового в этом форке:
+## ✨ Основные возможности:
 
-- 📦 **Готовый установщик в 1 клик (`AI-Free-Setup.exe`)**: портативный пакет для Windows со встроенным Node.js, автоматической загрузкой Chromium и автонастройкой ярлыков.
-- 🤖 **Полноценная работа Qwen в OpenCode Desktop**: исправлены системные запреты Qwen на выполнение bash/инструментов — теперь модель исправно пишет файлы, правит код и выполняет команды на ПК.
-- 🔍 **Улучшенный Web Search**: исправлена обработка поисковых запросов для веб-провайдеров, удалены мешающие системные префиксы, добавлено автоопределение намерения поиска через API.
-- 🔄 **Автовосстановление браузерного прокси**: защита от падения контекстов браузера при перезапусках и сбоях сессий.
-- ⚙️ **Автоматическая конфигурация OpenCode**: установщик сам прописывает профиль `AI-Free (Qwen / DeepSeek)` в `~/.opencode/opencode.json`.
+- 📦 **Готовый установщик в 1 клик (`WebAIFreeAPI-Setup.exe`)**: портативный пакет для Windows со встроенным Node.js, автоматической загрузкой Chromium и автонастройкой ярлыков.
+- 🤖 **Полноценная работа Qwen и DeepSeek в OpenCode Desktop**: поддержка tool calling, bash, чтения и правки файлов без сбоев.
+- 💬 **Умное переиспользование сессий**: внутри одной сессии чат продолжается последовательно без раздувания контекста каждым новым системным промтом.
+- 🔄 **Автообновление прямо из интерфейса и трея**: проверка свежих версий с GitHub и установка обновления в один клик.
+- 🔍 **Улучшенный Web Search**: встроенный веб-поиск и автоопределение намерений.
+- ⚙️ **Автоматическая конфигурация OpenCode**: установщик сам прописывает профили WebAIFreeAPI в конфиг OpenCode Desktop.
 
 ---
 
 ## 🚀 Быстрый старт на Windows
 
-### Способ 1 — Готовый установщик (AI-Free-Setup.exe)
-1. Скачай **[AI-Free-Setup.exe](https://github.com/j46871417-ui/ai-free/releases/latest/download/AI-Free-Setup.exe)** (или выбери версию в [Releases](https://github.com/j46871417-ui/ai-free/releases)).
+### Способ 1 — Готовый установщик (WebAIFreeAPI-Setup.exe)
+1. Скачай **[WebAIFreeAPI-Setup.exe](https://github.com/j46871417-ui/WebAIFreeAPI/releases/latest/download/WebAIFreeAPI-Setup.exe)** (или выбери версию в [Releases](https://github.com/j46871417-ui/WebAIFreeAPI/releases)).
 2. Запусти установщик — он автоматически:
-   - Распакует приложение в `C:\ai-free`;
-   - Скачает необходимый Chromium для Playwright;
-   - Создаст ярлыки на рабочем столе (**AI Free** и **AI Free Launcher**);
+   - Установит приложение в `C:\Program Files\WebAIFreeAPI`;
+   - Создаст ярлыки на рабочем столе (**WebAIFreeAPI** и **WebAIFreeAPI Launcher**);
    - Настроит конфиг OpenCode Desktop.
 3. Запусти с ярлыка, пройди авторизацию в нужных провайдерах (DeepSeek / Qwen) один раз — и пользуйся!
 
 ### Способ 2 — Из исходного кода (Git)
 ```powershell
-git clone https://github.com/j46871417-ui/ai-free.git ai-free
-cd ai-free
+git clone https://github.com/j46871417-ui/WebAIFreeAPI.git WebAIFreeAPI
+cd WebAIFreeAPI
 npm install
 npm start
 ```
