@@ -121,9 +121,9 @@ namespace WebAIFreeAPI.Native
                 string scriptPath = null;
                 string[] possibleScriptPaths = new string[]
                 {
-                    Path.Combine(baseDir, "bin", "backend.bundle.mjs"),
-                    Path.Combine(baseDir, "..", "bin", "backend.bundle.mjs"),
-                    Path.Combine(baseDir, "backend.bundle.mjs")
+                    Path.Combine(baseDir, "bin", "deepseek.mjs"),
+                    Path.Combine(baseDir, "..", "bin", "deepseek.mjs"),
+                    Path.Combine(baseDir, "deepseek.mjs")
                 };
 
                 foreach (var p in possibleScriptPaths)
@@ -163,6 +163,7 @@ namespace WebAIFreeAPI.Native
                     workingDir = baseDir;
                 }
 
+                string logFile = Path.Combine(baseDir, "backend.log");
                 var psi = new ProcessStartInfo
                 {
                     FileName = nodePath,
@@ -170,10 +171,20 @@ namespace WebAIFreeAPI.Native
                     WorkingDirectory = workingDir,
                     CreateNoWindow = true,
                     UseShellExecute = false,
-                    WindowStyle = ProcessWindowStyle.Hidden
+                    WindowStyle = ProcessWindowStyle.Hidden,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
                 };
 
                 backgroundNodeProcess = Process.Start(psi);
+                backgroundNodeProcess.OutputDataReceived += (sender, e) => {
+                    try { if (e.Data != null) File.AppendAllText(logFile, e.Data + Environment.NewLine); } catch {}
+                };
+                backgroundNodeProcess.ErrorDataReceived += (sender, e) => {
+                    try { if (e.Data != null) File.AppendAllText(logFile, e.Data + Environment.NewLine); } catch {}
+                };
+                backgroundNodeProcess.BeginOutputReadLine();
+                backgroundNodeProcess.BeginErrorReadLine();
             }
             catch
             {
