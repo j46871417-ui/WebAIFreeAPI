@@ -29,6 +29,8 @@ export function parseArgs(argv) {
     importQwenFile: null,
     loginChatGPT: false,
     importChatGPTFile: null,
+    loginGrok: false,
+    loginMistral: false,
     forceWelcome: false,
     prompt: [],
   };
@@ -59,6 +61,8 @@ export function parseArgs(argv) {
     else if (arg === "--import-qwen") args.importQwenFile = argv[++i];
     else if (arg === "--login-chatgpt") args.loginChatGPT = true;
     else if (arg === "--import-chatgpt") args.importChatGPTFile = argv[++i];
+    else if (arg === "--login-grok") args.loginGrok = true;
+    else if (arg === "--login-mistral") args.loginMistral = true;
     else if (arg === "--welcome") args.forceWelcome = true;
     else if (arg === "--port") args.port = Number(argv[++i]);
     else if (arg === "--api-port") args.apiPort = Number(argv[++i]);

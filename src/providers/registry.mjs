@@ -5,11 +5,15 @@
 //
 // DeepSeek и Qwen ленивые импорты — не грузим их код, пока не нужно.
 
+import path from "node:path";
 import fs from "node:fs";
-import { DEFAULT_AUTH_FILE } from "../config.mjs";
+import { DEFAULT_AUTH_FILE, AUTH_DIR } from "../config.mjs";
 import { QWEN_AUTH_FILE } from "./qwen/config.mjs";
 import { CHATGPT_AUTH_FILE } from "./chatgpt/config.mjs";
 import { isChatGPTAuthUsable, readChatGPTAuth } from "./chatgpt/auth-files.mjs";
+
+export const GROK_AUTH_FILE = path.join(AUTH_DIR, "grok-state.json");
+export const MISTRAL_AUTH_FILE = path.join(AUTH_DIR, "mistral-state.json");
 
 export const PROVIDERS = {
   deepseek: {
@@ -43,6 +47,28 @@ export const PROVIDERS = {
     async login(options = {}) {
       const { loginChatGPTAndSave } = await import("./chatgpt/browser-login.mjs");
       await loginChatGPTAndSave(CHATGPT_AUTH_FILE, options);
+    },
+  },
+  grok: {
+    id: "grok",
+    name: "Grok",
+    description: "grok.com — модель Grok от xAI (требуется аккаунт Twitter/X)",
+    authFile: GROK_AUTH_FILE,
+    hasAuth: () => fs.existsSync(GROK_AUTH_FILE),
+    async login() {
+      const { loginGrokAndSave } = await import("./grok/browser-login.mjs");
+      await loginGrokAndSave();
+    },
+  },
+  mistral: {
+    id: "mistral",
+    name: "Mistral",
+    description: "chat.mistral.ai — модели Mistral (Le Chat)",
+    authFile: MISTRAL_AUTH_FILE,
+    hasAuth: () => fs.existsSync(MISTRAL_AUTH_FILE),
+    async login() {
+      const { loginMistralAndSave } = await import("./mistral/browser-login.mjs");
+      await loginMistralAndSave();
     },
   },
 };
