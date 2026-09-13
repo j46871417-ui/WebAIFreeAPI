@@ -17,7 +17,7 @@ export async function launchPersistentDeepSeekContext(chromium, profileDir, head
   };
   const preferredChannel = Object.prototype.hasOwnProperty.call(overrides, "channel")
     ? overrides.channel
-    : "chrome";
+    : "msedge";
 
   const tryLaunch = async () => {
     try {

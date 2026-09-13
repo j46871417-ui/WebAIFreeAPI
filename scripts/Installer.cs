@@ -419,12 +419,9 @@ namespace AiFreeInstaller
         public static void VerifyOfflineRuntime(string dir)
         {
             string nodeExe = Path.Combine(dir, "node", "node.exe");
-            string packageJson = Path.Combine(dir, "package.json");
-            string entrypoint = Path.Combine(dir, "bin", "deepseek.mjs");
-            string patchright = Path.Combine(dir, "node_modules", "patchright", "package.json");
-            string playwright = Path.Combine(dir, "node_modules", "playwright", "package.json");
+            string entrypoint = Path.Combine(dir, "bin", "backend.bundle.mjs");
 
-            string[] required = new string[] { nodeExe, packageJson, entrypoint, patchright, playwright };
+            string[] required = new string[] { nodeExe, entrypoint };
             foreach (string file in required)
             {
                 if (!File.Exists(file))
