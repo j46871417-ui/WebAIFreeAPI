@@ -4087,7 +4087,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       const netSub = document.createElement("div");
       netSub.className = "desc";
       const ips = (info.localIps && info.localIps.length) ? info.localIps.join(", ") : "127.0.0.1";
-      netSub.textContent = `Локальный IP: ${ips}`;
+      netSub.textContent = "Локальный IP: " + ips;
       netTextWrap.appendChild(netTitle);
       netTextWrap.appendChild(netSub);
 
@@ -4147,12 +4147,13 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       const sepList = document.createElement("div");
       sepList.className = "apiKeyList";
 
+      const base = info.embeddedBaseUrl || "";
       const providerItems = [
-        { id: "deepseek", name: "DeepSeek", url: `${info.embeddedBaseUrl}/deepseek` },
-        { id: "qwen", name: "Qwen", url: `${info.embeddedBaseUrl}/qwen` },
-        { id: "chatgpt", name: "ChatGPT", url: `${info.embeddedBaseUrl}/chatgpt` },
-        { id: "grok", name: "Grok", url: `${info.embeddedBaseUrl}/grok` },
-        { id: "mistral", name: "Mistral", url: `${info.embeddedBaseUrl}/mistral` },
+        { id: "deepseek", name: "DeepSeek", url: base + "/deepseek" },
+        { id: "qwen", name: "Qwen", url: base + "/qwen" },
+        { id: "chatgpt", name: "ChatGPT", url: base + "/chatgpt" },
+        { id: "grok", name: "Grok", url: base + "/grok" },
+        { id: "mistral", name: "Mistral", url: base + "/mistral" },
       ];
 
       for (const p of providerItems) {
@@ -4204,7 +4205,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
         topRow.appendChild(urlGroup);
         itemWrap.appendChild(topRow);
 
-        itemWrap.appendChild(makeApiKeyRow(p.id, `Ключ ${p.name}`, keys[p.id] || ""));
+        itemWrap.appendChild(makeApiKeyRow(p.id, "Ключ " + p.name, keys[p.id] || ""));
         sepList.appendChild(itemWrap);
       }
       sepGroup.appendChild(sepList);
