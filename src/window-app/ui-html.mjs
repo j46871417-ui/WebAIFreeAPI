@@ -1483,7 +1483,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           })),
         };
 
-        if (["qwen", "chatgpt", "deepseek"].includes(sendProvider)) {
+        if (["qwen", "chatgpt", "deepseek", "grok", "mistral"].includes(sendProvider)) {
           await postStreamingMessage(sentConvId, messageBody, sendProvider);
           return;
         }

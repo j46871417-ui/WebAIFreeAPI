@@ -55,12 +55,28 @@ async function createMistralBrowserProxy({ debug = false } = {}) {
 
   const page = (await context.pages())[0] || await context.newPage();
 
+  async function dismissModals() {
+    await page.evaluate(() => {
+      const dismissPatterns = [
+        "accept", "agree", "understand", "согласиться", "одобрить", "not now", "no thanks", "close", "закрыть"
+      ];
+      const buttons = Array.from(document.querySelectorAll("button"));
+      for (const b of buttons) {
+        const t = (b.innerText || b.getAttribute("aria-label") || "").trim().toLowerCase();
+        if (dismissPatterns.some(p => t.includes(p))) {
+          try { b.click(); } catch {}
+        }
+      }
+    }).catch(() => {});
+  }
+
   async function ensurePageReady() {
     const currentUrl = page.url();
     if (!currentUrl.includes("chat.mistral.ai")) {
       await page.goto(MISTRAL_BASE_URL, { waitUntil: "domcontentloaded", timeout: 45_000 });
       await page.waitForTimeout(2000);
     }
+    await dismissModals();
   }
 
   async function findComposer() {
@@ -69,13 +85,17 @@ async function createMistralBrowserProxy({ debug = false } = {}) {
       'div[contenteditable="true"]',
       '[role="textbox"]'
     ];
-    for (const sel of selectors) {
-      const loc = page.locator(sel).first();
-      if (await loc.count().catch(() => 0)) {
-        if (await loc.isVisible().catch(() => false)) {
-          return loc;
+    for (let attempt = 0; attempt < 25; attempt++) {
+      await dismissModals();
+      for (const sel of selectors) {
+        const loc = page.locator(sel).first();
+        if (await loc.count().catch(() => 0)) {
+          if (await loc.isVisible().catch(() => false)) {
+            return loc;
+          }
         }
       }
+      await page.waitForTimeout(1000);
     }
     return null;
   }
@@ -146,7 +166,7 @@ async function createMistralBrowserProxy({ debug = false } = {}) {
       }
 
       const isGenerating = await page.evaluate(() => {
-        const stopBtn = document.querySelector('button[aria-label="Stop"], button:has(svg[class*="stop"])');
+        const stopBtn = document.querySelector('button[aria-label*="stop" i], button[aria-label*="остановить" i], button:has(svg[class*="stop"])');
         return Boolean(stopBtn && stopBtn.getClientRects().length > 0);
       });
 
