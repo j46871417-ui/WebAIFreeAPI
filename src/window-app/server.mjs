@@ -261,6 +261,26 @@ export async function runWindowApp({
     return chatGPTClient;
   }
 
+  let grokChatClient = null;
+  async function getOrCreateGrokClient() {
+    if (grokChatClient) return grokChatClient;
+    const { GrokChatClient } = await import("../providers/grok/client.mjs");
+    grokChatClient = new GrokChatClient({
+      debug: Boolean(process.env.API_DEBUG),
+    });
+    return grokChatClient;
+  }
+
+  let mistralChatClient = null;
+  async function getOrCreateMistralClient() {
+    if (mistralChatClient) return mistralChatClient;
+    const { MistralChatClient } = await import("../providers/mistral/client.mjs");
+    mistralChatClient = new MistralChatClient({
+      debug: Boolean(process.env.API_DEBUG),
+    });
+    return mistralChatClient;
+  }
+
   function isChatGPTAuthError(error) {
     const message = String(error?.message || error || "");
     if (/unusual activity/i.test(message)) return false;
@@ -1409,7 +1429,7 @@ export async function runWindowApp({
           return sendJson(res, { error: `Путь существует, но это не папка: ${workspace}` }, 400);
         }
 
-        const allowedProviders = new Set(["deepseek", "qwen", "chatgpt"]);
+        const allowedProviders = new Set(["deepseek", "qwen", "chatgpt", "grok", "mistral"]);
         const requestedProvider = String(body.provider || "deepseek");
         if (!allowedProviders.has(requestedProvider)) {
           return sendJson(res, { error: `Провайдер "${requestedProvider}" не поддерживается.` }, 400);
@@ -2209,6 +2229,79 @@ export async function runWindowApp({
             logConsole(`[chat] chatgpt failed: ${error.message}`);
             return sendJson(res, { conversation });
           }
+        }
+        if (convProvider === "grok" || convProvider === "mistral") {
+          const now = new Date().toISOString();
+          const isFirstUserMessage = !conversation.messages.some((message) => message.role === "user");
+          if (isFirstUserMessage && shouldAutoTitle(conversation)) {
+            conversation.title = makeConversationTitle(prompt);
+          }
+          conversation.messages.push(createUserMessage({ createdAt: now }));
+          conversation.updatedAt = now;
+          state.activeConversationId = conversation.id;
+          saveWindowState(workspaceRoot, state);
+
+          const streamMessage = {
+            role: "assistant",
+            content: "…",
+            streaming: true,
+            createdAt: new Date().toISOString(),
+          };
+          conversation.messages.push(streamMessage);
+          conversation.updatedAt = streamMessage.createdAt;
+          saveWindowState(workspaceRoot, state);
+
+          beginNdjsonStream(res);
+          writeNdjsonLine(res, { type: "start", conversation });
+
+          let answerText = "";
+          let lastSave = 0;
+          const pushStreamDelta = () => {
+            streamMessage.content = answerText || "…";
+            streamMessage.updatedAt = new Date().toISOString();
+            conversation.updatedAt = streamMessage.updatedAt;
+            const nowTime = Date.now();
+            if (nowTime - lastSave >= STREAM_SAVE_THROTTLE_MS) {
+              lastSave = nowTime;
+              saveWindowState(workspaceRoot, state);
+            }
+            writeNdjsonLine(res, { type: "delta", content: streamMessage.content });
+          };
+
+          try {
+            const client = convProvider === "grok"
+              ? await getOrCreateGrokClient()
+              : await getOrCreateMistralClient();
+
+            const result = await client.complete({
+              prompt,
+              model: conversation.model || undefined,
+              onText: (delta) => {
+                answerText += delta;
+                pushStreamDelta();
+              },
+            });
+
+            delete streamMessage.streaming;
+            streamMessage.content = (String(result?.text || answerText)).trim() || "[empty]";
+            streamMessage.updatedAt = new Date().toISOString();
+            conversation.updatedAt = streamMessage.updatedAt;
+            saveWindowState(workspaceRoot, state);
+
+            logConsoleBlock("assistant", streamMessage.content);
+            logConsole(`[chat] ${convProvider} response: ${streamMessage.content.length} char(s)`);
+            writeNdjsonLine(res, { type: "done", conversation });
+          } catch (error) {
+            delete streamMessage.streaming;
+            streamMessage.content = `⚠️ ${convProvider} error: ${error.message}`;
+            streamMessage.updatedAt = new Date().toISOString();
+            conversation.updatedAt = streamMessage.updatedAt;
+            saveWindowState(workspaceRoot, state);
+            logConsole(`[chat] ${convProvider} failed: ${error.message}`);
+            writeNdjsonLine(res, { type: "error", conversation, message: error.message });
+          }
+          endNdjsonStream(res);
+          return;
         }
         if (convProvider !== "deepseek") {
           conversation.messages.push({
