@@ -13,7 +13,7 @@ namespace WebAIFreeAPI.Native
     public static class App
     {
         private static Process backgroundNodeProcess = null;
-        private static Window mainWindow = null;
+        private static MainWindow mainWindow = null;
         private static Mutex appMutex = null;
         private static NativeTray tray = null;
         private static readonly ApiClient apiClient = new ApiClient("http://127.0.0.1:4317");
@@ -21,6 +21,9 @@ namespace WebAIFreeAPI.Native
         [STAThread]
         public static void Main(string[] args)
         {
+            System.Windows.Forms.Application.EnableVisualStyles();
+            System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
+
             bool isNewInstance = false;
             appMutex = new Mutex(true, "WebAIFreeAPI_Native_SingleInstance_Mutex", out isNewInstance);
             if (!isNewInstance)
@@ -70,18 +73,19 @@ namespace WebAIFreeAPI.Native
             System.Windows.Forms.Application.Run();
         }
 
-        public static Window LaunchAppWindow(string url)
+        public static MainWindow LaunchAppWindow(string url)
         {
-            if (mainWindow == null)
+            if (mainWindow == null || mainWindow.IsDisposed)
             {
                 mainWindow = new MainWindow(url);
+                mainWindow.FormClosed += (s, e) => mainWindow = null;
                 mainWindow.Show();
             }
             else
             {
-                if (mainWindow.WindowState == WindowState.Minimized)
+                if (mainWindow.WindowState == FormWindowState.Minimized)
                 {
-                    mainWindow.WindowState = WindowState.Normal;
+                    mainWindow.WindowState = FormWindowState.Normal;
                 }
                 mainWindow.Show();
                 mainWindow.Activate();

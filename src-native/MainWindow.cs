@@ -1,13 +1,13 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Windows;
-using Microsoft.Web.WebView2.Wpf;
+using System.Windows.Forms;
+using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Web.WebView2.Core;
 
 namespace WebAIFreeAPI.Native
 {
-    public class MainWindow : Window
+    public class MainWindow : Form
     {
         private WebView2 webView;
         private string url;
@@ -15,13 +15,14 @@ namespace WebAIFreeAPI.Native
         public MainWindow(string url)
         {
             this.url = url;
-            Title = "WebAIFreeAPI";
+            Text = "WebAIFreeAPI";
             Width = 1320;
             Height = 860;
-            WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            StartPosition = FormStartPosition.CenterScreen;
 
             webView = new WebView2();
-            Content = webView;
+            webView.Dock = DockStyle.Fill;
+            Controls.Add(webView);
 
             InitializeAsync();
         }
