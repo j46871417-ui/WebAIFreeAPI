@@ -33,6 +33,7 @@ import { extractBareToolCalls, formatCompactTools, normalizeToolCallsForSchemas,
 import { readChatGPTAuth } from "../src/providers/chatgpt/auth-files.mjs";
 import { CHATGPT_AUTH_FILE } from "../src/providers/chatgpt/config.mjs";
 import { ChatGPTChatClient } from "../src/providers/chatgpt/client.mjs";
+import { GrokChatClient } from "../src/providers/grok/client.mjs";
 import { createFileLogger } from "../src/logging/logger.mjs";
 import { runWithEmptyStreamRetry } from "./stream-retry.mjs";
 import { globalChatSessionManager } from "./chat-session-manager.mjs";
@@ -93,6 +94,15 @@ async function getChatGPTClient() {
     debug: Boolean(process.env.API_DEBUG),
   });
   return chatgptClient;
+}
+
+let grokClient = null;
+async function getGrokClient() {
+  if (grokClient) return grokClient;
+  grokClient = new GrokChatClient({
+    debug: Boolean(process.env.API_DEBUG),
+  });
+  return grokClient;
 }
 
 export async function handleRequest(req, res) {
@@ -390,6 +400,21 @@ async function handleChatCompletions(req, res) {
         prompt,
         model: mapping.model,
         images,
+        signal: abortController.signal,
+      });
+      return sendJson(res, toOpenAIResponse(modelName, result.text, body.tools));
+    }
+    if (mapping.provider === "grok") {
+      const client = await getGrokClient();
+      if (body.stream === true) {
+        return handleGrokStream(client, prompt, modelName, mapping.model, res, {
+          tools: body.tools,
+          signal: abortController.signal,
+        });
+      }
+      const result = await client.complete({
+        prompt,
+        model: mapping.model,
         signal: abortController.signal,
       });
       return sendJson(res, toOpenAIResponse(modelName, result.text, body.tools));
@@ -774,8 +799,8 @@ async function completeText(mapping, prompt, { thinking = false, search = false,
     }
   }
 
-  if (mapping.provider === "grok" || mapping.provider === "mistral") {
-    const msg = `[API Stub] Провайдер ${mapping.provider} еще не полностью реализован в API (в разработке).`;
+  if (mapping.provider === "mistral") {
+    const msg = `[API Stub] Провайдер mistral еще не полностью реализован в API (в разработке).`;
     if (body.stream) {
       res.statusCode = 200;
       res.setHeader("Content-Type", "text/event-stream");
@@ -808,6 +833,15 @@ async function completeText(mapping, prompt, { thinking = false, search = false,
   }
   if (mapping.provider === "chatgpt") {
     const client = await getChatGPTClient();
+    const result = await client.complete({
+      prompt,
+      model: mapping.model,
+      signal,
+    });
+    return result.text || "";
+  }
+  if (mapping.provider === "grok") {
+    const client = await getGrokClient();
     const result = await client.complete({
       prompt,
       model: mapping.model,
@@ -1257,6 +1291,45 @@ async function handleChatGPTStream(client, prompt, modelName, model, res, { tool
       return;
     }
     console.error("[API] ChatGPT stream error:", e.message);
+    sendStreamError(res, modelName, e.message);
+  }
+}
+
+// Обработка streaming-запроса к Grok.
+async function handleGrokStream(client, prompt, modelName, model, res, { tools = [], signal = null } = {}) {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const parser = new StreamParser(modelName, res, { tools });
+  try {
+    const completionResult = await client.complete({
+      prompt,
+      model,
+      signal,
+      onText: (textDelta) => {
+        if (signal?.aborted || res.destroyed || res.writableEnded) {
+          const abortErr = new Error("Request aborted by client");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
+        parser.onText(textDelta);
+      },
+    });
+    if (signal?.aborted || res.destroyed || res.writableEnded) return;
+    parser.onEnd();
+    res.write("data: [DONE]\n\n");
+    res.end();
+    return {
+      sessionId: null,
+      lastAssistantMessageId: null,
+    };
+  } catch (e) {
+    if (signal?.aborted || e?.name === "AbortError" || res.destroyed || res.writableEnded) {
+      return;
+    }
+    console.error("[API] Grok stream error:", e.message);
     sendStreamError(res, modelName, e.message);
   }
 }
