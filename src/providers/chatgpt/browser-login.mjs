@@ -85,7 +85,8 @@ export async function launchInternalBrowserContext(
     context = await chromium.launchPersistentContext(profileDir, launchOptions);
   } else {
     try {
-      context = await chromium.launchPersistentContext(profileDir, { ...launchOptions, channel: "chrome" });
+      console.log("   • Ошибка с msedge, пробуем fallback-Chromium...");
+      context = await chromium.launchPersistentContext(profileDir, { ...launchOptions, channel: "msedge" });
     } catch {
       cleanupChromeProfileForLaunch(profileDir, { clearCookies: false });
       context = await chromium.launchPersistentContext(profileDir, launchOptions);

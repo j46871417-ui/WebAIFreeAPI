@@ -111,7 +111,7 @@ async function launchWebBrowserContext() {
   const viewport = getWebBrowserViewport();
   // Браузер работает без собственного окна; интерфейс передаётся во встроенную Web-панель AI Free.
   const context = await launchPersistentDeepSeekContext(chromium, WEB_BROWSER_PROFILE, true, {
-    channel: "chrome",
+    channel: "msedge",
     viewport,
     locale: "ru-RU",
     reducedMotion: "reduce",

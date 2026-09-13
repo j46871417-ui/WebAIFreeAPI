@@ -45,6 +45,9 @@ const wpfRefs = [
   "System.dll",
   "System.Drawing.dll",
   "System.Windows.Forms.dll",
+  path.join(rootDir, "webview2-sdk", "lib", "net45", "Microsoft.Web.WebView2.Core.dll"),
+  path.join(rootDir, "webview2-sdk", "lib", "net45", "Microsoft.Web.WebView2.Wpf.dll"),
+  path.join(rootDir, "webview2-sdk", "lib", "net45", "Microsoft.Web.WebView2.WinForms.dll")
 ];
 
 console.log("Compiling native WPF desktop application (WebAIFreeAPI.exe)...");
@@ -67,9 +70,17 @@ try {
   const stat = fs.statSync(outputExe);
   console.log(`\nCompilation successful! Binary: ${outputExe} (${(stat.size / 1024).toFixed(1)} KB)`);
 
+  // Copy WebView2 DLLs
+  fs.copyFileSync(path.join(rootDir, "webview2-sdk", "runtimes", "win-x64", "native", "WebView2Loader.dll"), path.join(binDir, "WebView2Loader.dll"));
+  fs.copyFileSync(path.join(rootDir, "webview2-sdk", "lib", "net45", "Microsoft.Web.WebView2.Core.dll"), path.join(binDir, "Microsoft.Web.WebView2.Core.dll"));
+  fs.copyFileSync(path.join(rootDir, "webview2-sdk", "lib", "net45", "Microsoft.Web.WebView2.Wpf.dll"), path.join(binDir, "Microsoft.Web.WebView2.Wpf.dll"));
+  
   // Copy to dist
   const distExe = path.join(distDir, "WebAIFreeAPI.exe");
   fs.copyFileSync(outputExe, distExe);
+  fs.copyFileSync(path.join(binDir, "WebView2Loader.dll"), path.join(distDir, "WebView2Loader.dll"));
+  fs.copyFileSync(path.join(binDir, "Microsoft.Web.WebView2.Core.dll"), path.join(distDir, "Microsoft.Web.WebView2.Core.dll"));
+  fs.copyFileSync(path.join(binDir, "Microsoft.Web.WebView2.Wpf.dll"), path.join(distDir, "Microsoft.Web.WebView2.Wpf.dll"));
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8"));
   const version = pkg.version || "1.5.0";
@@ -80,3 +91,4 @@ try {
   console.error("Compilation failed:", err.message);
   process.exit(1);
 }
+
