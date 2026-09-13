@@ -54,7 +54,13 @@ export const PROVIDERS = {
     name: "Grok",
     description: "grok.com — модель Grok от xAI (требуется аккаунт Twitter/X)",
     authFile: GROK_AUTH_FILE,
-    hasAuth: () => fs.existsSync(GROK_AUTH_FILE),
+    hasAuth: () => {
+      try {
+        return fs.existsSync(GROK_AUTH_FILE) && fs.statSync(GROK_AUTH_FILE).size > 5;
+      } catch {
+        return false;
+      }
+    },
     async login() {
       const { loginGrokAndSave } = await import("./grok/browser-login.mjs");
       await loginGrokAndSave();
@@ -65,7 +71,13 @@ export const PROVIDERS = {
     name: "Mistral",
     description: "chat.mistral.ai — модели Mistral (Le Chat)",
     authFile: MISTRAL_AUTH_FILE,
-    hasAuth: () => fs.existsSync(MISTRAL_AUTH_FILE),
+    hasAuth: () => {
+      try {
+        return fs.existsSync(MISTRAL_AUTH_FILE) && fs.statSync(MISTRAL_AUTH_FILE).size > 5;
+      } catch {
+        return false;
+      }
+    },
     async login() {
       const { loginMistralAndSave } = await import("./mistral/browser-login.mjs");
       await loginMistralAndSave();
