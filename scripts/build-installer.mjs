@@ -31,15 +31,24 @@ if (fs.existsSync(buildNativeScript)) {
   execSync(`"${nodeExe}" "${buildNativeScript}"`, { cwd: rootDir, stdio: "inherit" });
 }
 
-console.log("0.1. Bundling backend with esbuild...");
-execSync(`set PATH=${rootDir}\\node;%PATH% & "${npxCmd}" esbuild bin/deepseek.mjs --bundle --platform=node --format=esm --outfile=bin/backend.bundle.mjs --external:chromium-bidi/*`, { cwd: rootDir, stdio: "inherit" });
-
 console.log("1. Creating ai-free.zip archive using 7-Zip...");
 const itemsToInclude = [
+  "api",
   "bin",
   "node",
+  "node_modules",
+  "packages",
+  "plugin-for-vscode",
   "scripts",
-  "ai-free.ico"
+  "src",
+  "src-native",
+  "package.json",
+  "run.bat",
+  "run-silent.vbs",
+  "launcher.bat",
+  "setup.bat",
+  "ai-free.ico",
+  ".gitignore"
 ];
 
 const excludes = [
