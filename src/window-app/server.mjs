@@ -223,7 +223,7 @@ export async function runWindowApp({
         if (isChatGPTAuthUsable(cached)) return cached;
       } catch (error) {
         if (/Executable doesn't exist|playwright install|patchright install/i.test(String(error?.message || error))) {
-          throw new Error("Chromium не установлен. В терминале: npx patchright install chromium");
+          throw new Error("Не найден совместимый браузер (Edge или Chrome) для работы веб-сессии.");
         }
       }
     }
@@ -816,7 +816,7 @@ export async function runWindowApp({
       // Устарело: больше не открываем внешний Chrome (конфликт профиля).
       if (req.method === "POST" && url.pathname === "/api/chatgpt/visible-login") {
         return sendJson(res, {
-          error: "Внешний Chrome отключён. Используйте 🧠 → Браузер → ChatGPT или npm run login-chatgpt",
+          error: "Нажмите «Авторизоваться» на карточке ChatGPT в приложении для входа.",
         }, 400);
       }
 
@@ -932,6 +932,14 @@ export async function runWindowApp({
             }
             if (providerId === "chatgpt") {
               chatGPTClient = null;
+            }
+            if (providerId === "grok") {
+              const { resetGrokBrowserProxy } = await import("../providers/grok/browser-proxy.mjs");
+              resetGrokBrowserProxy();
+            }
+            if (providerId === "mistral") {
+              const { resetMistralBrowserProxy } = await import("../providers/mistral/browser-proxy.mjs");
+              resetMistralBrowserProxy();
             }
           })();
           providerLoginStates.set(providerId, { state: "running", error: "" });

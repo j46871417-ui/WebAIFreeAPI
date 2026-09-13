@@ -1323,10 +1323,16 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       if (!opt) return;
       const id = opt.dataset.provider;
 
-      // Запускаем авторизацию ТОЛЬКО если кликнули по кнопке НЕавторизованного провайдера.
-      // Если провайдер уже подключен, клик по зеленому бейджу просто выбирает его!
+      // Если провайдер еще не авторизован — любой клик по нему запускает нативное окно входа
+      if (opt.dataset.authed !== "1") {
+        event.stopPropagation();
+        await connectProvider(id);
+        return;
+      }
+
+      // Если уже авторизован, но кликнули специально по бейджу — спросить о переподключении
       const reconnectBtn = event.target.closest(".reconnectLink");
-      if (reconnectBtn && opt.dataset.authed !== "1") {
+      if (reconnectBtn) {
         event.stopPropagation();
         await connectProvider(id);
         return;

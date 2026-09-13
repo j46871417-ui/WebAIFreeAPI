@@ -57,7 +57,7 @@ export const language = {
     "provider.chatgptEmbedLogin": "Complete sign-in in the Chrome window. It closes automatically only after the active session is verified.",
     "provider.chatgptEmbedLoginTimeout": "Sign-in timed out for {label}. Click ‘Sign in with Chrome’ and try again.",
     "provider.connectedAlert": "{label} connected.",
-    "provider.tokenMissing": "Login finished, but no token was found. Try again or run: npm run login-{id}",
+    "provider.tokenMissing": "Login finished, but no session was found. Click Authorize on the provider card to try again.",
     "provider.connectFailed": "Could not connect {label}: {message}",
     "provider.deepseekFast": "fast regular chat",
     "provider.deepseekExpert": "reasoning / R1",

@@ -57,7 +57,7 @@ export const language = {
     "provider.chatgptEmbedLogin": "Завершите вход в открывшемся окне Chrome. Оно закроется автоматически только после проверки активной сессии.",
     "provider.chatgptEmbedLoginTimeout": "Время ожидания входа в {label} истекло. Нажмите «Войти через Chrome» и повторите вход.",
     "provider.connectedAlert": "{label} подключён.",
-    "provider.tokenMissing": "Логин завершён, но токен не найден. Попробуй ещё раз или: npm run login-{id}",
+    "provider.tokenMissing": "Логин завершён, но сессия не найдена. Нажмите «Авторизоваться» на карточке провайдера для повторного входа.",
     "provider.connectFailed": "Не удалось подключить {label}: {message}",
     "provider.deepseekFast": "быстрый обычный чат",
     "provider.deepseekExpert": "reasoning / R1",

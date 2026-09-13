@@ -34,6 +34,7 @@ import { readChatGPTAuth } from "../src/providers/chatgpt/auth-files.mjs";
 import { CHATGPT_AUTH_FILE } from "../src/providers/chatgpt/config.mjs";
 import { ChatGPTChatClient } from "../src/providers/chatgpt/client.mjs";
 import { GrokChatClient } from "../src/providers/grok/client.mjs";
+import { MistralChatClient } from "../src/providers/mistral/client.mjs";
 import { createFileLogger } from "../src/logging/logger.mjs";
 import { runWithEmptyStreamRetry } from "./stream-retry.mjs";
 import { globalChatSessionManager } from "./chat-session-manager.mjs";
@@ -53,7 +54,7 @@ async function getQwenClient({ allowRefresh = true } = {}) {
   }
   if (!auth?.token) {
     throw new Error(
-      "Qwen не подключён. Запусти: npm run login-qwen (или npm run welcome)",
+      "Qwen не подключён. Нажмите «Авторизоваться» на карточке Qwen в приложении.",
     );
   }
   qwenClient = new QwenChatClient({
@@ -68,7 +69,7 @@ async function getDeepSeekClient() {
   if (deepseekClient) return deepseekClient;
   const auth = readSavedAuth(DEFAULT_AUTH_FILE);
   if (!auth?.token || !auth?.cookieHeader) {
-    throw new Error("DeepSeek не подключён. Запусти: npm run login");
+    throw new Error("DeepSeek не подключён. Нажмите «Авторизоваться» на карточке DeepSeek в приложении.");
   }
   deepseekClient = new DeepSeekChatClient({
     token: auth.token,
@@ -84,7 +85,7 @@ async function getChatGPTClient() {
   if (chatgptClient) return chatgptClient;
   const auth = readChatGPTAuth(CHATGPT_AUTH_FILE);
   if (!auth?.accessToken) {
-    throw new Error("ChatGPT не подключён. Импортируйте сессию или запустите npm run login-chatgpt");
+    throw new Error("ChatGPT не подключён. Нажмите «Авторизоваться» на карточке ChatGPT в приложении.");
   }
   chatgptClient = new ChatGPTChatClient({
     accessToken: auth.accessToken,
@@ -99,10 +100,29 @@ async function getChatGPTClient() {
 let grokClient = null;
 async function getGrokClient() {
   if (grokClient) return grokClient;
+  const { GROK_AUTH_FILE } = await import("../src/providers/grok/config.mjs");
+  const fs = await import("node:fs");
+  if (!fs.existsSync(GROK_AUTH_FILE)) {
+    throw new Error("Grok не подключён. Нажмите «Авторизоваться» на карточке Grok в приложении.");
+  }
   grokClient = new GrokChatClient({
     debug: Boolean(process.env.API_DEBUG),
   });
   return grokClient;
+}
+
+let mistralClient = null;
+async function getMistralClient() {
+  if (mistralClient) return mistralClient;
+  const { MISTRAL_AUTH_FILE } = await import("../src/providers/mistral/config.mjs");
+  const fs = await import("node:fs");
+  if (!fs.existsSync(MISTRAL_AUTH_FILE)) {
+    throw new Error("Mistral не подключён. Нажмите «Авторизоваться» на карточке Mistral в приложении.");
+  }
+  mistralClient = new MistralChatClient({
+    debug: Boolean(process.env.API_DEBUG),
+  });
+  return mistralClient;
 }
 
 export async function handleRequest(req, res) {
@@ -408,6 +428,21 @@ async function handleChatCompletions(req, res) {
       const client = await getGrokClient();
       if (body.stream === true) {
         return handleGrokStream(client, prompt, modelName, mapping.model, res, {
+          tools: body.tools,
+          signal: abortController.signal,
+        });
+      }
+      const result = await client.complete({
+        prompt,
+        model: mapping.model,
+        signal: abortController.signal,
+      });
+      return sendJson(res, toOpenAIResponse(modelName, result.text, body.tools));
+    }
+    if (mapping.provider === "mistral") {
+      const client = await getMistralClient();
+      if (body.stream === true) {
+        return handleMistralStream(client, prompt, modelName, mapping.model, res, {
           tools: body.tools,
           signal: abortController.signal,
         });
@@ -799,25 +834,6 @@ async function completeText(mapping, prompt, { thinking = false, search = false,
     }
   }
 
-  if (mapping.provider === "mistral") {
-    const msg = `[API Stub] Провайдер mistral еще не полностью реализован в API (в разработке).`;
-    if (body.stream) {
-      res.statusCode = 200;
-      res.setHeader("Content-Type", "text/event-stream");
-      writeSseRaw(res, `: stub\n\n`);
-      writeSseChunk(res, modelName, msg);
-      writeSseDone(res);
-      return sendStreamSuccessEnd(res, { provider: mapping.provider, model: modelName, serverChatId: "stub" });
-    }
-    return sendJson(res, {
-      id: "stub",
-      object: "chat.completion",
-      created: Math.floor(Date.now() / 1000),
-      model: modelName,
-      choices: [{ index: 0, message: { role: "assistant", content: msg }, finish_reason: "stop" }]
-    });
-  }
-
   if (mapping.provider === "deepseek") {
     const client = await getDeepSeekClient();
     const sessionId = await client.createSession();
@@ -842,6 +858,15 @@ async function completeText(mapping, prompt, { thinking = false, search = false,
   }
   if (mapping.provider === "grok") {
     const client = await getGrokClient();
+    const result = await client.complete({
+      prompt,
+      model: mapping.model,
+      signal,
+    });
+    return result.text || "";
+  }
+  if (mapping.provider === "mistral") {
+    const client = await getMistralClient();
     const result = await client.complete({
       prompt,
       model: mapping.model,
@@ -1330,6 +1355,45 @@ async function handleGrokStream(client, prompt, modelName, model, res, { tools =
       return;
     }
     console.error("[API] Grok stream error:", e.message);
+    sendStreamError(res, modelName, e.message);
+  }
+}
+
+// Обработка streaming-запроса к Mistral.
+async function handleMistralStream(client, prompt, modelName, model, res, { tools = [], signal = null } = {}) {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const parser = new StreamParser(modelName, res, { tools });
+  try {
+    const completionResult = await client.complete({
+      prompt,
+      model,
+      signal,
+      onText: (textDelta) => {
+        if (signal?.aborted || res.destroyed || res.writableEnded) {
+          const abortErr = new Error("Request aborted by client");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
+        parser.onText(textDelta);
+      },
+    });
+    if (signal?.aborted || res.destroyed || res.writableEnded) return;
+    parser.onEnd();
+    res.write("data: [DONE]\n\n");
+    res.end();
+    return {
+      sessionId: null,
+      lastAssistantMessageId: null,
+    };
+  } catch (e) {
+    if (signal?.aborted || e?.name === "AbortError" || res.destroyed || res.writableEnded) {
+      return;
+    }
+    console.error("[API] Mistral stream error:", e.message);
     sendStreamError(res, modelName, e.message);
   }
 }
