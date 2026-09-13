@@ -55,27 +55,57 @@ async function createGrokBrowserProxy({ debug = false } = {}) {
 
   const page = (await context.pages())[0] || await context.newPage();
 
+  async function dismissModals() {
+    await page.evaluate(() => {
+      const dismissPatterns = [
+        "понятно", "accept", "agree", "understand", "согласиться", "одобрить все",
+        "нет, спасибо", "не сейчас", "not now", "no thanks", "close", "закрыть"
+      ];
+      const buttons = Array.from(document.querySelectorAll("button"));
+      for (const b of buttons) {
+        const t = (b.innerText || b.getAttribute("aria-label") || "").trim().toLowerCase();
+        if (dismissPatterns.some(p => t.includes(p))) {
+          try { b.click(); } catch {}
+        }
+      }
+    }).catch(() => {});
+  }
+
   async function ensurePageReady() {
     const currentUrl = page.url();
     if (!currentUrl.includes("grok.com")) {
       await page.goto(GROK_BASE_URL, { waitUntil: "domcontentloaded", timeout: 45_000 });
       await page.waitForTimeout(2000);
     }
+    if (page.url().includes("tos-gate")) {
+      await dismissModals();
+      await page.waitForTimeout(1500);
+      if (page.url().includes("tos-gate")) {
+        await page.goto(GROK_BASE_URL, { waitUntil: "domcontentloaded", timeout: 45_000 });
+      }
+    }
+    await dismissModals();
   }
 
   async function findComposer() {
     const selectors = [
-      'textarea',
+      'div[role="textbox"][contenteditable="true"]',
+      'div.tiptap[contenteditable="true"]',
       'div[contenteditable="true"]',
+      'textarea',
       '[role="textbox"]'
     ];
-    for (const sel of selectors) {
-      const loc = page.locator(sel).first();
-      if (await loc.count().catch(() => 0)) {
-        if (await loc.isVisible().catch(() => false)) {
-          return loc;
+    for (let attempt = 0; attempt < 25; attempt++) {
+      await dismissModals();
+      for (const sel of selectors) {
+        const loc = page.locator(sel).first();
+        if (await loc.count().catch(() => 0)) {
+          if (await loc.isVisible().catch(() => false)) {
+            return loc;
+          }
         }
       }
+      await page.waitForTimeout(1000);
     }
     return null;
   }
@@ -86,7 +116,7 @@ async function createGrokBrowserProxy({ debug = false } = {}) {
 
     const composer = await findComposer();
     if (!composer) {
-      throw new Error("Grok: поле ввода сообщения не найдено на странице. Возможно, требуется авторизация через 'npm run login-grok'.");
+      throw new Error("Grok: поле ввода сообщения не найдено на странице. Возможно, требуется авторизация через кнопку «Авторизоваться» в карточке модели.");
     }
 
     await composer.click();
@@ -94,7 +124,7 @@ async function createGrokBrowserProxy({ debug = false } = {}) {
     await page.waitForTimeout(300);
 
     // Send via Enter or submit button
-    const submitBtn = page.locator('button[type="submit"], button[aria-label="Send"], button:has(svg)').last();
+    const submitBtn = page.locator('button[type="submit"], button[aria-label="Send"], button[aria-label*="отправить" i], button:has(svg rect)').last();
     if (await submitBtn.count().catch(() => 0) && await submitBtn.isVisible().catch(() => false)) {
       await submitBtn.click().catch(async () => {
         await page.keyboard.press("Enter");
@@ -118,22 +148,25 @@ async function createGrokBrowserProxy({ debug = false } = {}) {
       }
 
       // Extract last response text from DOM
-      const currentText = await page.evaluate(() => {
-        // Grok messages usually render in markdown/prose containers
-        const messageContainers = document.querySelectorAll(
-          '.prose, [data-message-author-role="assistant"], div[class*="message"], div[class*="response"]'
-        );
-        if (!messageContainers.length) {
-          // Fallback: take all paragraphs or main text containers
-          const allP = document.querySelectorAll('main p, [role="main"] p');
-          if (allP.length) {
-            return Array.from(allP).map(p => p.innerText).join("\n");
-          }
-          return "";
+      const currentText = await page.evaluate((userPrompt) => {
+        const proseList = Array.from(document.querySelectorAll('.prose, [data-message-author-role="assistant"], .response-content'));
+        const assistantBlocks = proseList.filter(el => {
+          if (el.closest('.query-bar-editor') || el.classList.contains('query-bar-editor') || el.getAttribute('contenteditable') === 'true') return false;
+          if (el.innerText.trim() === userPrompt.trim()) return false;
+          return true;
+        });
+        if (assistantBlocks.length) {
+          const last = assistantBlocks[assistantBlocks.length - 1];
+          return (last?.innerText || '').trim();
         }
-        const last = messageContainers[messageContainers.length - 1];
-        return last ? (last.innerText || "").trim() : "";
-      });
+        // Fallback: search main paragraphs
+        const allP = Array.from(document.querySelectorAll('main p.break-words, [role="main"] p.break-words, main p, [role="main"] p'));
+        const filtered = allP.filter(p => !p.innerText.includes(userPrompt) && !p.closest('.query-bar-editor'));
+        if (filtered.length) {
+          return filtered.map(p => p.innerText.trim()).filter(Boolean).join("\n\n");
+        }
+        return "";
+      }, prompt);
 
       if (currentText) {
         if (currentText !== lastText) {
@@ -153,8 +186,8 @@ async function createGrokBrowserProxy({ debug = false } = {}) {
       // Check if generation finished:
       // Stop button disappears, or unchanged for ~4 seconds after receiving text
       const isGenerating = await page.evaluate(() => {
-        const stopBtn = document.querySelector('button[aria-label="Stop"], button:has(svg[class*="stop"])');
-        return Boolean(stopBtn && stopBtn.getClientRects().length > 0);
+        const stopBtn = document.querySelector('button[aria-label*="остановить" i], button[aria-label*="stop" i]');
+        return Boolean(stopBtn && stopBtn.offsetParent !== null);
       });
 
       if (!isGenerating && lastText.length > 0 && unchangedCount >= 4) {
