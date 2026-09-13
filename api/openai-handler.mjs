@@ -128,9 +128,39 @@ async function getMistralClient() {
 export async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
-  if (req.method === "GET" && url.pathname === "/v1/models") {
+  // Поддержка выделенных путей по провайдерам:
+  // e.g. /v1/deepseek/chat/completions, /v1/qwen/models, /v1/chatgpt/..., /v1/grok/..., /v1/mistral/...
+  const KNOWN_PROVIDERS = ["deepseek", "qwen", "chatgpt", "grok", "mistral"];
+  let pathname = url.pathname;
+  let pathProvider = null;
+  for (const p of KNOWN_PROVIDERS) {
+    if (pathname.startsWith(`/v1/${p}/`)) {
+      pathProvider = p;
+      pathname = "/v1/" + pathname.slice(`/v1/${p}/`.length);
+      break;
+    }
+    if (pathname === `/v1/${p}`) {
+      pathProvider = p;
+      pathname = "/v1";
+      break;
+    }
+  }
+
+  if (req.openAICompatProvider && pathProvider && req.openAICompatProvider !== pathProvider) {
+    return sendJson(res, {
+      error: {
+        message: `API key for '${req.openAICompatProvider}' cannot be used on dedicated '/v1/${pathProvider}' endpoint.`,
+        type: "invalid_request_error",
+      },
+    }, 403);
+  }
+
+  const effectiveProvider = pathProvider || req.openAICompatProvider || null;
+  req.openAICompatProvider = effectiveProvider;
+
+  if (req.method === "GET" && pathname === "/v1/models") {
     const provider = req.openAICompatProvider || null;
-    const qwen = provider === "qwen" ? await getQwenLiveCatalogOverride() : null;
+    const qwen = provider === "qwen" || !provider ? await getQwenLiveCatalogOverride() : null;
     const list = modelsList(qwen ? { qwen } : {});
     if (!provider) return sendJson(res, list);
     return sendJson(res, {
@@ -139,23 +169,31 @@ export async function handleRequest(req, res) {
     });
   }
 
-  if (req.method === "POST" && url.pathname === "/v1/chat/completions") {
+  if (req.method === "POST" && pathname === "/v1/chat/completions") {
     return handleChatCompletions(req, res);
   }
 
-  if (req.method === "POST" && url.pathname === "/v1/responses") {
+  if (req.method === "POST" && pathname === "/v1/responses") {
     return handleResponses(req, res);
   }
 
-  if (req.method === "POST" && url.pathname === "/v1/messages") {
+  if (req.method === "POST" && pathname === "/v1/messages") {
     return handleAnthropicMessages(req, res);
   }
 
-  if (req.method === "GET" && url.pathname === "/") {
+  if (req.method === "GET" && pathname === "/") {
     return sendJson(res, {
       name: "AI Free openai-compat",
       version: "0.1.0-prototype",
-      endpoints: ["GET /v1/models", "POST /v1/chat/completions", "POST /v1/responses", "POST /v1/messages"],
+      endpoints: [
+        "GET /v1/models (Unified - all models)",
+        "POST /v1/chat/completions (Unified - all models)",
+        "GET /v1/{provider}/models (Provider-specific)",
+        "POST /v1/{provider}/chat/completions (Provider-specific)",
+        "POST /v1/responses",
+        "POST /v1/messages",
+      ],
+      providers: KNOWN_PROVIDERS,
       docs: "see README.md in api/",
     });
   }
@@ -188,21 +226,20 @@ async function handleChatCompletions(req, res) {
   console.log(`[API] POST /v1/chat/completions (model: ${modelName}, stream: ${Boolean(body.stream)}, tools: ${body.tools ? body.tools.length : 0})`);
 
   let mapping = findModel(modelName);
-  if (req.openAICompatProvider === "qwen") {
+  if (mapping?.provider === "qwen" || req.openAICompatProvider === "qwen") {
     const liveQwen = await getQwenLiveCatalogOverride();
     if (liveQwen) {
       const liveModel = liveQwen.models.find((model) => model.id === modelName);
-      if (!liveModel) {
-        return sendError(res, 404, `Qwen model '${modelName}' is not available for the current account. Refresh /v1/models and select an active model.`);
+      if (liveModel) {
+        mapping = {
+          name: liveModel.id,
+          provider: "qwen",
+          model: liveModel.id,
+          label: liveModel.label,
+          reasoning: liveModel.reasoning === true,
+          vision: liveModel.vision === true,
+        };
       }
-      mapping = {
-        name: liveModel.id,
-        provider: "qwen",
-        model: liveModel.id,
-        label: liveModel.label,
-        reasoning: liveModel.reasoning === true,
-        vision: liveModel.vision === true,
-      };
     }
   }
   if (!mapping) return sendError(res, 404, `Unknown model: ${modelName}`);

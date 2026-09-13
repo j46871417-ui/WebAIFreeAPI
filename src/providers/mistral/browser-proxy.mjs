@@ -170,6 +170,26 @@ async function createMistralBrowserProxy({ debug = false } = {}) {
         return Boolean(stopBtn && stopBtn.getClientRects().length > 0);
       });
 
+      // Ранняя проверка на ошибки или требование авторизации вместо бесконечного ожидания
+      if (!lastText && Date.now() - startTime > 12_000) {
+        const errorState = await page.evaluate(() => {
+          if (document.title.includes("Один момент") || document.title.includes("Just a moment") || document.querySelector("#challenge-running")) {
+            return "Сайт chat.mistral.ai заблокирован проверкой Cloudflare. Авторизуйтесь заново через кнопку «Авторизоваться».";
+          }
+          const allText = document.body.innerText.toLowerCase();
+          if (allText.includes("sign in to continue") || allText.includes("войдите, чтобы продолжить") || allText.includes("log in to chat")) {
+            return "Требуется авторизация в Mistral. Нажмите «Авторизоваться» на карточке модели.";
+          }
+          return null;
+        });
+        if (errorState) {
+          throw new Error(`Mistral: ${errorState}`);
+        }
+        if (!isGenerating && Date.now() - startTime > 18_000) {
+          throw new Error("Mistral не начал генерацию ответа. Возможно, сессия истекла. Нажмите «Авторизоваться» на карточке Mistral.");
+        }
+      }
+
       if (!isGenerating && lastText.length > 0 && unchangedCount >= 4) {
         break;
       }

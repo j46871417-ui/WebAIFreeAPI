@@ -22,8 +22,7 @@
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadDotEnv } from "../src/args.mjs";
-import { resolveOpenAICompatApiKey } from "../src/state/settings.mjs";
+import { loadSettings, resolveOpenAICompatApiKey } from "../src/state/settings.mjs";
 import { createFileLogger } from "../src/logging/logger.mjs";
 
 loadDotEnv();
@@ -35,7 +34,7 @@ async function resolveRequestHandler() {
 }
 
 export const DEFAULT_API_PORT = 4318;
-export const DEFAULT_API_HOST = "127.0.0.1"; // намеренно НЕ слушаем на 0.0.0.0 — только локально
+export const DEFAULT_API_HOST = "127.0.0.1";
 const apiLogger = createFileLogger({ component: "openai-api" });
 
 export function createOpenAICompatServer() {
@@ -94,7 +93,7 @@ export function setOpenAICorsHeaders(res) {
 
 export function startOpenAICompatServer({
   port = Number(process.env.API_PORT) || DEFAULT_API_PORT,
-  host = process.env.API_HOST || DEFAULT_API_HOST,
+  host = process.env.API_HOST || (loadSettings().openAICompat?.bindAllInterfaces ? "0.0.0.0" : DEFAULT_API_HOST),
 } = {}) {
   const server = createOpenAICompatServer();
   server.listen(port, host, () => {

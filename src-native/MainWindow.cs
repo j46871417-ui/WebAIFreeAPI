@@ -15,7 +15,7 @@ namespace WebAIFreeAPI.Native
         public MainWindow(string url)
         {
             this.url = url;
-            Text = "WebAIFreeAPI";
+            Text = "WebAIFreeAPI v1.9.3";
             Width = 1320;
             Height = 860;
             StartPosition = FormStartPosition.CenterScreen;
