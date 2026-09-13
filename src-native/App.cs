@@ -42,8 +42,26 @@ namespace WebAIFreeAPI.Native
                 bool ready = apiClient.WaitForReadyAsync(25).GetAwaiter().GetResult();
                 if (!ready)
                 {
+                    string errDetail = "";
+                    try
+                    {
+                        string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "backend.log");
+                        if (File.Exists(logFile))
+                        {
+                            var lines = File.ReadAllLines(logFile);
+                            int take = Math.Min(6, lines.Length);
+                            if (take > 0)
+                            {
+                                var sub = new string[take];
+                                Array.Copy(lines, lines.Length - take, sub, 0, take);
+                                errDetail = "\n\nЖурнал запуска:\n" + string.Join("\n", sub);
+                            }
+                        }
+                    }
+                    catch {}
+
                     System.Windows.Forms.MessageBox.Show(
-                        "Не удалось дождаться ответа локального сервера WebAIFreeAPI на порту 4317.\nПроверьте, что порт не занят другим приложением.",
+                        "Не удалось дождаться ответа локального сервера WebAIFreeAPI на порту 4317.\nПроверьте, что порт не занят другим приложением." + errDetail,
                         "WebAIFreeAPI — Запуск сервера",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning

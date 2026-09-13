@@ -22,6 +22,7 @@
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadDotEnv } from "../src/args.mjs";
 import { loadSettings, resolveOpenAICompatApiKey } from "../src/state/settings.mjs";
 import { createFileLogger } from "../src/logging/logger.mjs";
 
