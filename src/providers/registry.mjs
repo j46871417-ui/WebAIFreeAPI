@@ -73,7 +73,20 @@ export const PROVIDERS = {
     authFile: MISTRAL_AUTH_FILE,
     hasAuth: () => {
       try {
-        return fs.existsSync(MISTRAL_AUTH_FILE) && fs.statSync(MISTRAL_AUTH_FILE).size > 5;
+        if (!fs.existsSync(MISTRAL_AUTH_FILE) || fs.statSync(MISTRAL_AUTH_FILE).size <= 5) return false;
+        const cookies = JSON.parse(fs.readFileSync(MISTRAL_AUTH_FILE, "utf-8"));
+        if (!Array.isArray(cookies) || cookies.length === 0) return false;
+        const hasAnon = cookies.some((c) => c.name === "anonymousUser");
+        const hasAuthToken = cookies.some((c) =>
+          c.name.includes("session") ||
+          c.name.includes("auth") ||
+          c.name.includes("token") ||
+          c.name.includes("jwt") ||
+          c.name.includes("user_id") ||
+          c.name.includes("account")
+        );
+        if (hasAnon && !hasAuthToken) return false;
+        return cookies.length > 0;
       } catch {
         return false;
       }

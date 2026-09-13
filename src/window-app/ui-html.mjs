@@ -4039,32 +4039,177 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
 
     function renderOpenAISettings(target, info) {
       if (!info) return;
-      const groupEl = document.createElement("div");
-      groupEl.className = "settingsGroup apiSettings";
-
-      const heading = document.createElement("h3");
-      heading.textContent = t("settings.apiTitle");
-      groupEl.appendChild(heading);
-
-      const grid = document.createElement("div");
-      grid.className = "apiSettingsGrid";
-
-      grid.appendChild(makeApiField(t("settings.baseUrl"), info.embeddedBaseUrl));
-      groupEl.appendChild(grid);
-
-      const keyList = document.createElement("div");
-      keyList.className = "apiKeyList";
       const keys = info.apiKeys || {};
-      keyList.appendChild(makeApiKeyRow("deepseek", "DeepSeek", keys.deepseek || ""));
-      keyList.appendChild(makeApiKeyRow("qwen", "Qwen", keys.qwen || ""));
-      groupEl.appendChild(keyList);
 
-      const note = document.createElement("div");
-      note.className = "apiModels";
-      note.textContent = t("settings.apiNote", { models: (info.models || []).join(", ") });
-      groupEl.appendChild(note);
+      // 1. Сетевое подключение (Доступ по IP / LAN)
+      const netGroup = document.createElement("div");
+      netGroup.className = "settingsGroup apiSettings";
+      const netHeading = document.createElement("h3");
+      netHeading.textContent = "Сетевое подключение (Доступ по IP)";
+      netGroup.appendChild(netHeading);
 
-      target.appendChild(groupEl);
+      const netDesc = document.createElement("div");
+      netDesc.style.fontSize = "12px";
+      netDesc.style.color = "var(--muted)";
+      netDesc.style.marginBottom = "10px";
+      netDesc.textContent = "По умолчанию сервер слушает только локальный адрес 127.0.0.1. Включите эту опцию, если хотите отправлять запросы к моделям с других компьютеров, серверов или мобильных устройств в вашей локальной сети.";
+      netGroup.appendChild(netDesc);
+
+      const netRow = document.createElement("label");
+      netRow.className = "settingsItem";
+      netRow.style.cursor = "pointer";
+      netRow.style.marginBottom = "10px";
+
+      const netCb = document.createElement("input");
+      netCb.type = "checkbox";
+      netCb.checked = info.bindAllInterfaces === true;
+      netCb.addEventListener("change", async () => {
+        try {
+          await api("/api/settings", {
+            method: "PUT",
+            body: {
+              allowedCommands: collectAllowedCommands(),
+              openAICompat: { bindAllInterfaces: netCb.checked }
+            }
+          });
+          setStatus("Настройка сохранена. Перезапустите приложение, чтобы применить новый сетевой интерфейс (0.0.0.0 / 127.0.0.1).", false);
+          const next = await api("/api/settings");
+          renderSettings(next, "api");
+        } catch (err) {
+          alert("Ошибка сохранения: " + err.message);
+        }
+      });
+
+      const netTextWrap = document.createElement("div");
+      const netTitle = document.createElement("div");
+      netTitle.className = "name";
+      netTitle.textContent = "Разрешить доступ из локальной сети (слушать 0.0.0.0)";
+      const netSub = document.createElement("div");
+      netSub.className = "desc";
+      const ips = (info.localIps && info.localIps.length) ? info.localIps.join(", ") : "127.0.0.1";
+      netSub.textContent = `Локальный IP: ${ips}`;
+      netTextWrap.appendChild(netTitle);
+      netTextWrap.appendChild(netSub);
+
+      netRow.appendChild(netCb);
+      netRow.appendChild(netTextWrap);
+      netGroup.appendChild(netRow);
+      target.appendChild(netGroup);
+
+      // 2. Единый API (Все модели разом)
+      const unifiedGroup = document.createElement("div");
+      unifiedGroup.className = "settingsGroup apiSettings";
+
+      const uniHeading = document.createElement("h3");
+      uniHeading.textContent = "Единый API (все модели через единый IP и мастер-ключ)";
+      unifiedGroup.appendChild(uniHeading);
+
+      const uniDesc = document.createElement("div");
+      uniDesc.style.fontSize = "12px";
+      uniDesc.style.color = "var(--muted)";
+      uniDesc.style.marginBottom = "10px";
+      uniDesc.textContent = "Единая точка входа для Open WebUI, LibreChat, Cursor, 1C, Python и любых сторонних систем. Подключите один Base URL и мастер-ключ — вы сможете вызывать абсолютно любую модель любого подключённого провайдера без переключения ключей.";
+      unifiedGroup.appendChild(uniDesc);
+
+      const uniGrid = document.createElement("div");
+      uniGrid.className = "apiSettingsGrid";
+      uniGrid.appendChild(makeApiField("Единый Base URL", info.embeddedBaseUrl));
+      unifiedGroup.appendChild(uniGrid);
+
+      const uniKeyList = document.createElement("div");
+      uniKeyList.className = "apiKeyList";
+      uniKeyList.appendChild(makeApiKeyRow("all", "⭐ Мастер-ключ (все модели)", keys.all || ""));
+      unifiedGroup.appendChild(uniKeyList);
+
+      const uniNote = document.createElement("div");
+      uniNote.className = "apiModels";
+      uniNote.style.marginTop = "8px";
+      uniNote.textContent = "Доступные модели: " + (info.models || []).join(", ");
+      unifiedGroup.appendChild(uniNote);
+
+      target.appendChild(unifiedGroup);
+
+      // 3. Раздельные API по провайдерам
+      const sepGroup = document.createElement("div");
+      sepGroup.className = "settingsGroup apiSettings";
+
+      const sepHeading = document.createElement("h3");
+      sepHeading.textContent = "Раздельные API по провайдерам";
+      sepGroup.appendChild(sepHeading);
+
+      const sepDesc = document.createElement("div");
+      sepDesc.style.fontSize = "12px";
+      sepDesc.style.color = "var(--muted)";
+      sepDesc.style.marginBottom = "10px";
+      sepDesc.textContent = "Если вашей системе требуется изолированный доступ только к конкретному сервису со своим отдельным Base URL и ключом:";
+      sepGroup.appendChild(sepDesc);
+
+      const sepList = document.createElement("div");
+      sepList.className = "apiKeyList";
+
+      const providerItems = [
+        { id: "deepseek", name: "DeepSeek", url: `${info.embeddedBaseUrl}/deepseek` },
+        { id: "qwen", name: "Qwen", url: `${info.embeddedBaseUrl}/qwen` },
+        { id: "chatgpt", name: "ChatGPT", url: `${info.embeddedBaseUrl}/chatgpt` },
+        { id: "grok", name: "Grok", url: `${info.embeddedBaseUrl}/grok` },
+        { id: "mistral", name: "Mistral", url: `${info.embeddedBaseUrl}/mistral` },
+      ];
+
+      for (const p of providerItems) {
+        const itemWrap = document.createElement("div");
+        itemWrap.style.display = "flex";
+        itemWrap.style.flexDirection = "column";
+        itemWrap.style.gap = "6px";
+        itemWrap.style.padding = "8px";
+        itemWrap.style.border = "1px solid var(--line)";
+        itemWrap.style.borderRadius = "6px";
+
+        const topRow = document.createElement("div");
+        topRow.style.display = "flex";
+        topRow.style.justifyContent = "space-between";
+        topRow.style.alignItems = "center";
+
+        const titleEl = document.createElement("span");
+        titleEl.style.fontWeight = "600";
+        titleEl.style.fontSize = "12px";
+        titleEl.textContent = p.name;
+
+        const urlGroup = document.createElement("div");
+        urlGroup.style.display = "flex";
+        urlGroup.style.alignItems = "center";
+        urlGroup.style.gap = "6px";
+
+        const urlEl = document.createElement("code");
+        urlEl.style.fontSize = "11px";
+        urlEl.textContent = p.url;
+
+        const copyUrlBtn = document.createElement("button");
+        copyUrlBtn.type = "button";
+        copyUrlBtn.className = "apiKeyBtn";
+        copyUrlBtn.style.padding = "2px 6px";
+        copyUrlBtn.style.fontSize = "10px";
+        copyUrlBtn.textContent = "URL 📋";
+        copyUrlBtn.title = "Скопировать Base URL провайдера";
+        copyUrlBtn.addEventListener("click", () => {
+          navigator.clipboard.writeText(p.url).then(() => {
+            copyUrlBtn.textContent = "✓";
+            setTimeout(() => { copyUrlBtn.textContent = "URL 📋"; }, 1500);
+          }).catch(() => {});
+        });
+
+        urlGroup.appendChild(urlEl);
+        urlGroup.appendChild(copyUrlBtn);
+
+        topRow.appendChild(titleEl);
+        topRow.appendChild(urlGroup);
+        itemWrap.appendChild(topRow);
+
+        itemWrap.appendChild(makeApiKeyRow(p.id, `Ключ ${p.name}`, keys[p.id] || ""));
+        sepList.appendChild(itemWrap);
+      }
+      sepGroup.appendChild(sepList);
+      target.appendChild(sepGroup);
+
       renderAnthropicSettings(target, info);
       renderIdeIntegration(target, info);
     }
@@ -4095,8 +4240,9 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
     function renderIdeIntegration(target, info) {
       const keys = info.apiKeys || {};
       const baseUrl = info.embeddedBaseUrl || "http://127.0.0.1:4317/v1";
-      const qwenKey = keys.qwen || "sk-qwen-user-key";
-      const deepseekKey = keys.deepseek || "sk-deepseek-user-key";
+      const masterKey = keys.all || keys.qwen || keys.deepseek || "sk-master-user-key";
+      const qwenKey = keys.qwen || masterKey;
+      const deepseekKey = keys.deepseek || masterKey;
 
       const groupEl = document.createElement("div");
       groupEl.className = "settingsGroup apiSettings";
@@ -4150,23 +4296,23 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           title.textContent = "Настройка Cursor";
           steps.innerHTML = "<li>Откройте <strong>Cursor Settings</strong> (шестерёнка в верхнем правом углу или сочетание клавиш <code>Ctrl+Shift+J</code>).</li>"
             + "<li>Перейдите во вкладку <strong>Models</strong>.</li>"
-            + "<li>В секции <strong>OpenAI API Key</strong> укажите ваш сгенерированный ключ: <code>" + qwenKey + "</code>.</li>"
+            + "<li>В секции <strong>OpenAI API Key</strong> укажите ваш единый мастер-ключ: <code>" + masterKey + "</code>.</li>"
             + "<li>Включите тумблер <strong>Override OpenAI Base URL</strong> и введите: <code>" + baseUrl + "</code>.</li>"
-            + "<li>Добавьте модели: <code>qwen3.7-max</code>, <code>deepseek-chat</code>, <code>deepseek-reasoner</code>.</li>";
+            + "<li>Добавьте любые нужные модели: <code>qwen3.7-max</code>, <code>deepseek-chat</code>, <code>deepseek-reasoner</code>, <code>chatgpt-auto</code>, <code>grok-3</code>, <code>mistral-large</code>.</li>";
           codeContent = "# Настройки Cursor (вводятся в GUI Models):\\n"
             + "Base URL: " + baseUrl + "\\n"
-            + "API Key:  " + qwenKey + "\\n"
-            + "Models:   qwen3.7-max, deepseek-chat, deepseek-reasoner";
+            + "API Key:  " + masterKey + "\\n"
+            + "Models:   " + (info.models || []).join(", ");
         } else if (id === "cline") {
           title.textContent = "Настройка VS Code (Cline / Roo Code)";
           steps.innerHTML = "<li>В панели расширения <strong>Cline</strong> или <strong>Roo Code</strong> нажмите шестерёнку (Settings).</li>"
             + "<li>В поле <strong>API Provider</strong> выберите <strong>OpenAI-Compatible</strong>.</li>"
-            + "<li>Укажите Base URL: <code>" + baseUrl + "</code> и ваш API-ключ.</li>"
+            + "<li>Укажите Base URL: <code>" + baseUrl + "</code> и ваш мастер-ключ (<code>" + masterKey + "</code>).</li>"
             + "<li>Либо вставьте фрагмент конфигурации ниже в <code>settings.json</code> вашего VS Code.</li>";
           codeContent = JSON.stringify({
             "cline.apiProvider": "openai-compatible",
             "cline.openAiBaseUrl": baseUrl,
-            "cline.openAiApiKey": qwenKey,
+            "cline.openAiApiKey": masterKey,
             "cline.openAiModelId": "qwen3.7-max",
             "cline.openAiCustomModelInfo": {
               "maxTokens": 8192,
@@ -4404,7 +4550,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
         try {
           await api("/api/settings/openai-key", { method: "POST", body: { provider } });
           const nextSettings = await api("/api/settings");
-          renderSettings(nextSettings);
+          renderSettings(nextSettings, "api");
           setStatus(t("settings.keyReady", { label }), false);
         } catch (err) {
           setStatus(t("settings.keyCreateFailed", { label, message: err.message }), true);
@@ -4423,10 +4569,32 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       const labelEl = document.createElement("div");
       labelEl.className = "apiFieldLabel";
       labelEl.textContent = label;
+      const valWrap = document.createElement("div");
+      valWrap.style.display = "flex";
+      valWrap.style.alignItems = "center";
+      valWrap.style.gap = "8px";
       const valueEl = document.createElement("code");
       valueEl.textContent = value;
+      valueEl.style.flex = "1";
+      valWrap.appendChild(valueEl);
+      if (value) {
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "apiKeyBtn";
+        copyBtn.style.padding = "4px 8px";
+        copyBtn.style.fontSize = "11px";
+        copyBtn.textContent = "📋";
+        copyBtn.title = "Скопировать";
+        copyBtn.addEventListener("click", () => {
+          navigator.clipboard.writeText(value).then(() => {
+            copyBtn.textContent = "✓";
+            setTimeout(() => { copyBtn.textContent = "📋"; }, 1500);
+          }).catch(() => {});
+        });
+        valWrap.appendChild(copyBtn);
+      }
       wrap.appendChild(labelEl);
-      wrap.appendChild(valueEl);
+      wrap.appendChild(valWrap);
       return wrap;
     }
 

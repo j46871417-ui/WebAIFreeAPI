@@ -18,6 +18,7 @@ import {
   COMMAND_CATALOG,
   ensureAllOpenAICompatApiKeys,
   ensureOpenAICompatApiKey,
+  getLocalIpAddresses,
   loadSettings,
   resolveOpenAICompatApiKey,
   saveSettings,
@@ -860,7 +861,7 @@ export async function runWindowApp({
 
       // OpenAI-compatible API is also available on the window server:
       // http://127.0.0.1:<window-port>/v1/...
-      if (url.pathname.startsWith("/v1/")) {
+      if (url.pathname === "/v1" || url.pathname.startsWith("/v1/")) {
         logConsole(`[api] ${req.method} ${url.pathname}`);
         setOpenAICorsHeaders(res);
         if (req.method === "OPTIONS") {
@@ -1248,8 +1249,10 @@ export async function runWindowApp({
       if (req.method === "GET" && url.pathname === "/api/settings") {
         const { modelsList } = await import("../../api/models.mjs");
         const { listProviders } = await import("../providers/registry.mjs");
-        ensureAllOpenAICompatApiKeys();
+        const allKeys = ensureAllOpenAICompatApiKeys();
         const current = loadSettings();
+        const localIps = getLocalIpAddresses();
+        const primaryIp = localIps[0] || "127.0.0.1";
         const catalog = Object.entries(COMMAND_CATALOG).map(([name, meta]) => ({
           name,
           description: getCommandDescription(name, current.ui?.language, meta.description),
@@ -1260,6 +1263,8 @@ export async function runWindowApp({
           name: p.name,
           hasAuth: p.hasAuth(),
         }));
+        const bindAll = current.openAICompat?.bindAllInterfaces === true;
+        const hostForUrls = bindAll ? primaryIp : "127.0.0.1";
         return sendJson(res, {
           allowedCommands: current.allowedCommands,
           commandPermissions: current.commandPermissions || {},
@@ -1273,10 +1278,15 @@ export async function runWindowApp({
           telegram: current.telegram || { enabled: false, botToken: "", chatId: "" },
           catalog,
           openAICompat: {
-            embeddedBaseUrl: `http://127.0.0.1:${port}/v1`,
-            anthropicBaseUrl: `http://127.0.0.1:${port}`,
-            anthropicMessagesUrl: `http://127.0.0.1:${port}/v1/messages`,
-            apiKeys: current.openAICompat?.apiKeys || { deepseek: "", qwen: "", chatgpt: "" },
+            bindAllInterfaces: bindAll,
+            localIps,
+            primaryIp,
+            hostForUrls,
+            embeddedBaseUrl: `http://${hostForUrls}:${port}/v1`,
+            masterKey: allKeys.all || current.openAICompat?.apiKeys?.all || "",
+            anthropicBaseUrl: `http://${hostForUrls}:${port}`,
+            anthropicMessagesUrl: `http://${hostForUrls}:${port}/v1/messages`,
+            apiKeys: current.openAICompat?.apiKeys || allKeys,
             models: modelsList().data.map((m) => m.id),
             providers,
           },
@@ -1380,12 +1390,14 @@ export async function runWindowApp({
         const saved = saveSettings({
           allowedCommands: body.allowedCommands,
           commandPermissions: body.commandPermissions,
+          openAICompat: body.openAICompat,
           ui: body.ui,
           telegram: body.telegram,
         });
         return sendJson(res, {
           allowedCommands: saved.allowedCommands,
           commandPermissions: saved.commandPermissions,
+          openAICompat: saved.openAICompat,
           ui: saved.ui,
           telegram: saved.telegram,
         });
@@ -2556,9 +2568,11 @@ export async function runWindowApp({
     socket.destroy();
   });
 
+  const currentSettings = loadSettings();
+  const bindHost = currentSettings.openAICompat?.bindAllInterfaces === true ? "0.0.0.0" : "127.0.0.1";
   await new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(port, "127.0.0.1", resolve);
+    server.listen(port, bindHost, resolve);
   });
 
   const url = `http://127.0.0.1:${port}`;
