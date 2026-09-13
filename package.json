@@ -59,6 +59,8 @@
     "import-qwen": "node ./bin/deepseek.mjs --import-qwen",
     "login-chatgpt": "node ./bin/deepseek.mjs --login-chatgpt",
     "import-chatgpt": "node ./bin/deepseek.mjs --import-chatgpt",
+    "login-grok": "node ./bin/deepseek.mjs --login-grok",
+    "login-mistral": "node ./bin/deepseek.mjs --login-mistral",
     "welcome": "node ./bin/deepseek.mjs --welcome",
     "save-creds": "node ./bin/deepseek.mjs --save-creds",
     "check": "node ./bin/deepseek.mjs --check",

@@ -774,6 +774,25 @@ async function completeText(mapping, prompt, { thinking = false, search = false,
     }
   }
 
+  if (mapping.provider === "grok" || mapping.provider === "mistral") {
+    const msg = `[API Stub] Провайдер ${mapping.provider} еще не полностью реализован в API (в разработке).`;
+    if (body.stream) {
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "text/event-stream");
+      writeSseRaw(res, `: stub\n\n`);
+      writeSseChunk(res, modelName, msg);
+      writeSseDone(res);
+      return sendStreamSuccessEnd(res, { provider: mapping.provider, model: modelName, serverChatId: "stub" });
+    }
+    return sendJson(res, {
+      id: "stub",
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model: modelName,
+      choices: [{ index: 0, message: { role: "assistant", content: msg }, finish_reason: "stop" }]
+    });
+  }
+
   if (mapping.provider === "deepseek") {
     const client = await getDeepSeekClient();
     const sessionId = await client.createSession();

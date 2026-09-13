@@ -101,6 +101,48 @@ export const PROVIDER_CATALOG = {
       { id: "o3-mini", label: "o3 mini", apiModel: "o3-mini", webLabels: ["o3-mini", "o3 mini", "o3"], reasoning: true, legacy: true },
     ],
   },
+  grok: {
+    id: "grok",
+    label: "Grok",
+    icon: "GR",
+    sub: "grok.com",
+    defaultMode: "default",
+    defaultModel: "grok-3",
+    modes: [
+      {
+        id: "default",
+        title: "Grok",
+        sub: "x.com / grok.com",
+        model: "grok-3",
+      },
+    ],
+    models: [
+      { id: "grok-3", label: "Grok 3", apiModel: "grok-3", webLabels: ["Grok 3"] },
+      { id: "grok-3-reasoner", label: "Grok 3 (Thinking)", apiModel: "grok-3-reasoner", webLabels: ["Grok 3 (Thinking)"], reasoning: true },
+      { id: "grok-2", label: "Grok 2", apiModel: "grok-2", webLabels: ["Grok 2"] },
+    ],
+  },
+  mistral: {
+    id: "mistral",
+    label: "Mistral",
+    icon: "MI",
+    sub: "chat.mistral.ai",
+    defaultMode: "default",
+    defaultModel: "mistral-large",
+    modes: [
+      {
+        id: "default",
+        title: "Le Chat",
+        sub: "Mistral AI",
+        model: "mistral-large",
+      },
+    ],
+    models: [
+      { id: "mistral-large", label: "Mistral Large", apiModel: "mistral-large", webLabels: ["Mistral Large"] },
+      { id: "mistral-le-chat", label: "Mistral Le Chat", apiModel: "mistral-le-chat", webLabels: ["Le Chat"] },
+      { id: "pixtral-large", label: "Pixtral Large", apiModel: "pixtral-large", webLabels: ["Pixtral Large"], vision: true },
+    ],
+  },
 };
 
 export const OPENAI_COMPAT_MODELS = Object.values(PROVIDER_CATALOG).flatMap((provider) =>
