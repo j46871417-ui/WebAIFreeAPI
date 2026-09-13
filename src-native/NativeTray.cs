@@ -51,7 +51,7 @@ namespace WebAIFreeAPI.Native
         private void InitializeTray()
         {
             notifyIcon = new NotifyIcon();
-            notifyIcon.Text = "WebAIFreeAPI v1.8.3";
+            notifyIcon.Text = "WebAIFreeAPI v1.9.0";
 
             try
             {
