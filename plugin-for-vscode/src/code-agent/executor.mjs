@@ -610,36 +610,68 @@ function clampInteger(value, min, max, fallback) {
   return Math.min(Math.max(Math.floor(parsed), min), max);
 }
 
-// Резолв пути к файлу/папке относительно workspace. Внешние пути разрешены;
-// служебные и секретные каталоги по-прежнему блокируются.
-export function resolveWorkspacePath(workspaceRoot, requestedPath) {
+// Резолв пути к файлу/папке относительно workspace с поддержкой настраиваемых
+// защитных ограничений (security.allowExternalPaths, allowedExternalDirectories).
+// Служебные, секретные и системные каталоги блокируются всегда.
+export function resolveWorkspacePath(workspaceRoot, requestedPath, options = {}) {
   if (!requestedPath || typeof requestedPath !== "string") {
     throw new Error("Tool path is required.");
   }
 
   const root = path.resolve(workspaceRoot);
   const target = path.normalize(path.resolve(root, requestedPath));
-  const relative = path.relative(root, target);
+  const settings = loadSettings();
+  const security = settings?.security || {
+    allowExternalPaths: true,
+    allowedExternalDirectories: [],
+    blockedPatterns: [".git", "node_modules", ".env", ".ssh", ".aws", "id_rsa", "id_ed25519"],
+  };
 
+  const blocked = security.blockedPatterns || [".git", "node_modules", ".env", ".ssh", ".aws", "id_rsa", "id_ed25519"];
   const parts = path.resolve(target).split(path.sep);
-  if (parts.includes(".git") || parts.includes("node_modules") || parts.includes(".env")) {
-    throw new Error(`Path is blocked: ${requestedPath}`);
+  for (const pattern of blocked) {
+    if (parts.includes(pattern) || parts.some((p) => p.toLowerCase() === pattern.toLowerCase()) || path.basename(target).toLowerCase() === pattern.toLowerCase()) {
+      throw new Error(`Path is blocked: ${requestedPath}`);
+    }
+  }
+
+  // Windows system directories check (e.g. C:\Windows)
+  if (process.platform === "win32") {
+    const windir = process.env.SystemRoot || process.env.windir || "C:\\Windows";
+    if (target.toLowerCase().startsWith(path.resolve(windir).toLowerCase())) {
+      throw new Error(`Access to system directory is blocked: ${requestedPath}`);
+    }
+  }
+
+  const rootPrefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+  const isInsideWorkspace = target === root || target.startsWith(rootPrefix);
+
+  const allowExternal = options.allowExternalPaths !== undefined
+    ? options.allowExternalPaths
+    : (security.allowExternalPaths !== false);
+
+  if (!isInsideWorkspace) {
+    const isWhitelisted = Array.isArray(security.allowedExternalDirectories) && security.allowedExternalDirectories.some((dir) => {
+      const resolvedDir = path.resolve(dir);
+      const prefix = resolvedDir.endsWith(path.sep) ? resolvedDir : `${resolvedDir}${path.sep}`;
+      return target === resolvedDir || target.startsWith(prefix);
+    });
+
+    if (!allowExternal && !isWhitelisted) {
+      throw new Error(`Path escapes workspace: ${requestedPath}. To allow paths outside the project, enable 'security.allowExternalPaths' in settings.`);
+    }
   }
 
   return target;
 }
 
 
-export function resolveReadableWorkspacePath(workspaceRoot, requestedPath) {
+export function resolveReadableWorkspacePath(workspaceRoot, requestedPath, options = {}) {
   if (requestedPath && path.isAbsolute(requestedPath) && fs.existsSync(requestedPath)) {
-    const parts = path.resolve(requestedPath).split(path.sep);
-    if (parts.includes(".git") || parts.includes(".env") || path.basename(requestedPath).startsWith("id_rsa")) {
-      throw new Error(`Path is blocked: ${requestedPath}`);
-    }
-    return path.resolve(requestedPath);
+    return resolveWorkspacePath(workspaceRoot, requestedPath, options);
   }
 
-  const target = resolveWorkspacePath(workspaceRoot, requestedPath);
+  const target = resolveWorkspacePath(workspaceRoot, requestedPath, options);
   if (fs.existsSync(target)) return target;
 
   // Модели иногда возвращают "project/src/file" при workspace уже равном "project".

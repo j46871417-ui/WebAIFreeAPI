@@ -18,6 +18,7 @@ import {
   COMMAND_CATALOG,
   ensureAllOpenAICompatApiKeys,
   ensureOpenAICompatApiKey,
+  getLocalIpAddresses,
   loadSettings,
   resolveOpenAICompatApiKey,
   saveSettings,
@@ -223,7 +224,7 @@ export async function runWindowApp({
         if (isChatGPTAuthUsable(cached)) return cached;
       } catch (error) {
         if (/Executable doesn't exist|playwright install|patchright install/i.test(String(error?.message || error))) {
-          throw new Error("Chromium не установлен. В терминале: npx patchright install chromium");
+          throw new Error("Не найден совместимый браузер (Edge или Chrome) для работы веб-сессии.");
         }
       }
     }
@@ -259,6 +260,26 @@ export async function runWindowApp({
     const auth = await ensureChatGPTAuth();
     chatGPTClient = await buildChatGPTClientFromAuth(auth);
     return chatGPTClient;
+  }
+
+  let grokChatClient = null;
+  async function getOrCreateGrokClient() {
+    if (grokChatClient) return grokChatClient;
+    const { GrokChatClient } = await import("../providers/grok/client.mjs");
+    grokChatClient = new GrokChatClient({
+      debug: Boolean(process.env.API_DEBUG),
+    });
+    return grokChatClient;
+  }
+
+  let mistralChatClient = null;
+  async function getOrCreateMistralClient() {
+    if (mistralChatClient) return mistralChatClient;
+    const { MistralChatClient } = await import("../providers/mistral/client.mjs");
+    mistralChatClient = new MistralChatClient({
+      debug: Boolean(process.env.API_DEBUG),
+    });
+    return mistralChatClient;
   }
 
   function isChatGPTAuthError(error) {
@@ -816,7 +837,7 @@ export async function runWindowApp({
       // Устарело: больше не открываем внешний Chrome (конфликт профиля).
       if (req.method === "POST" && url.pathname === "/api/chatgpt/visible-login") {
         return sendJson(res, {
-          error: "Внешний Chrome отключён. Используйте 🧠 → Браузер → ChatGPT или npm run login-chatgpt",
+          error: "Нажмите «Авторизоваться» на карточке ChatGPT в приложении для входа.",
         }, 400);
       }
 
@@ -840,7 +861,7 @@ export async function runWindowApp({
 
       // OpenAI-compatible API is also available on the window server:
       // http://127.0.0.1:<window-port>/v1/...
-      if (url.pathname.startsWith("/v1/")) {
+      if (url.pathname === "/v1" || url.pathname.startsWith("/v1/")) {
         logConsole(`[api] ${req.method} ${url.pathname}`);
         setOpenAICorsHeaders(res);
         if (req.method === "OPTIONS") {
@@ -933,15 +954,26 @@ export async function runWindowApp({
             if (providerId === "chatgpt") {
               chatGPTClient = null;
             }
+            if (providerId === "grok") {
+              const { resetGrokBrowserProxy } = await import("../providers/grok/browser-proxy.mjs");
+              resetGrokBrowserProxy();
+            }
+            if (providerId === "mistral") {
+              const { resetMistralBrowserProxy } = await import("../providers/mistral/browser-proxy.mjs");
+              resetMistralBrowserProxy();
+            }
           })();
           providerLoginStates.set(providerId, { state: "running", error: "" });
           providerLoginJobs.set(providerId, loginJob);
           loginJob
             .then(() => {
               providerLoginStates.set(providerId, { state: "completed", error: "" });
+              appLogger.info("provider.login.completed", { providerId });
             })
             .catch((error) => {
-              providerLoginStates.set(providerId, { state: "error", error: error.message || String(error) });
+              const errorMessage = error?.message || String(error);
+              providerLoginStates.set(providerId, { state: "error", error: errorMessage });
+              appLogger.error("provider.login.failed", error, { providerId });
               console.error(`[provider-login] ${providerId} failed:`, error);
             })
             .finally(() => {
@@ -1220,8 +1252,10 @@ export async function runWindowApp({
       if (req.method === "GET" && url.pathname === "/api/settings") {
         const { modelsList } = await import("../../api/models.mjs");
         const { listProviders } = await import("../providers/registry.mjs");
-        ensureAllOpenAICompatApiKeys();
+        const allKeys = ensureAllOpenAICompatApiKeys();
         const current = loadSettings();
+        const localIps = getLocalIpAddresses();
+        const primaryIp = localIps[0] || "127.0.0.1";
         const catalog = Object.entries(COMMAND_CATALOG).map(([name, meta]) => ({
           name,
           description: getCommandDescription(name, current.ui?.language, meta.description),
@@ -1232,6 +1266,8 @@ export async function runWindowApp({
           name: p.name,
           hasAuth: p.hasAuth(),
         }));
+        const bindAll = current.openAICompat?.bindAllInterfaces === true;
+        const hostForUrls = bindAll ? primaryIp : "127.0.0.1";
         return sendJson(res, {
           allowedCommands: current.allowedCommands,
           commandPermissions: current.commandPermissions || {},
@@ -1245,22 +1281,55 @@ export async function runWindowApp({
           telegram: current.telegram || { enabled: false, botToken: "", chatId: "" },
           catalog,
           openAICompat: {
-            embeddedBaseUrl: `http://127.0.0.1:${port}/v1`,
-            anthropicBaseUrl: `http://127.0.0.1:${port}`,
-            anthropicMessagesUrl: `http://127.0.0.1:${port}/v1/messages`,
-            apiKeys: current.openAICompat?.apiKeys || { deepseek: "", qwen: "", chatgpt: "" },
+            bindAllInterfaces: bindAll,
+            localIps,
+            primaryIp,
+            hostForUrls,
+            embeddedBaseUrl: `http://${hostForUrls}:${port}/v1`,
+            masterKey: allKeys.all || current.openAICompat?.apiKeys?.all || "",
+            anthropicBaseUrl: `http://${hostForUrls}:${port}`,
+            anthropicMessagesUrl: `http://${hostForUrls}:${port}/v1/messages`,
+            apiKeys: current.openAICompat?.apiKeys || allKeys,
             models: modelsList().data.map((m) => m.id),
             providers,
           },
         });
       }
 
-      if (req.method === "GET" && url.pathname === "/api/diagnostics") {
+      if (req.method === "GET" && (url.pathname === "/api/diagnostics" || url.pathname === "/api/diagnostics/export")) {
         return sendJson(res, await collectDiagnostics({
           workspaceRoot,
           state,
           runningTaskIds: getRunningIds(),
         }));
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/diagnostics/download") {
+        const diag = await collectDiagnostics({
+          workspaceRoot,
+          state,
+          runningTaskIds: getRunningIds(),
+        });
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+        res.writeHead(200, {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Content-Disposition": `attachment; filename="web-ai-free-diagnostics-${stamp}.txt"`,
+        });
+        return res.end(diag.report || "No diagnostic report generated");
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/logs/download") {
+        const { resolveLogDirectory } = await import("../logging/logger.mjs");
+        const logPath = path.join(resolveLogDirectory(), "ai-free.log");
+        if (fs.existsSync(logPath)) {
+          const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+          res.writeHead(200, {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Content-Disposition": `attachment; filename="ai-free-${stamp}.log"`,
+          });
+          return fs.createReadStream(logPath).pipe(res);
+        }
+        return sendJson(res, { error: "Log file not found" }, 404);
       }
 
       if (req.method === "POST" && url.pathname === "/api/settings/openai-key") {
@@ -1352,12 +1421,14 @@ export async function runWindowApp({
         const saved = saveSettings({
           allowedCommands: body.allowedCommands,
           commandPermissions: body.commandPermissions,
+          openAICompat: body.openAICompat,
           ui: body.ui,
           telegram: body.telegram,
         });
         return sendJson(res, {
           allowedCommands: saved.allowedCommands,
           commandPermissions: saved.commandPermissions,
+          openAICompat: saved.openAICompat,
           ui: saved.ui,
           telegram: saved.telegram,
         });
@@ -1401,7 +1472,7 @@ export async function runWindowApp({
           return sendJson(res, { error: `Путь существует, но это не папка: ${workspace}` }, 400);
         }
 
-        const allowedProviders = new Set(["deepseek", "qwen", "chatgpt"]);
+        const allowedProviders = new Set(["deepseek", "qwen", "chatgpt", "grok", "mistral"]);
         const requestedProvider = String(body.provider || "deepseek");
         if (!allowedProviders.has(requestedProvider)) {
           return sendJson(res, { error: `Провайдер "${requestedProvider}" не поддерживается.` }, 400);
@@ -2202,6 +2273,79 @@ export async function runWindowApp({
             return sendJson(res, { conversation });
           }
         }
+        if (convProvider === "grok" || convProvider === "mistral") {
+          const now = new Date().toISOString();
+          const isFirstUserMessage = !conversation.messages.some((message) => message.role === "user");
+          if (isFirstUserMessage && shouldAutoTitle(conversation)) {
+            conversation.title = makeConversationTitle(prompt);
+          }
+          conversation.messages.push(createUserMessage({ createdAt: now }));
+          conversation.updatedAt = now;
+          state.activeConversationId = conversation.id;
+          saveWindowState(workspaceRoot, state);
+
+          const streamMessage = {
+            role: "assistant",
+            content: "…",
+            streaming: true,
+            createdAt: new Date().toISOString(),
+          };
+          conversation.messages.push(streamMessage);
+          conversation.updatedAt = streamMessage.createdAt;
+          saveWindowState(workspaceRoot, state);
+
+          beginNdjsonStream(res);
+          writeNdjsonLine(res, { type: "start", conversation });
+
+          let answerText = "";
+          let lastSave = 0;
+          const pushStreamDelta = () => {
+            streamMessage.content = answerText || "…";
+            streamMessage.updatedAt = new Date().toISOString();
+            conversation.updatedAt = streamMessage.updatedAt;
+            const nowTime = Date.now();
+            if (nowTime - lastSave >= STREAM_SAVE_THROTTLE_MS) {
+              lastSave = nowTime;
+              saveWindowState(workspaceRoot, state);
+            }
+            writeNdjsonLine(res, { type: "delta", content: streamMessage.content });
+          };
+
+          try {
+            const client = convProvider === "grok"
+              ? await getOrCreateGrokClient()
+              : await getOrCreateMistralClient();
+
+            const result = await client.complete({
+              prompt,
+              model: conversation.model || undefined,
+              onText: (delta) => {
+                answerText += delta;
+                pushStreamDelta();
+              },
+            });
+
+            delete streamMessage.streaming;
+            streamMessage.content = (String(result?.text || answerText)).trim() || "[empty]";
+            streamMessage.updatedAt = new Date().toISOString();
+            conversation.updatedAt = streamMessage.updatedAt;
+            saveWindowState(workspaceRoot, state);
+
+            logConsoleBlock("assistant", streamMessage.content);
+            logConsole(`[chat] ${convProvider} response: ${streamMessage.content.length} char(s)`);
+            writeNdjsonLine(res, { type: "done", conversation });
+          } catch (error) {
+            delete streamMessage.streaming;
+            streamMessage.content = `⚠️ ${convProvider} error: ${error.message}`;
+            streamMessage.updatedAt = new Date().toISOString();
+            conversation.updatedAt = streamMessage.updatedAt;
+            saveWindowState(workspaceRoot, state);
+            logConsole(`[chat] ${convProvider} failed: ${error.message}`);
+            writeNdjsonLine(res, { type: "error", conversation, message: error.message });
+          }
+          endNdjsonStream(res);
+          return;
+        }
         if (convProvider !== "deepseek") {
           conversation.messages.push({
             role: "assistant",
@@ -2455,9 +2599,11 @@ export async function runWindowApp({
     socket.destroy();
   });
 
+  const currentSettings = loadSettings();
+  const bindHost = currentSettings.openAICompat?.bindAllInterfaces === true ? "0.0.0.0" : "127.0.0.1";
   await new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(port, "127.0.0.1", resolve);
+    server.listen(port, bindHost, resolve);
   });
 
   const url = `http://127.0.0.1:${port}`;

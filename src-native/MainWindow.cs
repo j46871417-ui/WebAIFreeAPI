@@ -41,6 +41,20 @@ namespace WebAIFreeAPI.Native
                 // Remove some default WebView2 features
                 webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
                 webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+
+                webView.CoreWebView2.ScriptDialogOpening += (sender, args) =>
+                {
+                    if (args.Kind == CoreWebView2ScriptDialogKind.Alert)
+                    {
+                        MessageBox.Show(args.Message, "WebAIFreeAPI", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        args.Accept();
+                    }
+                    else if (args.Kind == CoreWebView2ScriptDialogKind.Confirm)
+                    {
+                        var res = MessageBox.Show(args.Message, "WebAIFreeAPI", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+                        if (res == DialogResult.OK) args.Accept();
+                    }
+                };
                 
                 webView.Source = new Uri(url);
             }

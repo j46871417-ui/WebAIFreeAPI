@@ -84,12 +84,58 @@ export async function launchInternalBrowserContext(
   if (preferBundled) {
     context = await chromium.launchPersistentContext(profileDir, launchOptions);
   } else {
-    try {
-      console.log("   • Ошибка с msedge, пробуем fallback-Chromium...");
-      context = await chromium.launchPersistentContext(profileDir, { ...launchOptions, channel: "msedge" });
-    } catch {
-      cleanupChromeProfileForLaunch(profileDir, { clearCookies: false });
-      context = await chromium.launchPersistentContext(profileDir, launchOptions);
+    const { detectBrowserChannels } = await import("../../browser/launch.mjs");
+    const detected = detectBrowserChannels();
+    const attempts = [];
+    if (detected.msedge) attempts.push({ channel: "msedge" });
+    if (detected.chrome) attempts.push({ channel: "chrome" });
+    if (detected.chromium) attempts.push({ channel: "chromium" });
+    if (!attempts.length) {
+      attempts.push({ channel: "msedge" });
+      attempts.push({ channel: "chrome" });
+    }
+    if (detected.any) {
+      attempts.push({ executablePath: detected.any });
+    }
+    attempts.push({});
+
+    killStaleChromeForProfile(profileDir);
+    cleanupChromeProfileForLaunch(profileDir, { clearCookies: false });
+
+    const errors = [];
+    for (const opt of attempts) {
+      try {
+        context = await chromium.launchPersistentContext(profileDir, {
+          ...launchOptions,
+          ...opt,
+        });
+        if (context) break;
+      } catch (err) {
+        const msg = String(err?.message || "");
+        if (msg.includes("ProcessSingleton") || msg.includes("Lock file")) {
+          killStaleChromeForProfile(profileDir);
+          cleanupChromeProfileForLaunch(profileDir, { clearCookies: false });
+          try {
+            context = await chromium.launchPersistentContext(profileDir, {
+              ...launchOptions,
+              ...opt,
+            });
+            if (context) break;
+          } catch (retryErr) {
+            errors.push(`- ${opt.channel || opt.executablePath || "bundled"}: ${retryErr.message.split('\n')[0]}`);
+            continue;
+          }
+        }
+        let displayMsg = msg;
+        if (displayMsg.includes("Executable doesn't exist")) {
+          displayMsg = "Браузер не найден по указанному пути.";
+        }
+        errors.push(`- ${opt.channel || opt.executablePath || "bundled Playwright"}: ${displayMsg.split('\n')[0]}`);
+      }
+    }
+    if (!context) {
+      const detectedInfo = detected.any ? `Найден браузер: ${detected.msedge ? "Edge" : "Chrome"}, но запустить его не удалось.` : "В системе не найдены Chrome или Edge.";
+      throw new Error(`Не удалось запустить браузер для ChatGPT. ${detectedInfo}\n\nДетали попыток:\n${errors.join("\n")}`);
     }
   }
 
@@ -352,7 +398,7 @@ export function killStaleChromeForProfile(profileDir) {
 
 export function cleanupChromeProfileForLaunch(profileDir, { clearCookies = false } = {}) {
   fs.mkdirSync(profileDir, { recursive: true });
-  for (const file of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) {
+  for (const file of ["SingletonLock", "SingletonCookie", "SingletonSocket", "lockfile"]) {
     try { fs.unlinkSync(path.join(profileDir, file)); } catch {}
   }
   if (!clearCookies) return;

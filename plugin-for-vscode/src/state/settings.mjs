@@ -5,6 +5,7 @@
 // бэкенд читает loadSettings() на каждый run_command вызов — без рестарта.
 
 import fs from "node:fs";
+import os from "node:os";
 import { randomBytes } from "node:crypto";
 import { AUTH_DIR, SETTINGS_FILE } from "../config.mjs";
 import { DEFAULT_LANGUAGE, normalizeLanguage } from "../i18n/index.mjs";
@@ -287,7 +288,9 @@ export const COMMAND_CATALOG = {
 };
 
 function emptyProviderApiKeys() {
-  return Object.fromEntries(getProviderIds().map((providerId) => [providerId, ""]));
+  const keys = Object.fromEntries(getProviderIds().map((providerId) => [providerId, ""]));
+  keys.all = "";
+  return keys;
 }
 
 function normalizeProviderApiKeys(rawKeys = {}, legacyKey = "") {
@@ -323,7 +326,15 @@ export function loadSettings() {
     allowedCommands: Object.keys(COMMAND_CATALOG).filter(
       (cmd) => COMMAND_CATALOG[cmd].enabledByDefault,
     ),
-    openAICompat: { apiKeys: emptyProviderApiKeys() },
+    openAICompat: {
+      bindAllInterfaces: false,
+      apiKeys: emptyProviderApiKeys(),
+    },
+    security: {
+      allowExternalPaths: true,
+      allowedExternalDirectories: [],
+      blockedPatterns: [".git", "node_modules", ".env", ".ssh", ".aws", "id_rsa", "id_ed25519"],
+    },
     commandPermissions: normalizeCommandPermissions(),
     ui: {
       language: normalizeLanguage(process.env.AI_FREE_LANG || DEFAULT_LANGUAGE),
@@ -344,12 +355,15 @@ export function loadSettings() {
       ? raw.allowedCommands.filter((cmd) => typeof cmd === "string" && COMMAND_CATALOG[cmd])
       : fallback.allowedCommands;
     const legacyKey = typeof raw?.openAICompat?.apiKey === "string" ? raw.openAICompat.apiKey : "";
-    const apiKeys = raw?.openAICompat?.apiKeys || {};
+    const apiKeys = raw?.openAICompat?.apiKeys || raw?.apiKeys || {};
+    const bindAllInterfaces = raw?.openAICompat?.bindAllInterfaces === true;
     return {
       allowedCommands: mergeDefaultAllowedCommands(allowed),
       openAICompat: {
+        bindAllInterfaces,
         apiKeys: normalizeProviderApiKeys(apiKeys, legacyKey),
       },
+      security: normalizeSecuritySettings(raw?.security),
       commandPermissions: normalizeCommandPermissions(raw?.commandPermissions),
       ui: {
         language: normalizeLanguage(raw?.ui?.language || fallback.ui.language),
@@ -372,6 +386,18 @@ function normalizeTelegramSettings(raw) {
   };
 }
 
+export function normalizeSecuritySettings(raw) {
+  return {
+    allowExternalPaths: raw?.allowExternalPaths !== undefined ? raw.allowExternalPaths === true : true,
+    allowedExternalDirectories: Array.isArray(raw?.allowedExternalDirectories)
+      ? raw.allowedExternalDirectories.filter((d) => typeof d === "string" && d.trim())
+      : [],
+    blockedPatterns: Array.isArray(raw?.blockedPatterns)
+      ? raw.blockedPatterns.filter((p) => typeof p === "string" && p.trim())
+      : [".git", "node_modules", ".env", ".ssh", ".aws", "id_rsa", "id_ed25519"],
+  };
+}
+
 export function saveSettings(settings) {
   fs.mkdirSync(AUTH_DIR, { recursive: true });
   const current = loadSettings();
@@ -391,11 +417,16 @@ export function saveSettings(settings) {
       ? requestedKeys[providerId]
       : currentKeys[providerId] || "";
   }
+  const bindAllInterfaces = typeof settings?.openAICompat?.bindAllInterfaces === "boolean"
+    ? settings.openAICompat.bindAllInterfaces
+    : current.openAICompat?.bindAllInterfaces === true;
   const payload = {
     allowedCommands: Array.from(new Set(valid)),
     openAICompat: {
+      bindAllInterfaces,
       apiKeys: nextKeys,
     },
+    security: normalizeSecuritySettings(settings?.security || current.security),
     commandPermissions,
     ui: {
       language: normalizeLanguage(settings?.ui?.language || current.ui?.language || DEFAULT_LANGUAGE),
@@ -420,7 +451,7 @@ export function saveSettings(settings) {
 }
 
 export function ensureOpenAICompatApiKey(provider) {
-  if (!getProviderIds().includes(provider)) {
+  if (provider !== "all" && !getProviderIds().includes(provider)) {
     throw new Error(`Unknown OpenAI-compatible API provider: ${provider}`);
   }
   const current = loadSettings();
@@ -431,7 +462,10 @@ export function ensureOpenAICompatApiKey(provider) {
   const apiKeys = { ...emptyProviderApiKeys(), ...(current.openAICompat?.apiKeys || {}), [provider]: apiKey };
   saveSettings({
     allowedCommands: current.allowedCommands,
-    openAICompat: { apiKeys },
+    openAICompat: {
+      bindAllInterfaces: current.openAICompat?.bindAllInterfaces === true,
+      apiKeys,
+    },
   });
   return apiKey;
 }
@@ -440,7 +474,8 @@ export function ensureAllOpenAICompatApiKeys() {
   const current = loadSettings();
   let updated = false;
   const apiKeys = { ...emptyProviderApiKeys(), ...(current.openAICompat?.apiKeys || {}) };
-  for (const provider of getProviderIds()) {
+  const allTargets = [...getProviderIds(), "all"];
+  for (const provider of allTargets) {
     if (!apiKeys[provider] || apiKeys[provider].includes("GhC8UKD")) {
       apiKeys[provider] = `sk-${randomBytes(32).toString("base64url")}`;
       updated = true;
@@ -449,7 +484,10 @@ export function ensureAllOpenAICompatApiKeys() {
   if (updated) {
     saveSettings({
       allowedCommands: current.allowedCommands,
-      openAICompat: { apiKeys },
+      openAICompat: {
+        bindAllInterfaces: current.openAICompat?.bindAllInterfaces === true,
+        apiKeys,
+      },
     });
   }
   return apiKeys;
@@ -466,5 +504,21 @@ export function resolveOpenAICompatApiKey(req) {
   const provided = bearer || apiKey;
   const match = configured.find(([, key]) => key === provided);
   if (!match) return { ok: false, provider: null };
+  if (match[0] === "all") {
+    return { ok: true, provider: null }; // Master key gives access to all providers
+  }
   return { ok: true, provider: match[0] };
+}
+
+export function getLocalIpAddresses() {
+  const nets = os.networkInterfaces();
+  const results = [];
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if (net.family === "IPv4" && !net.internal) {
+        results.push(net.address);
+      }
+    }
+  }
+  return results;
 }

@@ -8,15 +8,33 @@ const rootDir = path.resolve(__dirname, "..");
 const binDir = path.join(rootDir, "bin");
 const srcNativeDir = path.join(rootDir, "src-native");
 const distDir = path.join(rootDir, "dist");
-const cscExe = "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe";
+function findCsc() {
+  const candidates = [
+    "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe",
+    "C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe",
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  try {
+    const fromPath = execSync("where csc", { encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim().split(/\r?\n/)[0];
+    if (fromPath && fs.existsSync(fromPath)) return fromPath;
+  } catch {}
+  return null;
+}
+
+const cscExe = findCsc();
 const iconFile = path.join(rootDir, "ai-free.ico");
 const manifestFile = path.join(srcNativeDir, "app.manifest");
 const outputExe = path.join(binDir, "WebAIFreeAPI.exe");
 
-if (!fs.existsSync(cscExe)) {
-  console.error(`csc.exe not found at ${cscExe}`);
+if (!cscExe) {
+  console.error("csc.exe not found in Microsoft.NET Framework or PATH. .NET Framework v4.0 is required to build native GUI.");
   process.exit(1);
 }
+
+const netFrameworkDir = path.dirname(cscExe);
+const wpfDir = path.join(netFrameworkDir, "WPF");
 
 fs.mkdirSync(binDir, { recursive: true });
 fs.mkdirSync(distDir, { recursive: true });
@@ -37,11 +55,11 @@ for (const f of csFiles) {
 }
 
 const wpfRefs = [
-  "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\WPF\\PresentationFramework.dll",
-  "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\WPF\\PresentationCore.dll",
-  "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\WPF\\WindowsBase.dll",
-  "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\System.Xaml.dll",
-  "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\System.Web.Extensions.dll",
+  path.join(wpfDir, "PresentationFramework.dll"),
+  path.join(wpfDir, "PresentationCore.dll"),
+  path.join(wpfDir, "WindowsBase.dll"),
+  path.join(netFrameworkDir, "System.Xaml.dll"),
+  path.join(netFrameworkDir, "System.Web.Extensions.dll"),
   "System.dll",
   "System.Drawing.dll",
   "System.Windows.Forms.dll",

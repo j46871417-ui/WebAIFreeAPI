@@ -968,9 +968,12 @@ export async function runWindowApp({
           loginJob
             .then(() => {
               providerLoginStates.set(providerId, { state: "completed", error: "" });
+              appLogger.info("provider.login.completed", { providerId });
             })
             .catch((error) => {
-              providerLoginStates.set(providerId, { state: "error", error: error.message || String(error) });
+              const errorMessage = error?.message || String(error);
+              providerLoginStates.set(providerId, { state: "error", error: errorMessage });
+              appLogger.error("provider.login.failed", error, { providerId });
               console.error(`[provider-login] ${providerId} failed:`, error);
             })
             .finally(() => {
@@ -1293,12 +1296,40 @@ export async function runWindowApp({
         });
       }
 
-      if (req.method === "GET" && url.pathname === "/api/diagnostics") {
+      if (req.method === "GET" && (url.pathname === "/api/diagnostics" || url.pathname === "/api/diagnostics/export")) {
         return sendJson(res, await collectDiagnostics({
           workspaceRoot,
           state,
           runningTaskIds: getRunningIds(),
         }));
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/diagnostics/download") {
+        const diag = await collectDiagnostics({
+          workspaceRoot,
+          state,
+          runningTaskIds: getRunningIds(),
+        });
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+        res.writeHead(200, {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Content-Disposition": `attachment; filename="web-ai-free-diagnostics-${stamp}.txt"`,
+        });
+        return res.end(diag.report || "No diagnostic report generated");
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/logs/download") {
+        const { resolveLogDirectory } = await import("../logging/logger.mjs");
+        const logPath = path.join(resolveLogDirectory(), "ai-free.log");
+        if (fs.existsSync(logPath)) {
+          const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+          res.writeHead(200, {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Content-Disposition": `attachment; filename="ai-free-${stamp}.log"`,
+          });
+          return fs.createReadStream(logPath).pipe(res);
+        }
+        return sendJson(res, { error: "Log file not found" }, 404);
       }
 
       if (req.method === "POST" && url.pathname === "/api/settings/openai-key") {

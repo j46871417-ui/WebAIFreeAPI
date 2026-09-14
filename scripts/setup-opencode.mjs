@@ -15,12 +15,24 @@ try {
   settings = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
 } catch {}
 
+if (!settings.openAICompat || typeof settings.openAICompat !== "object") {
+  settings.openAICompat = {};
+}
+if (!settings.openAICompat.apiKeys || typeof settings.openAICompat.apiKeys !== "object") {
+  settings.openAICompat.apiKeys = {};
+}
 if (!settings.apiKeys || typeof settings.apiKeys !== "object") {
   settings.apiKeys = {};
 }
-for (const p of ["deepseek", "qwen", "chatgpt"]) {
-  if (!settings.apiKeys[p] || settings.apiKeys[p].includes("GhC8UKD")) {
-    settings.apiKeys[p] = `sk-${crypto.randomBytes(32).toString("base64url")}`;
+for (const p of ["deepseek", "qwen", "chatgpt", "grok", "mistral", "all"]) {
+  const existing = settings.openAICompat.apiKeys[p] || settings.apiKeys[p];
+  if (!existing || existing.includes("GhC8UKD")) {
+    const key = `sk-${crypto.randomBytes(32).toString("base64url")}`;
+    settings.openAICompat.apiKeys[p] = key;
+    settings.apiKeys[p] = key;
+  } else {
+    settings.openAICompat.apiKeys[p] = existing;
+    settings.apiKeys[p] = existing;
   }
 }
 fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2), "utf8");

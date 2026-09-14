@@ -183,4 +183,14 @@ describe("ui-html inline script", () => {
     assert.match(html, /thinkingSummary\.className = "thinkingSummary"/);
     assert.match(html, /thinkingBody\.className = "thinkingBody"/);
   });
+
+  it("uses an in-app modal for provider authorization errors and includes a diagnostics download button", () => {
+    const html = renderWindowHtml({ language: "ru" });
+    assert.match(html, /id="authErrorOverlay"/);
+    assert.match(html, /id="authErrorTitle"/);
+    assert.match(html, /id="authErrorMessage"/);
+    assert.match(html, /id="authErrorCopy"/);
+    assert.match(html, /function showAuthErrorModal/);
+    assert.match(html, /\/api\/diagnostics\/download/);
+  });
 });

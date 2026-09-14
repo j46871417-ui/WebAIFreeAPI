@@ -1,6 +1,6 @@
 {
   "name": "WebAIFreeAPI",
-  "version": "1.9.4",
+  "version": "1.9.5",
   "description": "Free local AI client for DeepSeek, Qwen and ChatGPT with OpenAI-compatible API, CLI, code agent, memory and skills.",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",

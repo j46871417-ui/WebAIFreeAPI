@@ -153,6 +153,21 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           </div>
         </div>
       </div>
+      <div id="authErrorOverlay" class="settingsOverlay confirmOverlay hidden" aria-hidden="true">
+        <div class="settingsPanel confirmPanel" role="dialog" aria-modal="true" aria-labelledby="authErrorTitle">
+          <div class="settingsHead">
+            <h2 id="authErrorTitle">⚠️ Ошибка авторизации</h2>
+            <button id="authErrorClose" class="iconBtn" type="button" aria-label="${t("app.close")}">✕</button>
+          </div>
+          <div class="confirmBody">
+            <p id="authErrorMessage" class="confirmMessage" style="white-space: pre-wrap; font-size: 13px; line-height: 1.5;"></p>
+            <div class="confirmActions" style="margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;">
+              <button id="authErrorCopy" class="iconBtn" type="button" style="padding: 6px 12px; font-weight: 500;">📋 Скопировать для поддержки</button>
+              <button id="authErrorDismiss" class="iconBtn primaryBtn" type="button" style="padding: 6px 14px;">Понятно</button>
+            </div>
+          </div>
+        </div>
+      </div>
       <div id="updateToast" class="updateToast hidden" aria-hidden="true">
         <button id="updateToastDismiss" class="updateToastClose" type="button" aria-label="${t("app.close")}">✕</button>
         <div class="updateToastTitle">Появилось новое обновление</div>
@@ -1188,17 +1203,70 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
     let newChatSelectedProvider = localStorage.getItem(PROVIDER_PICK_KEY) || "deepseek";
     let newChatSelectedMode = localStorage.getItem(NEWCHAT_MODE_KEY) || "fast";
 
-    async function connectProvider(id, { confirmFirst = true } = {}) {
+    function showAuthErrorModal(providerLabel, errorText) {
+      const overlay = document.getElementById("authErrorOverlay");
+      if (!overlay) {
+        alert(t("provider.connectFailed", { label: providerLabel, message: errorText }));
+        return;
+      }
+      const titleEl = document.getElementById("authErrorTitle");
+      const msgEl = document.getElementById("authErrorMessage");
+      const copyBtn = document.getElementById("authErrorCopy");
+      const dismissBtn = document.getElementById("authErrorDismiss");
+      const closeBtn = document.getElementById("authErrorClose");
+
+      if (titleEl) titleEl.textContent = "⚠️ Ошибка входа: " + providerLabel;
+      if (msgEl) {
+        msgEl.textContent = errorText || "Неизвестная ошибка запуска браузера.";
+      }
+
+      const close = () => {
+        overlay.classList.add("hidden");
+        overlay.setAttribute("aria-hidden", "true");
+      };
+
+      if (closeBtn) closeBtn.onclick = close;
+      if (dismissBtn) dismissBtn.onclick = close;
+      if (copyBtn) {
+        copyBtn.onclick = async () => {
+          const textToCopy = [
+            "=== Ошибка авторизации: " + providerLabel + " ===",
+            "Сообщение: " + (errorText || "N/A"),
+            "Время: " + new Date().toISOString(),
+            "UserAgent: " + navigator.userAgent,
+          ].join("\\n");
+          try {
+            await navigator.clipboard.writeText(textToCopy);
+            copyBtn.textContent = "✅ Скопировано в буфер";
+            setTimeout(() => {
+              copyBtn.textContent = "📋 Скопировать для поддержки";
+            }, 3000);
+          } catch {
+            prompt("Скопируйте текст ошибки вручную:", textToCopy);
+          }
+        };
+      }
+
+      overlay.classList.remove("hidden");
+      overlay.setAttribute("aria-hidden", "false");
+    }
+
+    async function connectProvider(id, { confirmFirst = false } = {}) {
       const info = PROVIDER_INFO[id];
       if (!info) return;
       const label = info.label;
       const providerButton = newChatProviderPicker.querySelector('[data-provider="' + id + '"] .reconnectLink');
       if (providerButton?.disabled) return;
-      const confirmKey = id === "chatgpt" ? "provider.chatgptConnectConfirm" : "provider.connectConfirm";
-      if (confirmFirst && !confirm(
-        t(confirmKey, { label }),
-      )) return;
-      if (providerButton) providerButton.disabled = true;
+      if (confirmFirst) {
+        const confirmKey = id === "chatgpt" ? "provider.chatgptConnectConfirm" : "provider.connectConfirm";
+        if (!confirm(t(confirmKey, { label }))) return;
+      }
+      if (providerButton) {
+        providerButton.disabled = true;
+        providerButton.dataset.prevText = providerButton.textContent;
+        providerButton.textContent = "⏳ " + (t("app.loading") || "Запуск...");
+      }
+      setStatus("Запуск браузера для авторизации в " + label + "...");
       try {
         const r = await fetch("/api/providers/" + id + "/login", { method: "POST" });
         const j = await r.json().catch(() => ({}));
@@ -1207,15 +1275,15 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           setAgentDrawerTab("browser");
           openAgentDrawer();
           notifyBrowserTab("chatgpt", { force: true });
-          alert(t("provider.chatgptEmbedLogin"));
         }
         if (j.loginStarted || j.embedLogin) {
-          for (let attempt = 0; attempt < 120; attempt += 1) {
-            await new Promise((resolve) => setTimeout(resolve, 5000));
+          for (let attempt = 0; attempt < 240; attempt += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
             await refreshAvailableProviders();
             const loginStatus = providerLoginStates.get(id);
             if (loginStatus?.state === "error") {
-              alert(t("provider.connectFailed", { label, message: loginStatus.error || "Browser launch failed" }));
+              setStatus(loginStatus.error || "Ошибка запуска браузера", true);
+              showAuthErrorModal(label, loginStatus.error || "Не удалось запустить браузер для авторизации.");
               return;
             }
             if (availableProviders.includes(id)) {
@@ -1223,11 +1291,12 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
               localStorage.setItem(PROVIDER_PICK_KEY, id);
               renderProviderPicker();
               renderModePickerForProvider();
-              alert(t("provider.connectedAlert", { label }));
+              setStatus(t("provider.connectedAlert", { label }));
               return;
             }
           }
-          alert(id === "chatgpt" ? t("provider.chatgptEmbedLoginTimeout", { label }) : t("provider.tokenMissing", { id }));
+          const timeoutMsg = id === "chatgpt" ? t("provider.chatgptEmbedLoginTimeout", { label }) : t("provider.tokenMissing", { id });
+          showAuthErrorModal(label, timeoutMsg);
           return;
         }
         await refreshAvailableProviders();
@@ -1236,14 +1305,20 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           localStorage.setItem(PROVIDER_PICK_KEY, id);
           renderProviderPicker();
           renderModePickerForProvider();
-          alert(t("provider.connectedAlert", { label }));
+          setStatus(t("provider.connectedAlert", { label }));
         } else {
-          alert(t("provider.tokenMissing", { id }));
+          showAuthErrorModal(label, t("provider.tokenMissing", { id }));
         }
       } catch (e) {
-        alert(t("provider.connectFailed", { label, message: e.message }));
+        setStatus(e.message, true);
+        showAuthErrorModal(label, e.message);
       } finally {
-        if (providerButton) providerButton.disabled = false;
+        if (providerButton) {
+          providerButton.disabled = false;
+          if (providerButton.dataset.prevText) {
+            providerButton.textContent = providerButton.dataset.prevText;
+          }
+        }
       }
     }
 
@@ -1323,10 +1398,16 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       if (!opt) return;
       const id = opt.dataset.provider;
 
-      // Запускаем авторизацию ТОЛЬКО если кликнули по кнопке НЕавторизованного провайдера.
-      // Если провайдер уже подключен, клик по зеленому бейджу просто выбирает его!
+      // Если провайдер еще не авторизован — любой клик по нему запускает нативное окно входа
+      if (opt.dataset.authed !== "1") {
+        event.stopPropagation();
+        await connectProvider(id);
+        return;
+      }
+
+      // Если уже авторизован, но кликнули специально по бейджу — спросить о переподключении
       const reconnectBtn = event.target.closest(".reconnectLink");
-      if (reconnectBtn && opt.dataset.authed !== "1") {
+      if (reconnectBtn) {
         event.stopPropagation();
         await connectProvider(id);
         return;
@@ -1477,7 +1558,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           })),
         };
 
-        if (["qwen", "chatgpt", "deepseek"].includes(sendProvider)) {
+        if (["qwen", "chatgpt", "deepseek", "grok", "mistral"].includes(sendProvider)) {
           await postStreamingMessage(sentConvId, messageBody, sendProvider);
           return;
         }
@@ -3302,7 +3383,15 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       copyBtn.type = "button";
       copyBtn.className = "apiKeyBtn";
       copyBtn.textContent = t("health.copyReport") || "Скопировать отчёт";
-      actions.append(refreshBtn, copyBtn);
+      const downloadBtn = document.createElement("button");
+      downloadBtn.type = "button";
+      downloadBtn.className = "apiKeyBtn";
+      downloadBtn.textContent = "📥 Скачать (.txt)";
+      downloadBtn.title = "Скачать полный диагностический отчёт с логами для отправки разработчику";
+      downloadBtn.addEventListener("click", () => {
+        window.open("/api/diagnostics/download", "_blank");
+      });
+      actions.append(refreshBtn, copyBtn, downloadBtn);
       header.append(heading, actions);
       groupEl.appendChild(header);
 
@@ -3371,6 +3460,13 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
         }
 
         systemGrid.innerHTML = "";
+        if (data.browsers) {
+          systemGrid.appendChild(makeCard("Microsoft Edge", data.browsers.edge?.available ? "ok" : "missing", data.browsers.edge?.path || "Edge не найден", data.browsers.edge?.available));
+          systemGrid.appendChild(makeCard("Google Chrome", data.browsers.chrome?.available ? "ok" : "missing", data.browsers.chrome?.path || "Chrome не найден", data.browsers.chrome?.available));
+          if (data.browsers.brave?.available) {
+            systemGrid.appendChild(makeCard("Brave Browser", "ok", data.browsers.brave?.path || "", true));
+          }
+        }
         systemGrid.appendChild(makeCard("Workspace", data.workspace?.exists ? "ok" : "missing", data.workspace?.root || "-", data.workspace?.exists));
         systemGrid.appendChild(makeCard("Git", data.git?.available ? (data.git.branch || "ok") : "missing", data.git?.dirty ? "dirty worktree" : (data.git?.commit || ""), data.git?.available));
         systemGrid.appendChild(makeCard("Telegram", data.telegram?.enabled ? "enabled" : "off", data.telegram?.hasBotToken ? "token configured" : "no token", !data.telegram?.enabled || data.telegram?.hasBotToken));
@@ -4033,32 +4129,178 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
 
     function renderOpenAISettings(target, info) {
       if (!info) return;
-      const groupEl = document.createElement("div");
-      groupEl.className = "settingsGroup apiSettings";
-
-      const heading = document.createElement("h3");
-      heading.textContent = t("settings.apiTitle");
-      groupEl.appendChild(heading);
-
-      const grid = document.createElement("div");
-      grid.className = "apiSettingsGrid";
-
-      grid.appendChild(makeApiField(t("settings.baseUrl"), info.embeddedBaseUrl));
-      groupEl.appendChild(grid);
-
-      const keyList = document.createElement("div");
-      keyList.className = "apiKeyList";
       const keys = info.apiKeys || {};
-      keyList.appendChild(makeApiKeyRow("deepseek", "DeepSeek", keys.deepseek || ""));
-      keyList.appendChild(makeApiKeyRow("qwen", "Qwen", keys.qwen || ""));
-      groupEl.appendChild(keyList);
 
-      const note = document.createElement("div");
-      note.className = "apiModels";
-      note.textContent = t("settings.apiNote", { models: (info.models || []).join(", ") });
-      groupEl.appendChild(note);
+      // 1. Сетевое подключение (Доступ по IP / LAN)
+      const netGroup = document.createElement("div");
+      netGroup.className = "settingsGroup apiSettings";
+      const netHeading = document.createElement("h3");
+      netHeading.textContent = "Сетевое подключение (Доступ по IP)";
+      netGroup.appendChild(netHeading);
 
-      target.appendChild(groupEl);
+      const netDesc = document.createElement("div");
+      netDesc.style.fontSize = "12px";
+      netDesc.style.color = "var(--muted)";
+      netDesc.style.marginBottom = "10px";
+      netDesc.textContent = "По умолчанию сервер слушает только локальный адрес 127.0.0.1. Включите эту опцию, если хотите отправлять запросы к моделям с других компьютеров, серверов или мобильных устройств в вашей локальной сети.";
+      netGroup.appendChild(netDesc);
+
+      const netRow = document.createElement("label");
+      netRow.className = "settingsItem";
+      netRow.style.cursor = "pointer";
+      netRow.style.marginBottom = "10px";
+
+      const netCb = document.createElement("input");
+      netCb.type = "checkbox";
+      netCb.checked = info.bindAllInterfaces === true;
+      netCb.addEventListener("change", async () => {
+        try {
+          await api("/api/settings", {
+            method: "PUT",
+            body: {
+              allowedCommands: collectAllowedCommands(),
+              openAICompat: { bindAllInterfaces: netCb.checked }
+            }
+          });
+          setStatus("Настройка сохранена. Перезапустите приложение, чтобы применить новый сетевой интерфейс (0.0.0.0 / 127.0.0.1).", false);
+          const next = await api("/api/settings");
+          renderSettings(next, "api");
+        } catch (err) {
+          alert("Ошибка сохранения: " + err.message);
+        }
+      });
+
+      const netTextWrap = document.createElement("div");
+      const netTitle = document.createElement("div");
+      netTitle.className = "name";
+      netTitle.textContent = "Разрешить доступ из локальной сети (слушать 0.0.0.0)";
+      const netSub = document.createElement("div");
+      netSub.className = "desc";
+      const ips = (info.localIps && info.localIps.length) ? info.localIps.join(", ") : "127.0.0.1";
+      netSub.textContent = "Локальный IP: " + ips;
+      netTextWrap.appendChild(netTitle);
+      netTextWrap.appendChild(netSub);
+
+      netRow.appendChild(netCb);
+      netRow.appendChild(netTextWrap);
+      netGroup.appendChild(netRow);
+      target.appendChild(netGroup);
+
+      // 2. Единый API (Все модели разом)
+      const unifiedGroup = document.createElement("div");
+      unifiedGroup.className = "settingsGroup apiSettings";
+
+      const uniHeading = document.createElement("h3");
+      uniHeading.textContent = "Единый API (все модели через единый IP и мастер-ключ)";
+      unifiedGroup.appendChild(uniHeading);
+
+      const uniDesc = document.createElement("div");
+      uniDesc.style.fontSize = "12px";
+      uniDesc.style.color = "var(--muted)";
+      uniDesc.style.marginBottom = "10px";
+      uniDesc.textContent = "Единая точка входа для Open WebUI, LibreChat, Cursor, 1C, Python и любых сторонних систем. Подключите один Base URL и мастер-ключ — вы сможете вызывать абсолютно любую модель любого подключённого провайдера без переключения ключей.";
+      unifiedGroup.appendChild(uniDesc);
+
+      const uniGrid = document.createElement("div");
+      uniGrid.className = "apiSettingsGrid";
+      uniGrid.appendChild(makeApiField("Единый Base URL", info.embeddedBaseUrl));
+      unifiedGroup.appendChild(uniGrid);
+
+      const uniKeyList = document.createElement("div");
+      uniKeyList.className = "apiKeyList";
+      uniKeyList.appendChild(makeApiKeyRow("all", "⭐ Мастер-ключ (все модели)", keys.all || ""));
+      unifiedGroup.appendChild(uniKeyList);
+
+      const uniNote = document.createElement("div");
+      uniNote.className = "apiModels";
+      uniNote.style.marginTop = "8px";
+      uniNote.textContent = "Доступные модели: " + (info.models || []).join(", ");
+      unifiedGroup.appendChild(uniNote);
+
+      target.appendChild(unifiedGroup);
+
+      // 3. Раздельные API по провайдерам
+      const sepGroup = document.createElement("div");
+      sepGroup.className = "settingsGroup apiSettings";
+
+      const sepHeading = document.createElement("h3");
+      sepHeading.textContent = "Раздельные API по провайдерам";
+      sepGroup.appendChild(sepHeading);
+
+      const sepDesc = document.createElement("div");
+      sepDesc.style.fontSize = "12px";
+      sepDesc.style.color = "var(--muted)";
+      sepDesc.style.marginBottom = "10px";
+      sepDesc.textContent = "Если вашей системе требуется изолированный доступ только к конкретному сервису со своим отдельным Base URL и ключом:";
+      sepGroup.appendChild(sepDesc);
+
+      const sepList = document.createElement("div");
+      sepList.className = "apiKeyList";
+
+      const base = info.embeddedBaseUrl || "";
+      const providerItems = [
+        { id: "deepseek", name: "DeepSeek", url: base + "/deepseek" },
+        { id: "qwen", name: "Qwen", url: base + "/qwen" },
+        { id: "chatgpt", name: "ChatGPT", url: base + "/chatgpt" },
+        { id: "grok", name: "Grok", url: base + "/grok" },
+        { id: "mistral", name: "Mistral", url: base + "/mistral" },
+      ];
+
+      for (const p of providerItems) {
+        const itemWrap = document.createElement("div");
+        itemWrap.style.display = "flex";
+        itemWrap.style.flexDirection = "column";
+        itemWrap.style.gap = "6px";
+        itemWrap.style.padding = "8px";
+        itemWrap.style.border = "1px solid var(--line)";
+        itemWrap.style.borderRadius = "6px";
+
+        const topRow = document.createElement("div");
+        topRow.style.display = "flex";
+        topRow.style.justifyContent = "space-between";
+        topRow.style.alignItems = "center";
+
+        const titleEl = document.createElement("span");
+        titleEl.style.fontWeight = "600";
+        titleEl.style.fontSize = "12px";
+        titleEl.textContent = p.name;
+
+        const urlGroup = document.createElement("div");
+        urlGroup.style.display = "flex";
+        urlGroup.style.alignItems = "center";
+        urlGroup.style.gap = "6px";
+
+        const urlEl = document.createElement("code");
+        urlEl.style.fontSize = "11px";
+        urlEl.textContent = p.url;
+
+        const copyUrlBtn = document.createElement("button");
+        copyUrlBtn.type = "button";
+        copyUrlBtn.className = "apiKeyBtn";
+        copyUrlBtn.style.padding = "2px 6px";
+        copyUrlBtn.style.fontSize = "10px";
+        copyUrlBtn.textContent = "URL 📋";
+        copyUrlBtn.title = "Скопировать Base URL провайдера";
+        copyUrlBtn.addEventListener("click", () => {
+          navigator.clipboard.writeText(p.url).then(() => {
+            copyUrlBtn.textContent = "✓";
+            setTimeout(() => { copyUrlBtn.textContent = "URL 📋"; }, 1500);
+          }).catch(() => {});
+        });
+
+        urlGroup.appendChild(urlEl);
+        urlGroup.appendChild(copyUrlBtn);
+
+        topRow.appendChild(titleEl);
+        topRow.appendChild(urlGroup);
+        itemWrap.appendChild(topRow);
+
+        itemWrap.appendChild(makeApiKeyRow(p.id, "Ключ " + p.name, keys[p.id] || ""));
+        sepList.appendChild(itemWrap);
+      }
+      sepGroup.appendChild(sepList);
+      target.appendChild(sepGroup);
+
       renderAnthropicSettings(target, info);
       renderIdeIntegration(target, info);
     }
@@ -4089,8 +4331,9 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
     function renderIdeIntegration(target, info) {
       const keys = info.apiKeys || {};
       const baseUrl = info.embeddedBaseUrl || "http://127.0.0.1:4317/v1";
-      const qwenKey = keys.qwen || "sk-qwen-user-key";
-      const deepseekKey = keys.deepseek || "sk-deepseek-user-key";
+      const masterKey = keys.all || keys.qwen || keys.deepseek || "sk-master-user-key";
+      const qwenKey = keys.qwen || masterKey;
+      const deepseekKey = keys.deepseek || masterKey;
 
       const groupEl = document.createElement("div");
       groupEl.className = "settingsGroup apiSettings";
@@ -4144,23 +4387,23 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           title.textContent = "Настройка Cursor";
           steps.innerHTML = "<li>Откройте <strong>Cursor Settings</strong> (шестерёнка в верхнем правом углу или сочетание клавиш <code>Ctrl+Shift+J</code>).</li>"
             + "<li>Перейдите во вкладку <strong>Models</strong>.</li>"
-            + "<li>В секции <strong>OpenAI API Key</strong> укажите ваш сгенерированный ключ: <code>" + qwenKey + "</code>.</li>"
+            + "<li>В секции <strong>OpenAI API Key</strong> укажите ваш единый мастер-ключ: <code>" + masterKey + "</code>.</li>"
             + "<li>Включите тумблер <strong>Override OpenAI Base URL</strong> и введите: <code>" + baseUrl + "</code>.</li>"
-            + "<li>Добавьте модели: <code>qwen3.7-max</code>, <code>deepseek-chat</code>, <code>deepseek-reasoner</code>.</li>";
+            + "<li>Добавьте любые нужные модели: <code>qwen3.7-max</code>, <code>deepseek-chat</code>, <code>deepseek-reasoner</code>, <code>chatgpt-auto</code>, <code>grok-3</code>, <code>mistral-large</code>.</li>";
           codeContent = "# Настройки Cursor (вводятся в GUI Models):\\n"
             + "Base URL: " + baseUrl + "\\n"
-            + "API Key:  " + qwenKey + "\\n"
-            + "Models:   qwen3.7-max, deepseek-chat, deepseek-reasoner";
+            + "API Key:  " + masterKey + "\\n"
+            + "Models:   " + (info.models || []).join(", ");
         } else if (id === "cline") {
           title.textContent = "Настройка VS Code (Cline / Roo Code)";
           steps.innerHTML = "<li>В панели расширения <strong>Cline</strong> или <strong>Roo Code</strong> нажмите шестерёнку (Settings).</li>"
             + "<li>В поле <strong>API Provider</strong> выберите <strong>OpenAI-Compatible</strong>.</li>"
-            + "<li>Укажите Base URL: <code>" + baseUrl + "</code> и ваш API-ключ.</li>"
+            + "<li>Укажите Base URL: <code>" + baseUrl + "</code> и ваш мастер-ключ (<code>" + masterKey + "</code>).</li>"
             + "<li>Либо вставьте фрагмент конфигурации ниже в <code>settings.json</code> вашего VS Code.</li>";
           codeContent = JSON.stringify({
             "cline.apiProvider": "openai-compatible",
             "cline.openAiBaseUrl": baseUrl,
-            "cline.openAiApiKey": qwenKey,
+            "cline.openAiApiKey": masterKey,
             "cline.openAiModelId": "qwen3.7-max",
             "cline.openAiCustomModelInfo": {
               "maxTokens": 8192,
@@ -4398,7 +4641,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
         try {
           await api("/api/settings/openai-key", { method: "POST", body: { provider } });
           const nextSettings = await api("/api/settings");
-          renderSettings(nextSettings);
+          renderSettings(nextSettings, "api");
           setStatus(t("settings.keyReady", { label }), false);
         } catch (err) {
           setStatus(t("settings.keyCreateFailed", { label, message: err.message }), true);
@@ -4417,10 +4660,32 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       const labelEl = document.createElement("div");
       labelEl.className = "apiFieldLabel";
       labelEl.textContent = label;
+      const valWrap = document.createElement("div");
+      valWrap.style.display = "flex";
+      valWrap.style.alignItems = "center";
+      valWrap.style.gap = "8px";
       const valueEl = document.createElement("code");
       valueEl.textContent = value;
+      valueEl.style.flex = "1";
+      valWrap.appendChild(valueEl);
+      if (value) {
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "apiKeyBtn";
+        copyBtn.style.padding = "4px 8px";
+        copyBtn.style.fontSize = "11px";
+        copyBtn.textContent = "📋";
+        copyBtn.title = "Скопировать";
+        copyBtn.addEventListener("click", () => {
+          navigator.clipboard.writeText(value).then(() => {
+            copyBtn.textContent = "✓";
+            setTimeout(() => { copyBtn.textContent = "📋"; }, 1500);
+          }).catch(() => {});
+        });
+        valWrap.appendChild(copyBtn);
+      }
       wrap.appendChild(labelEl);
-      wrap.appendChild(valueEl);
+      wrap.appendChild(valWrap);
       return wrap;
     }
 

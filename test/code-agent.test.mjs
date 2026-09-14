@@ -1287,6 +1287,20 @@ describe("resolveWorkspacePath", () => {
     }
   });
 
+  it("blocks path that escapes when allowExternalPaths is false", () => {
+    assert.throws(
+      () => resolveWorkspacePath(ws, "../outside", { allowExternalPaths: false }),
+      /Path escapes workspace/,
+    );
+  });
+
+  it("blocks sensitive SSH credentials even if external paths are enabled", () => {
+    assert.throws(
+      () => resolveWorkspacePath(ws, "/home/user/.ssh/id_rsa", { allowExternalPaths: true }),
+      /Path is blocked/,
+    );
+  });
+
   it("cleanup", () => {
     fs.rmSync(ws, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });

@@ -867,7 +867,7 @@ export const STYLES = `
     }
     .apiKeyRow {
       display: grid;
-      grid-template-columns: 80px minmax(0, 1fr) auto;
+      grid-template-columns: minmax(110px, auto) minmax(0, 1fr) auto;
       gap: 8px;
       align-items: center;
       border: 1px solid var(--line);

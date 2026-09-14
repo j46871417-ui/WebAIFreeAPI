@@ -26,9 +26,47 @@ function chromiumLooksInstalled(chromium) {
 }
 
 export async function ensureBrowserBinaries({ quiet = false } = {}) {
-  return { ok: true, engine: "msedge" };
+  const { detectBrowserChannels } = await import("./launch.mjs");
+  const detected = detectBrowserChannels();
+
+  if (detected.any) {
+    const installed = [];
+    if (detected.msedge) installed.push("msedge");
+    if (detected.chrome) installed.push("chrome");
+    if (detected.brave) installed.push("brave");
+    if (detected.chromium) installed.push("chromium");
+    return {
+      ok: true,
+      engine: installed[0] || "msedge",
+      installed,
+      detectedPath: detected.any,
+      channels: detected,
+    };
+  }
+
+  // Проверяем встроенный Playwright/Patchright Chromium
+  try {
+    const { chromium } = await import("playwright");
+    const exe = chromium?.executablePath?.();
+    if (exe && fs.existsSync(exe)) {
+      return {
+        ok: true,
+        engine: "playwright-bundled",
+        installed: ["playwright-bundled"],
+        detectedPath: exe,
+        channels: { ...detected, playwrightBundled: exe },
+      };
+    }
+  } catch {}
+
+  return {
+    ok: false,
+    engine: null,
+    installed: [],
+    error: "Не найден поддерживаемый браузер (Microsoft Edge или Google Chrome). Пожалуйста, установите Google Chrome или Microsoft Edge, либо выполните команду 'npx playwright install chromium'.",
+  };
 }
 
-async function ensureBrowserBinariesOnce({ quiet = false } = {}) {
-  return { ok: true, engine: "msedge", installed: [] };
+async function ensureBrowserBinariesOnce(opts) {
+  return ensureBrowserBinaries(opts);
 }

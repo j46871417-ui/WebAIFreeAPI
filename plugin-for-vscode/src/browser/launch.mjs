@@ -7,6 +7,7 @@ import { spawn, spawnSync } from "node:child_process";
 
 // Поднять persistent Chromium-профиль для DeepSeek/Qwen/ChatGPT. headless=false —
 // видимое окно, true — для тихого refresh из профиля. Чистит stale SingletonLock-файлы от падений.
+// Поддерживает каскадный выбор браузера: Edge → Chrome → Brave → Chromium → bundled Playwright.
 export async function launchPersistentDeepSeekContext(chromium, profileDir, headless, overrides = {}) {
   fs.mkdirSync(profileDir, { recursive: true });
   const options = {
@@ -15,53 +16,105 @@ export async function launchPersistentDeepSeekContext(chromium, profileDir, head
     args: ["--disable-blink-features=AutomationControlled"],
     ...overrides,
   };
-  const preferredChannel = Object.prototype.hasOwnProperty.call(overrides, "channel")
-    ? overrides.channel
-    : "chrome";
 
-  const tryLaunch = async () => {
+  const detected = detectBrowserChannels();
+  const candidateAttempts = [];
+
+  if (overrides.channel) {
+    candidateAttempts.push({ type: "channel", value: overrides.channel });
+  } else {
+    if (detected.msedge) candidateAttempts.push({ type: "channel", value: "msedge" });
+    if (detected.chrome) candidateAttempts.push({ type: "channel", value: "chrome" });
+    if (detected.chromium) candidateAttempts.push({ type: "channel", value: "chromium" });
+
+    // Если точные пути не определились (например, в экзотических окружениях),
+    // всё равно пробуем стандартные каналы по очереди
+    if (!candidateAttempts.length) {
+      candidateAttempts.push({ type: "channel", value: "msedge" });
+      candidateAttempts.push({ type: "channel", value: "chrome" });
+      candidateAttempts.push({ type: "channel", value: "chromium" });
+    }
+  }
+
+  // Если найден системный браузер (Brave, Edge или Chrome по прямому пути)
+  if (detected.any && !candidateAttempts.some((a) => a.type === "executablePath")) {
+    candidateAttempts.push({ type: "executablePath", value: detected.any });
+  }
+
+  // Последняя попытка — встроенный Playwright/Patchright Chromium без channel
+  candidateAttempts.push({ type: "bundled", value: null });
+
+  // Убиваем зависшие процессы браузера, которые держат лок на этой папке профиля
+  const clearLocks = () => {
     try {
-      if (preferredChannel) {
-        return await chromium.launchPersistentContext(profileDir, {
-          ...options,
-          channel: preferredChannel,
-        });
-      }
-      return await chromium.launchPersistentContext(profileDir, options);
-    } catch (chromeError) {
-      try {
-        return await chromium.launchPersistentContext(profileDir, options);
-      } catch (chromiumError) {
-        const combined = new Error(
-          `Chrome error: ${chromeError.message}. Chromium error: ${chromiumError.message}`,
+      if (process.platform === "win32") {
+        const escaped = String(profileDir).replace(/'/g, "''");
+        spawnSync(
+          "powershell",
+          [
+            "-NoProfile",
+            "-Command",
+            `$p = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${escaped}*' }; if ($p) { $p | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } }`,
+          ],
+          { stdio: "ignore", timeout: 10_000 }
         );
-        combined.bothFailed = true;
-        throw combined;
+      } else {
+        const dir = String(profileDir);
+        spawnSync("pkill", ["-9", "-f", dir], { stdio: "ignore", timeout: 5_000 });
       }
+    } catch {}
+
+    for (const f of ["SingletonLock", "SingletonCookie", "SingletonSocket", "lockfile"]) {
+      try { fs.unlinkSync(path.join(profileDir, f)); } catch {}
     }
   };
 
-  try {
-    return await tryLaunch();
-  } catch (error) {
-    const message = String(error?.message || "");
-    if (message.includes("ProcessSingleton") || message.includes("SingletonLock")) {
-      // Stale-локи от прошлого упавшего Chromium-инстанса.
-      for (const f of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) {
-        try { fs.unlinkSync(path.join(profileDir, f)); } catch {}
-      }
-      try {
-        return await tryLaunch();
-      } catch (retryError) {
-        throw new Error(
-          `Could not open browser profile even after clearing stale lock files. ${retryError.message}`,
-        );
+  // Чистим локи и зависшие процессы перед первой попыткой
+  clearLocks();
+
+  const tryLaunchSingle = async (attempt) => {
+    const launchOpts = { ...options };
+    if (attempt.type === "channel") {
+      launchOpts.channel = attempt.value;
+      delete launchOpts.executablePath;
+    } else if (attempt.type === "executablePath") {
+      delete launchOpts.channel;
+      launchOpts.executablePath = attempt.value;
+    } else {
+      delete launchOpts.channel;
+      delete launchOpts.executablePath;
+    }
+    return await chromium.launchPersistentContext(profileDir, launchOpts);
+  };
+
+  const errors = [];
+  for (const attempt of candidateAttempts) {
+    try {
+      return await tryLaunchSingle(attempt);
+    } catch (error) {
+      errors.push(error);
+      const message = String(error?.message || "");
+      if (message.includes("ProcessSingleton") || message.includes("SingletonLock") || message.includes("Lock file")) {
+        clearLocks();
+        try {
+          return await tryLaunchSingle(attempt);
+        } catch (retryError) {
+          errors.push(retryError);
+        }
       }
     }
-    throw new Error(
-      `Could not open browser profile. Install Google Chrome or run "npx playwright install chromium". ${error.message}`,
-    );
   }
+
+  const cleanReasons = errors.map((e) => e?.message || String(e)).slice(-2).join(" | ");
+  let errorMessage;
+  if (detected.any) {
+    errorMessage = `Не удалось запустить найденный браузер (${detected.msedge ? "Microsoft Edge" : "Google Chrome"}). Ошибка запуска: ${cleanReasons}`;
+  } else {
+    errorMessage = `В системе не найден поддерживаемый браузер (Chrome, Edge, Brave). Пожалуйста, установите обычный Google Chrome или Microsoft Edge.`;
+  }
+  const userFacingError = new Error(errorMessage);
+  userFacingError.attempts = errors;
+  throw userFacingError;
 }
 
 // Открыть URL в окне-приложении (--app): без вкладок и адресной строки.
@@ -94,60 +147,92 @@ export function openAppWindow(url) {
   fallbackOpen(url);
 }
 
-// Поиск Chrome/Chromium/Edge на Win/Linux. Возвращает абсолютный путь или null.
-// Порядок: настоящий Chrome → Chromium → Edge.
-export function findChromeBinary() {
-  if (process.platform === "darwin") {
-    const candidates = [
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-      path.join(osHomedirSafe(), "Applications", "Google Chrome.app", "Contents", "MacOS", "Google Chrome"),
-      "/Applications/Chromium.app/Contents/MacOS/Chromium",
-      path.join(osHomedirSafe(), "Applications", "Chromium.app", "Contents", "MacOS", "Chromium"),
-      "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-    ];
-    for (const candidate of candidates) {
-      try { if (fs.existsSync(candidate)) return candidate; } catch {}
-    }
-    return null;
-  }
+// Определение наличия установленных Chromium-браузеров (Edge, Chrome, Brave, Chromium).
+export function detectBrowserChannels() {
+  const result = {
+    msedge: null,
+    chrome: null,
+    brave: null,
+    chromium: null,
+    any: null,
+  };
 
   if (process.platform === "win32") {
     const localAppData = process.env.LOCALAPPDATA || "";
     const programFiles = process.env["ProgramFiles"] || "C:\\Program Files";
     const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
-    const candidates = [
+
+    const edgePaths = [
+      path.join(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
+      path.join(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
+      localAppData ? path.join(localAppData, "Microsoft", "Edge", "Application", "msedge.exe") : null,
+    ].filter(Boolean);
+    for (const p of edgePaths) {
+      try { if (fs.existsSync(p)) { result.msedge = p; break; } } catch {}
+    }
+
+    const chromePaths = [
       path.join(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
       path.join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
       localAppData ? path.join(localAppData, "Google", "Chrome", "Application", "chrome.exe") : null,
+    ].filter(Boolean);
+    for (const p of chromePaths) {
+      try { if (fs.existsSync(p)) { result.chrome = p; break; } } catch {}
+    }
+
+    const bravePaths = [
+      path.join(programFiles, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+      path.join(programFilesX86, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+      localAppData ? path.join(localAppData, "BraveSoftware", "Brave-Browser", "Application", "brave.exe") : null,
+    ].filter(Boolean);
+    for (const p of bravePaths) {
+      try { if (fs.existsSync(p)) { result.brave = p; break; } } catch {}
+    }
+
+    const chromiumPaths = [
       path.join(programFiles, "Chromium", "Application", "chrome.exe"),
       path.join(programFilesX86, "Chromium", "Application", "chrome.exe"),
-      path.join(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
-      path.join(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
+      localAppData ? path.join(localAppData, "Chromium", "Application", "chrome.exe") : null,
     ].filter(Boolean);
-    for (const candidate of candidates) {
-      try { if (fs.existsSync(candidate)) return candidate; } catch {}
+    for (const p of chromiumPaths) {
+      try { if (fs.existsSync(p)) { result.chromium = p; break; } } catch {}
     }
-    return null;
+  } else if (process.platform === "darwin") {
+    const check = (p) => { try { return fs.existsSync(p) ? p : null; } catch { return null; } };
+    const home = osHomedirSafe();
+    result.chrome = check("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome") ||
+      check(path.join(home, "Applications/Google Chrome.app/Contents/MacOS/Google Chrome"));
+    result.msedge = check("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge") ||
+      check(path.join(home, "Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"));
+    result.brave = check("/Applications/Brave Browser.app/Contents/MacOS/Brave Browser") ||
+      check(path.join(home, "Applications/Brave Browser.app/Contents/MacOS/Brave Browser"));
+    result.chromium = check("/Applications/Chromium.app/Contents/MacOS/Chromium") ||
+      check(path.join(home, "Applications/Chromium.app/Contents/MacOS/Chromium"));
+  } else {
+    const which = (name) => {
+      try {
+        const res = spawnSync("which", [name], { encoding: "utf8" });
+        if (res.status === 0 && res.stdout) {
+          const first = res.stdout.split("\n")[0].trim();
+          if (first && fs.existsSync(first)) return first;
+        }
+      } catch {}
+      return null;
+    };
+    result.chrome = which("google-chrome") || which("google-chrome-stable");
+    result.msedge = which("microsoft-edge") || which("microsoft-edge-stable");
+    result.brave = which("brave-browser");
+    result.chromium = which("chromium") || which("chromium-browser");
   }
 
-  const names = [
-    "google-chrome",
-    "google-chrome-stable",
-    "chromium",
-    "chromium-browser",
-    "microsoft-edge",
-    "microsoft-edge-stable",
-  ];
-  for (const name of names) {
-    try {
-      const result = spawnSync("which", [name], { encoding: "utf8" });
-      if (result.status === 0 && result.stdout) {
-        const found = result.stdout.split("\n")[0].trim();
-        if (found && fs.existsSync(found)) return found;
-      }
-    } catch {}
-  }
-  return null;
+  // Порядок выбора основного бинарника: Chrome → Edge → Brave → Chromium
+  result.any = result.chrome || result.msedge || result.brave || result.chromium;
+  return result;
+}
+
+// Поиск Chrome/Chromium/Edge на Win/Linux/Mac. Возвращает абсолютный путь или null.
+export function findChromeBinary() {
+  return detectBrowserChannels().any;
 }
 
 function osHomedirSafe() {

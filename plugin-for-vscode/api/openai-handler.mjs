@@ -33,6 +33,8 @@ import { extractBareToolCalls, formatCompactTools, normalizeToolCallsForSchemas,
 import { readChatGPTAuth } from "../src/providers/chatgpt/auth-files.mjs";
 import { CHATGPT_AUTH_FILE } from "../src/providers/chatgpt/config.mjs";
 import { ChatGPTChatClient } from "../src/providers/chatgpt/client.mjs";
+import { GrokChatClient } from "../src/providers/grok/client.mjs";
+import { MistralChatClient } from "../src/providers/mistral/client.mjs";
 import { createFileLogger } from "../src/logging/logger.mjs";
 import { runWithEmptyStreamRetry } from "./stream-retry.mjs";
 import { globalChatSessionManager } from "./chat-session-manager.mjs";
@@ -52,7 +54,7 @@ async function getQwenClient({ allowRefresh = true } = {}) {
   }
   if (!auth?.token) {
     throw new Error(
-      "Qwen не подключён. Запусти: npm run login-qwen (или npm run welcome)",
+      "Qwen не подключён. Нажмите «Авторизоваться» на карточке Qwen в приложении.",
     );
   }
   qwenClient = new QwenChatClient({
@@ -67,7 +69,7 @@ async function getDeepSeekClient() {
   if (deepseekClient) return deepseekClient;
   const auth = readSavedAuth(DEFAULT_AUTH_FILE);
   if (!auth?.token || !auth?.cookieHeader) {
-    throw new Error("DeepSeek не подключён. Запусти: npm run login");
+    throw new Error("DeepSeek не подключён. Нажмите «Авторизоваться» на карточке DeepSeek в приложении.");
   }
   deepseekClient = new DeepSeekChatClient({
     token: auth.token,
@@ -83,7 +85,7 @@ async function getChatGPTClient() {
   if (chatgptClient) return chatgptClient;
   const auth = readChatGPTAuth(CHATGPT_AUTH_FILE);
   if (!auth?.accessToken) {
-    throw new Error("ChatGPT не подключён. Импортируйте сессию или запустите npm run login-chatgpt");
+    throw new Error("ChatGPT не подключён. Нажмите «Авторизоваться» на карточке ChatGPT в приложении.");
   }
   chatgptClient = new ChatGPTChatClient({
     accessToken: auth.accessToken,
@@ -95,12 +97,70 @@ async function getChatGPTClient() {
   return chatgptClient;
 }
 
+let grokClient = null;
+async function getGrokClient() {
+  if (grokClient) return grokClient;
+  const { GROK_AUTH_FILE } = await import("../src/providers/grok/config.mjs");
+  const fs = await import("node:fs");
+  if (!fs.existsSync(GROK_AUTH_FILE)) {
+    throw new Error("Grok не подключён. Нажмите «Авторизоваться» на карточке Grok в приложении.");
+  }
+  grokClient = new GrokChatClient({
+    debug: Boolean(process.env.API_DEBUG),
+  });
+  return grokClient;
+}
+
+let mistralClient = null;
+async function getMistralClient() {
+  if (mistralClient) return mistralClient;
+  const { MISTRAL_AUTH_FILE } = await import("../src/providers/mistral/config.mjs");
+  const fs = await import("node:fs");
+  if (!fs.existsSync(MISTRAL_AUTH_FILE)) {
+    throw new Error("Mistral не подключён. Нажмите «Авторизоваться» на карточке Mistral в приложении.");
+  }
+  mistralClient = new MistralChatClient({
+    debug: Boolean(process.env.API_DEBUG),
+  });
+  return mistralClient;
+}
+
 export async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
-  if (req.method === "GET" && url.pathname === "/v1/models") {
+  // Поддержка выделенных путей по провайдерам:
+  // e.g. /v1/deepseek/chat/completions, /v1/qwen/models, /v1/chatgpt/..., /v1/grok/..., /v1/mistral/...
+  const KNOWN_PROVIDERS = ["deepseek", "qwen", "chatgpt", "grok", "mistral"];
+  let pathname = url.pathname;
+  let pathProvider = null;
+  for (const p of KNOWN_PROVIDERS) {
+    if (pathname.startsWith(`/v1/${p}/`)) {
+      pathProvider = p;
+      pathname = "/v1/" + pathname.slice(`/v1/${p}/`.length);
+      break;
+    }
+    if (pathname === `/v1/${p}`) {
+      pathProvider = p;
+      pathname = "/v1";
+      break;
+    }
+  }
+
+  if (req.openAICompatProvider && pathProvider && req.openAICompatProvider !== pathProvider) {
+    return sendJson(res, {
+      error: {
+        message: `API key for '${req.openAICompatProvider}' cannot be used on dedicated '/v1/${pathProvider}' endpoint.`,
+        type: "invalid_request_error",
+      },
+    }, 403);
+  }
+
+  const effectiveProvider = pathProvider || req.openAICompatProvider || null;
+  req.openAICompatProvider = effectiveProvider;
+
+  if (req.method === "GET" && pathname === "/v1/models") {
     const provider = req.openAICompatProvider || null;
-    const qwen = provider === "qwen" ? await getQwenLiveCatalogOverride() : null;
+    const qwen = provider === "qwen" || !provider ? await getQwenLiveCatalogOverride() : null;
     const list = modelsList(qwen ? { qwen } : {});
     if (!provider) return sendJson(res, list);
     return sendJson(res, {
@@ -109,23 +169,31 @@ export async function handleRequest(req, res) {
     });
   }
 
-  if (req.method === "POST" && url.pathname === "/v1/chat/completions") {
+  if (req.method === "POST" && pathname === "/v1/chat/completions") {
     return handleChatCompletions(req, res);
   }
 
-  if (req.method === "POST" && url.pathname === "/v1/responses") {
+  if (req.method === "POST" && pathname === "/v1/responses") {
     return handleResponses(req, res);
   }
 
-  if (req.method === "POST" && url.pathname === "/v1/messages") {
+  if (req.method === "POST" && pathname === "/v1/messages") {
     return handleAnthropicMessages(req, res);
   }
 
-  if (req.method === "GET" && url.pathname === "/") {
+  if (req.method === "GET" && pathname === "/") {
     return sendJson(res, {
       name: "AI Free openai-compat",
       version: "0.1.0-prototype",
-      endpoints: ["GET /v1/models", "POST /v1/chat/completions", "POST /v1/responses", "POST /v1/messages"],
+      endpoints: [
+        "GET /v1/models (Unified - all models)",
+        "POST /v1/chat/completions (Unified - all models)",
+        "GET /v1/{provider}/models (Provider-specific)",
+        "POST /v1/{provider}/chat/completions (Provider-specific)",
+        "POST /v1/responses",
+        "POST /v1/messages",
+      ],
+      providers: KNOWN_PROVIDERS,
       docs: "see README.md in api/",
     });
   }
@@ -158,21 +226,20 @@ async function handleChatCompletions(req, res) {
   console.log(`[API] POST /v1/chat/completions (model: ${modelName}, stream: ${Boolean(body.stream)}, tools: ${body.tools ? body.tools.length : 0})`);
 
   let mapping = findModel(modelName);
-  if (req.openAICompatProvider === "qwen") {
+  if (mapping?.provider === "qwen" || req.openAICompatProvider === "qwen") {
     const liveQwen = await getQwenLiveCatalogOverride();
     if (liveQwen) {
       const liveModel = liveQwen.models.find((model) => model.id === modelName);
-      if (!liveModel) {
-        return sendError(res, 404, `Qwen model '${modelName}' is not available for the current account. Refresh /v1/models and select an active model.`);
+      if (liveModel) {
+        mapping = {
+          name: liveModel.id,
+          provider: "qwen",
+          model: liveModel.id,
+          label: liveModel.label,
+          reasoning: liveModel.reasoning === true,
+          vision: liveModel.vision === true,
+        };
       }
-      mapping = {
-        name: liveModel.id,
-        provider: "qwen",
-        model: liveModel.id,
-        label: liveModel.label,
-        reasoning: liveModel.reasoning === true,
-        vision: liveModel.vision === true,
-      };
     }
   }
   if (!mapping) return sendError(res, 404, `Unknown model: ${modelName}`);
@@ -390,6 +457,36 @@ async function handleChatCompletions(req, res) {
         prompt,
         model: mapping.model,
         images,
+        signal: abortController.signal,
+      });
+      return sendJson(res, toOpenAIResponse(modelName, result.text, body.tools));
+    }
+    if (mapping.provider === "grok") {
+      const client = await getGrokClient();
+      if (body.stream === true) {
+        return handleGrokStream(client, prompt, modelName, mapping.model, res, {
+          tools: body.tools,
+          signal: abortController.signal,
+        });
+      }
+      const result = await client.complete({
+        prompt,
+        model: mapping.model,
+        signal: abortController.signal,
+      });
+      return sendJson(res, toOpenAIResponse(modelName, result.text, body.tools));
+    }
+    if (mapping.provider === "mistral") {
+      const client = await getMistralClient();
+      if (body.stream === true) {
+        return handleMistralStream(client, prompt, modelName, mapping.model, res, {
+          tools: body.tools,
+          signal: abortController.signal,
+        });
+      }
+      const result = await client.complete({
+        prompt,
+        model: mapping.model,
         signal: abortController.signal,
       });
       return sendJson(res, toOpenAIResponse(modelName, result.text, body.tools));
@@ -789,6 +886,24 @@ async function completeText(mapping, prompt, { thinking = false, search = false,
   }
   if (mapping.provider === "chatgpt") {
     const client = await getChatGPTClient();
+    const result = await client.complete({
+      prompt,
+      model: mapping.model,
+      signal,
+    });
+    return result.text || "";
+  }
+  if (mapping.provider === "grok") {
+    const client = await getGrokClient();
+    const result = await client.complete({
+      prompt,
+      model: mapping.model,
+      signal,
+    });
+    return result.text || "";
+  }
+  if (mapping.provider === "mistral") {
+    const client = await getMistralClient();
     const result = await client.complete({
       prompt,
       model: mapping.model,
@@ -1238,6 +1353,84 @@ async function handleChatGPTStream(client, prompt, modelName, model, res, { tool
       return;
     }
     console.error("[API] ChatGPT stream error:", e.message);
+    sendStreamError(res, modelName, e.message);
+  }
+}
+
+// Обработка streaming-запроса к Grok.
+async function handleGrokStream(client, prompt, modelName, model, res, { tools = [], signal = null } = {}) {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const parser = new StreamParser(modelName, res, { tools });
+  try {
+    const completionResult = await client.complete({
+      prompt,
+      model,
+      signal,
+      onText: (textDelta) => {
+        if (signal?.aborted || res.destroyed || res.writableEnded) {
+          const abortErr = new Error("Request aborted by client");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
+        parser.onText(textDelta);
+      },
+    });
+    if (signal?.aborted || res.destroyed || res.writableEnded) return;
+    parser.onEnd();
+    res.write("data: [DONE]\n\n");
+    res.end();
+    return {
+      sessionId: null,
+      lastAssistantMessageId: null,
+    };
+  } catch (e) {
+    if (signal?.aborted || e?.name === "AbortError" || res.destroyed || res.writableEnded) {
+      return;
+    }
+    console.error("[API] Grok stream error:", e.message);
+    sendStreamError(res, modelName, e.message);
+  }
+}
+
+// Обработка streaming-запроса к Mistral.
+async function handleMistralStream(client, prompt, modelName, model, res, { tools = [], signal = null } = {}) {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const parser = new StreamParser(modelName, res, { tools });
+  try {
+    const completionResult = await client.complete({
+      prompt,
+      model,
+      signal,
+      onText: (textDelta) => {
+        if (signal?.aborted || res.destroyed || res.writableEnded) {
+          const abortErr = new Error("Request aborted by client");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
+        parser.onText(textDelta);
+      },
+    });
+    if (signal?.aborted || res.destroyed || res.writableEnded) return;
+    parser.onEnd();
+    res.write("data: [DONE]\n\n");
+    res.end();
+    return {
+      sessionId: null,
+      lastAssistantMessageId: null,
+    };
+  } catch (e) {
+    if (signal?.aborted || e?.name === "AbortError" || res.destroyed || res.writableEnded) {
+      return;
+    }
+    console.error("[API] Mistral stream error:", e.message);
     sendStreamError(res, modelName, e.message);
   }
 }

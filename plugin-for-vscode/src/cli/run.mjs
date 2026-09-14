@@ -57,6 +57,18 @@ export async function run() {
     return;
   }
 
+  if (args.loginGrok) {
+    const { loginGrokAndSave } = await import("../providers/grok/browser-login.mjs");
+    await loginGrokAndSave();
+    return;
+  }
+
+  if (args.loginMistral) {
+    const { loginMistralAndSave } = await import("../providers/mistral/browser-login.mjs");
+    await loginMistralAndSave();
+    return;
+  }
+
   if (args.acp) {
     const { runAcpServer } = await import("../acp/server.mjs");
     await runAcpServer();

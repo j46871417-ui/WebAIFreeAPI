@@ -299,7 +299,29 @@ export async function fillChatGPTComposer(page, prompt, { timeoutMs = COMPOSER_T
         if (!enabled) continue;
 
         try {
-          await composer.click({ timeout: 2_000 });
+          try {
+            await composer.click({ timeout: 2_000 });
+          } catch (clickErr) {
+            if (/detached|not attached/i.test(String(clickErr?.message || clickErr || ""))) {
+              throw clickErr;
+            }
+            if (typeof page?.evaluate === "function") {
+              await page.evaluate(() => {
+                const banners = document.querySelectorAll(
+                  '[data-cookie-banner="true"], [role="dialog"], [aria-label*="cookie" i], [id*="cookie" i], [class*="cookie" i]'
+                );
+                for (const banner of banners) {
+                  const btn = banner.querySelector('button[aria-label*="close" i], button:has(svg)');
+                  if (btn) try { btn.click(); } catch {}
+                  else try { banner.remove(); } catch {}
+                }
+              }).catch(() => {});
+            }
+            await composer.click({ force: true, timeout: 2_000 }).catch(() => {});
+            if (typeof composer?.focus === "function") {
+              await composer.focus().catch(() => {});
+            }
+          }
           try {
             await composer.fill(prompt, { timeout: 5_000 });
           } catch (error) {
@@ -1237,7 +1259,7 @@ async function createProxy({ debug, adoptedSession = null }) {
       try {
         // С картинками ждём дольше: кнопка отправки активна только после загрузки.
         await sendButton.waitFor({ state: "visible", timeout: tempImagePaths.length ? 60_000 : 5000 });
-        await sendButton.click();
+        await sendButton.click({ force: true, timeout: 3000 });
       } catch {
         await page.keyboard.press("Enter");
       }

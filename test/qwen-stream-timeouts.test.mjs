@@ -7,7 +7,7 @@ describe("Qwen stream timeouts", () => {
     const timeouts = resolveQwenStreamTimeouts({});
 
     assert.equal(timeouts.fetchMs, 600_000);
-    assert.equal(timeouts.firstContentMs, 240_000);
+    assert.equal(timeouts.firstContentMs, 600_000);
     assert.equal(timeouts.idleMs, 90_000);
   });
 
