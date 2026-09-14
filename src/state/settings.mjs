@@ -330,6 +330,11 @@ export function loadSettings() {
       bindAllInterfaces: false,
       apiKeys: emptyProviderApiKeys(),
     },
+    security: {
+      allowExternalPaths: true,
+      allowedExternalDirectories: [],
+      blockedPatterns: [".git", "node_modules", ".env", ".ssh", ".aws", "id_rsa", "id_ed25519"],
+    },
     commandPermissions: normalizeCommandPermissions(),
     ui: {
       language: normalizeLanguage(process.env.AI_FREE_LANG || DEFAULT_LANGUAGE),
@@ -350,7 +355,7 @@ export function loadSettings() {
       ? raw.allowedCommands.filter((cmd) => typeof cmd === "string" && COMMAND_CATALOG[cmd])
       : fallback.allowedCommands;
     const legacyKey = typeof raw?.openAICompat?.apiKey === "string" ? raw.openAICompat.apiKey : "";
-    const apiKeys = raw?.openAICompat?.apiKeys || {};
+    const apiKeys = raw?.openAICompat?.apiKeys || raw?.apiKeys || {};
     const bindAllInterfaces = raw?.openAICompat?.bindAllInterfaces === true;
     return {
       allowedCommands: mergeDefaultAllowedCommands(allowed),
@@ -358,6 +363,7 @@ export function loadSettings() {
         bindAllInterfaces,
         apiKeys: normalizeProviderApiKeys(apiKeys, legacyKey),
       },
+      security: normalizeSecuritySettings(raw?.security),
       commandPermissions: normalizeCommandPermissions(raw?.commandPermissions),
       ui: {
         language: normalizeLanguage(raw?.ui?.language || fallback.ui.language),
@@ -377,6 +383,18 @@ function normalizeTelegramSettings(raw) {
     enabled: raw?.enabled === true,
     botToken: typeof raw?.botToken === "string" ? raw.botToken : "",
     chatId: typeof raw?.chatId === "string" ? raw.chatId : "",
+  };
+}
+
+export function normalizeSecuritySettings(raw) {
+  return {
+    allowExternalPaths: raw?.allowExternalPaths !== undefined ? raw.allowExternalPaths === true : true,
+    allowedExternalDirectories: Array.isArray(raw?.allowedExternalDirectories)
+      ? raw.allowedExternalDirectories.filter((d) => typeof d === "string" && d.trim())
+      : [],
+    blockedPatterns: Array.isArray(raw?.blockedPatterns)
+      ? raw.blockedPatterns.filter((p) => typeof p === "string" && p.trim())
+      : [".git", "node_modules", ".env", ".ssh", ".aws", "id_rsa", "id_ed25519"],
   };
 }
 
@@ -408,6 +426,7 @@ export function saveSettings(settings) {
       bindAllInterfaces,
       apiKeys: nextKeys,
     },
+    security: normalizeSecuritySettings(settings?.security || current.security),
     commandPermissions,
     ui: {
       language: normalizeLanguage(settings?.ui?.language || current.ui?.language || DEFAULT_LANGUAGE),

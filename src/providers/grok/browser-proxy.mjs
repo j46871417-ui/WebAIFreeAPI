@@ -57,14 +57,30 @@ async function createGrokBrowserProxy({ debug = false } = {}) {
 
   async function dismissModals() {
     await page.evaluate(() => {
+      // 1. Remove/dismiss cookie banners explicitly
+      const banners = document.querySelectorAll(
+        '[data-cookie-banner="true"], [role="dialog"][aria-label*="cookie" i], [aria-label*="Cookie" i], [id*="cookie" i], [class*="cookie" i]'
+      );
+      for (const banner of banners) {
+        const btn = Array.from(banner.querySelectorAll("button")).find((b) => {
+          const t = (b.innerText || b.getAttribute("aria-label") || "").trim().toLowerCase();
+          return t.includes("accept") || t.includes("agree") || t.includes("allow") || t.includes("close") || t.includes("принять") || t.includes("понятно");
+        }) || banner.querySelector("button");
+        if (btn) {
+          try { btn.click(); } catch {}
+        }
+        try { banner.remove(); } catch {}
+      }
+
+      // 2. Generic modal dismiss
       const dismissPatterns = [
-        "понятно", "accept", "agree", "understand", "согласиться", "одобрить все",
-        "нет, спасибо", "не сейчас", "not now", "no thanks", "close", "закрыть"
+        "понятно", "accept", "agree", "understand", "согласиться", "одобрить все", "allow", "allow all", "accept all",
+        "нет, спасибо", "не сейчас", "not now", "no thanks", "close", "закрыть", "ок", "ok"
       ];
       const buttons = Array.from(document.querySelectorAll("button"));
       for (const b of buttons) {
         const t = (b.innerText || b.getAttribute("aria-label") || "").trim().toLowerCase();
-        if (dismissPatterns.some(p => t.includes(p))) {
+        if (dismissPatterns.some((p) => t.includes(p))) {
           try { b.click(); } catch {}
         }
       }
@@ -119,14 +135,22 @@ async function createGrokBrowserProxy({ debug = false } = {}) {
       throw new Error("Grok: поле ввода сообщения не найдено на странице. Возможно, требуется авторизация через кнопку «Авторизоваться» в карточке модели.");
     }
 
-    await composer.click();
+    try {
+      await composer.click({ timeout: 2000 });
+    } catch {
+      await dismissModals();
+      await composer.click({ force: true, timeout: 2000 }).catch(() => {});
+    }
+    if (typeof composer?.focus === "function") {
+      await composer.focus().catch(() => {});
+    }
     await page.keyboard.insertText(prompt);
     await page.waitForTimeout(300);
 
     // Send via Enter or submit button
     const submitBtn = page.locator('button[type="submit"], button[aria-label="Send"], button[aria-label*="отправить" i], button:has(svg rect)').last();
     if (await submitBtn.count().catch(() => 0) && await submitBtn.isVisible().catch(() => false)) {
-      await submitBtn.click().catch(async () => {
+      await submitBtn.click({ force: true, timeout: 2000 }).catch(async () => {
         await page.keyboard.press("Enter");
       });
     } else {
@@ -159,13 +183,7 @@ async function createGrokBrowserProxy({ debug = false } = {}) {
           const last = assistantBlocks[assistantBlocks.length - 1];
           return (last?.innerText || '').trim();
         }
-        // Fallback: search main paragraphs
-        const allP = Array.from(document.querySelectorAll('main p.break-words, [role="main"] p.break-words, main p, [role="main"] p'));
-        const filtered = allP.filter(p => !p.innerText.includes(userPrompt) && !p.closest('.query-bar-editor'));
-        if (filtered.length) {
-          return filtered.map(p => p.innerText.trim()).filter(Boolean).join("\n\n");
-        }
-        return "";
+          return "";
       }, prompt);
 
       if (currentText) {

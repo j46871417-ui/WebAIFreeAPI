@@ -75,10 +75,26 @@ export async function loginAndSaveAuth(authFile) {
 export async function waitForAuthenticatedApiCall(context, { timeoutMs = 5 * 60 * 1000, settleMs = 800 } = {}) {
   return await new Promise((resolve, reject) => {
     let done = false;
+    let closeTimer = null;
+
+    const cleanup = () => {
+      if (closeTimer) clearInterval(closeTimer);
+      try { context.off("response", handler); } catch {}
+      try { context.off("close", closeHandler); } catch {}
+    };
+
+    const closeHandler = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      cleanup();
+      reject(new Error("Окно авторизации DeepSeek было закрыто до завершения входа."));
+    };
+
     const timer = setTimeout(() => {
       if (done) return;
       done = true;
-      context.off("response", handler);
+      cleanup();
       reject(
         new Error(
           `Login timed out after ${Math.round(timeoutMs / 1000)}s. Залогинься в открывшемся окне DeepSeek и подожди — окно закроется автоматически.`,
@@ -101,12 +117,25 @@ export async function waitForAuthenticatedApiCall(context, { timeoutMs = 5 * 60 
 
         done = true;
         clearTimeout(timer);
-        context.off("response", handler);
+        cleanup();
         setTimeout(resolve, settleMs);
       } catch {}
     };
 
     context.on("response", handler);
+    try { context.on("close", closeHandler); } catch {}
+
+    // Периодическая проверка наличия открытых страниц
+    closeTimer = setInterval(() => {
+      if (done) return;
+      try {
+        if (!context.pages || context.pages().length === 0) {
+          closeHandler();
+        }
+      } catch {
+        closeHandler();
+      }
+    }, 1500);
   });
 }
 

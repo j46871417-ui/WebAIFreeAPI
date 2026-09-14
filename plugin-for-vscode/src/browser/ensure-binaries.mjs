@@ -26,69 +26,47 @@ function chromiumLooksInstalled(chromium) {
 }
 
 export async function ensureBrowserBinaries({ quiet = false } = {}) {
-  if (!quiet && ensurePromise) return ensurePromise;
-  const run = ensureBrowserBinariesOnce({ quiet });
-  if (quiet) return run;
-  ensurePromise = run.then((result) => {
-    if (!result?.ok) ensurePromise = null;
-    return result;
-  }, (error) => {
-    ensurePromise = null;
-    throw error;
-  });
-  return ensurePromise;
+  const { detectBrowserChannels } = await import("./launch.mjs");
+  const detected = detectBrowserChannels();
+
+  if (detected.any) {
+    const installed = [];
+    if (detected.msedge) installed.push("msedge");
+    if (detected.chrome) installed.push("chrome");
+    if (detected.brave) installed.push("brave");
+    if (detected.chromium) installed.push("chromium");
+    return {
+      ok: true,
+      engine: installed[0] || "msedge",
+      installed,
+      detectedPath: detected.any,
+      channels: detected,
+    };
+  }
+
+  // Проверяем встроенный Playwright/Patchright Chromium
+  try {
+    const { chromium } = await import("playwright");
+    const exe = chromium?.executablePath?.();
+    if (exe && fs.existsSync(exe)) {
+      return {
+        ok: true,
+        engine: "playwright-bundled",
+        installed: ["playwright-bundled"],
+        detectedPath: exe,
+        channels: { ...detected, playwrightBundled: exe },
+      };
+    }
+  } catch {}
+
+  return {
+    ok: false,
+    engine: null,
+    installed: [],
+    error: "Не найден поддерживаемый браузер (Microsoft Edge или Google Chrome). Пожалуйста, установите Google Chrome или Microsoft Edge, либо выполните команду 'npx playwright install chromium'.",
+  };
 }
 
-async function ensureBrowserBinariesOnce({ quiet = false } = {}) {
-  const engines = [];
-  try {
-    const mod = await import("patchright");
-    engines.push({
-      name: "patchright",
-      chromium: mod.chromium,
-      installLabel: "Ставлю Chromium для Patchright",
-      installArgs: ["patchright", "install", "chromium"],
-    });
-  } catch {}
-  try {
-    const mod = await import("playwright");
-    engines.push({
-      name: "playwright",
-      chromium: mod.chromium,
-      installLabel: "Ставлю Chromium для Playwright",
-      installArgs: ["playwright", "install", "chromium"],
-    });
-  } catch {}
-
-  if (!engines.length) {
-    return { ok: false, engine: "none", error: "Playwright/Patchright packages are not installed" };
-  }
-
-  const missing = engines.filter((engine) => !chromiumLooksInstalled(engine.chromium));
-  if (!missing.length) return { ok: true, engine: engines.map((engine) => engine.name).join("+") };
-
-  if (quiet) {
-    return {
-      ok: false,
-      engine: missing.map((engine) => engine.name).join("+"),
-      error: `Chromium not installed for: ${missing.map((engine) => engine.name).join(", ")}`,
-    };
-  }
-
-  const installed = [];
-  for (const engine of missing) {
-    const ok = runInstall(engine.installLabel, engine.installArgs);
-    if (ok && chromiumLooksInstalled(engine.chromium)) installed.push(engine.name);
-  }
-
-  const stillMissing = engines.filter((engine) => !chromiumLooksInstalled(engine.chromium));
-  if (stillMissing.length) {
-    return {
-      ok: false,
-      engine: stillMissing.map((engine) => engine.name).join("+"),
-      error: `Не удалось установить Chromium для: ${stillMissing.map((engine) => engine.name).join(", ")}. Запустите: npx playwright install chromium`,
-    };
-  }
-
-  return { ok: true, engine: engines.map((engine) => engine.name).join("+"), installed };
+async function ensureBrowserBinariesOnce(opts) {
+  return ensureBrowserBinaries(opts);
 }

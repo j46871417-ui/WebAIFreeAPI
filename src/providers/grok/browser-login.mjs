@@ -35,14 +35,26 @@ export async function loginGrokAndSave(timeoutMs = 5 * 60 * 1000) {
       const notSignIn = !currentUrl.includes("/sign-in") && !currentUrl.includes("/sign-up");
 
       let hasChatInterface = false;
+      let hasSignInButton = true;
+      let hasSsoCookie = false;
       try {
         hasChatInterface = await page.evaluate(() => {
           const composer = document.querySelector('textarea, div[contenteditable="true"], [role="textbox"]');
           return Boolean(composer && composer.getClientRects().length > 0);
         });
+        hasSignInButton = await page.evaluate(() => {
+          const buttons = Array.from(document.querySelectorAll("button, a"));
+          const signPatterns = ["sign in", "log in", "sign up", "войти", "se connecter"];
+          return buttons.some((b) => {
+            const t = (b.innerText || b.getAttribute("aria-label") || "").toLowerCase().trim();
+            const h = (b.getAttribute("href") || "").toLowerCase();
+            return signPatterns.some((p) => t === p || t.startsWith(p)) || h.includes("/login") || h.includes("/sign-in");
+          });
+        });
+        hasSsoCookie = lastCookies.some((c) => c.name.includes("sso") || c.name === "auth_token" || c.name.includes("session"));
       } catch {}
 
-      if (notSignIn && hasChatInterface) {
+      if (notSignIn && hasChatInterface && !hasSignInButton && hasSsoCookie) {
         fs.writeFileSync(GROK_AUTH_FILE, JSON.stringify(lastCookies, null, 2));
         await page.waitForTimeout(1500).catch(() => {});
         await context.close().catch(() => {});
@@ -52,6 +64,7 @@ export async function loginGrokAndSave(timeoutMs = 5 * 60 * 1000) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   } catch (err) {
+    console.error("[grok-login] Error during login session:", err);
   } finally {
     if (lastCookies.length) {
       try {
@@ -61,5 +74,10 @@ export async function loginGrokAndSave(timeoutMs = 5 * 60 * 1000) {
     await context.close().catch(() => {});
   }
 
-  return { ok: fs.existsSync(GROK_AUTH_FILE) };
+  const success = fs.existsSync(GROK_AUTH_FILE) && fs.statSync(GROK_AUTH_FILE).size > 5;
+  if (!success) {
+    throw new Error("Grok: авторизация не завершена. Окно браузера было закрыто до сохранения сессии или время ожидания истекло.");
+  }
+
+  return { ok: true };
 }

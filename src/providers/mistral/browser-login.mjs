@@ -37,12 +37,10 @@ export async function loginMistralAndSave(timeoutMs = 5 * 60 * 1000) {
       // Проверяем куки на наличие реального токена/сессии (а не гостевого anonymousUser)
       const hasAnon = lastCookies.some((c) => c.name === "anonymousUser");
       const hasAuthToken = lastCookies.some((c) =>
-        c.name.includes("session") ||
-        c.name.includes("auth") ||
-        c.name.includes("token") ||
-        c.name.includes("jwt") ||
-        c.name.includes("user_id") ||
-        c.name.includes("account")
+        c.name.includes("session-token") ||
+        c.name === "mistral_session" ||
+        c.name === "token" ||
+        (c.name.includes("session") && !c.name.includes("anonymous"))
       );
 
       // Проверяем интерфейс страницы: пропала ли кнопка входа и появился ли профиль
@@ -78,7 +76,7 @@ export async function loginMistralAndSave(timeoutMs = 5 * 60 * 1000) {
         hasUserProfile = domCheck.profile;
       } catch {}
 
-      const isActuallyLoggedIn = (!hasSignInButton && (hasUserProfile || hasAuthToken)) || (hasAuthToken && !hasAnon);
+      const isActuallyLoggedIn = !hasSignInButton && (hasUserProfile || hasAuthToken);
 
       if (isActuallyLoggedIn && notAuthPage) {
         fs.writeFileSync(MISTRAL_AUTH_FILE, JSON.stringify(lastCookies, null, 2));
@@ -90,6 +88,7 @@ export async function loginMistralAndSave(timeoutMs = 5 * 60 * 1000) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   } catch (err) {
+    console.error("[mistral-login] Error during login session:", err);
   } finally {
     if (lastCookies.length) {
       const hasAnon = lastCookies.some((c) => c.name === "anonymousUser");
@@ -111,5 +110,9 @@ export async function loginMistralAndSave(timeoutMs = 5 * 60 * 1000) {
   }
 
   const { hasAuth } = (await import("../registry.mjs")).PROVIDERS.mistral;
-  return { ok: hasAuth() };
+  if (!hasAuth()) {
+    throw new Error("Mistral: авторизация не завершена. Окно браузера было закрыто до сохранения сессии или время ожидания истекло.");
+  }
+
+  return { ok: true };
 }

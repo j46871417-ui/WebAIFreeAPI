@@ -123,7 +123,7 @@ namespace AiFreeInstaller
             else
                 targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WebAIFreeAPI");
 
-            this.Text = "Установка WebAIFreeAPI v1.9.4";
+            this.Text = "Установка WebAIFreeAPI v1.9.5";
             this.Size = new Size(540, 320);
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
@@ -134,7 +134,7 @@ namespace AiFreeInstaller
             } catch {}
 
             titleLabel = new Label() {
-                Text = "Мастер установки WebAIFreeAPI v1.9.4",
+                Text = "Мастер установки WebAIFreeAPI v1.9.5",
                 Font = new Font("Segoe UI", 12, FontStyle.Bold),
                 Location = new Point(25, 18),
                 AutoSize = true
@@ -303,18 +303,22 @@ namespace AiFreeInstaller
         {
             try
             {
-                foreach (var p in Process.GetProcessesByName("node"))
+                var targetProcesses = new string[] { "node", "WebAIFreeAPI" };
+                foreach (var procName in targetProcesses)
                 {
-                    try
+                    foreach (var p in Process.GetProcessesByName(procName))
                     {
-                        string pPath = p.MainModule.FileName;
-                        if (pPath.StartsWith(dir, StringComparison.OrdinalIgnoreCase))
+                        try
                         {
-                            p.Kill();
-                            p.WaitForExit(1500);
+                            string pPath = p.MainModule.FileName;
+                            if (pPath.StartsWith(dir, StringComparison.OrdinalIgnoreCase))
+                            {
+                                p.Kill();
+                                p.WaitForExit(1500);
+                            }
                         }
+                        catch {}
                     }
-                    catch {}
                 }
             }
             catch {}

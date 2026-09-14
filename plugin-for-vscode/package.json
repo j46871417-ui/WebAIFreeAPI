@@ -2,7 +2,7 @@
   "name": "ai-free-vscode",
   "displayName": "AI Free (DeepSeek & Qwen)",
   "description": "Free AI coding assistant powered by DeepSeek, Qwen and ChatGPT with zero-token-cost local automation.",
-  "version": "1.7.1",
+  "version": "1.9.5",
   "publisher": "developers-daily-life",
   "license": "SEE LICENSE IN LICENSE",
   "icon": "media/marketplace-icon.png",

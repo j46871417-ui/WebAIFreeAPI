@@ -29,5 +29,4 @@ HANDOFF.md
 REFACTOR_NOTES.md
 api/README.md
 .kilo/
-package-lock.json
-!plugin-for-vscode/package-lock.json
+bin/*.bundle.mjs

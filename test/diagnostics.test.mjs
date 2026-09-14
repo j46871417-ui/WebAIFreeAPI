@@ -43,4 +43,39 @@ describe("diagnostics report", () => {
     assert.match(report, /Qwen: ready/);
     assert.match(report, /Log file: ~[/\\]\.ai-free[/\\]logs[/\\]ai-free\.log \(exists\)/);
   });
+
+  it("formats browser channels and recent logs in support report", () => {
+    const report = formatDiagnosticReport({
+      generatedAt: "2026-01-01T00:00:00.000Z",
+      app: { version: "1.9.4", node: "v20.0.0", platform: "win32 x64", release: "10" },
+      workspace: { root: "C:\\test\\proj", exists: true },
+      state: {
+        stateFile: "state.json",
+        stateFileExists: true,
+        settingsFile: "settings.json",
+        settingsFileExists: true,
+        conversations: 1,
+        runningTaskIds: [],
+      },
+      logging: { file: "ai-free.log", exists: true },
+      browsers: {
+        edge: { available: true, path: "C:\\Program Files\\Edge\\msedge.exe" },
+        chrome: { available: false, path: null },
+        any: true,
+      },
+      recentLogs: [
+        { timestamp: "2026-01-01T00:00:01Z", level: "error", component: "provider.login", event: "failed", message: "Edge crash" },
+      ],
+      providers: [],
+      commands: [],
+      git: { available: true },
+      telegram: { enabled: false },
+    });
+
+    assert.match(report, /Browsers/);
+    assert.match(report, /Microsoft Edge: C:\\Program Files\\Edge\\msedge\.exe/);
+    assert.match(report, /Google Chrome: missing/);
+    assert.match(report, /Recent Logs & Errors/);
+    assert.match(report, /provider\.login.*Edge crash/);
+  });
 });

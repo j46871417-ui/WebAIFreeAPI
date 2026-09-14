@@ -37,6 +37,28 @@ export async function collectDiagnostics({ workspaceRoot, state, runningTaskIds 
   const conversations = Array.isArray(state?.conversations) ? state.conversations : [];
   const logFile = path.join(resolveLogDirectory(), "ai-free.log");
   const activeConversation = conversations.find((item) => item.id === state?.activeConversationId) || null;
+
+  let browsers = {
+    edge: { available: false, path: null },
+    chrome: { available: false, path: null },
+    brave: { available: false, path: null },
+    chromium: { available: false, path: null },
+    any: false,
+  };
+  try {
+    const { detectBrowserChannels } = await import("../browser/launch.mjs");
+    const ch = detectBrowserChannels();
+    browsers = {
+      edge: { available: Boolean(ch.msedge), path: ch.msedge ? redactHome(ch.msedge) : null },
+      chrome: { available: Boolean(ch.chrome), path: ch.chrome ? redactHome(ch.chrome) : null },
+      brave: { available: Boolean(ch.brave), path: ch.brave ? redactHome(ch.brave) : null },
+      chromium: { available: Boolean(ch.chromium), path: ch.chromium ? redactHome(ch.chromium) : null },
+      any: Boolean(ch.any),
+    };
+  } catch {}
+
+  const recentLogs = collectRecentLogs(logFile, 40);
+
   const summary = {
     generatedAt: new Date().toISOString(),
     app: {
@@ -65,6 +87,8 @@ export async function collectDiagnostics({ workspaceRoot, state, runningTaskIds 
       file: logFile,
       exists: fs.existsSync(logFile),
     },
+    browsers,
+    recentLogs,
     providers,
     commands,
     git,
@@ -125,7 +149,74 @@ export function formatDiagnosticReport(data) {
   lines.push(`- Enabled: ${yesNo(data.telegram.enabled)}`);
   lines.push(`- Bot token configured: ${yesNo(data.telegram.hasBotToken)}`);
   lines.push(`- Chat ID configured: ${yesNo(data.telegram.hasChatId)}`);
+
+  if (data.browsers) {
+    lines.push("");
+    lines.push("Browsers");
+    lines.push(`- Microsoft Edge: ${data.browsers.edge?.available ? (data.browsers.edge.path || "ok") : "missing"}`);
+    lines.push(`- Google Chrome: ${data.browsers.chrome?.available ? (data.browsers.chrome.path || "ok") : "missing"}`);
+    if (data.browsers.brave?.available) {
+      lines.push(`- Brave Browser: ${data.browsers.brave.path || "ok"}`);
+    }
+    if (data.browsers.chromium?.available) {
+      lines.push(`- Chromium: ${data.browsers.chromium.path || "ok"}`);
+    }
+    lines.push(`- Any browser available: ${yesNo(data.browsers.any)}`);
+  }
+
+  if (Array.isArray(data.recentLogs) && data.recentLogs.length) {
+    lines.push("");
+    lines.push("Recent Logs & Errors");
+    for (const entry of data.recentLogs.slice(-25)) {
+      const ts = entry.timestamp ? `[${entry.timestamp}] ` : "";
+      const lvl = entry.level ? `[${entry.level.toUpperCase()}] ` : "";
+      const comp = entry.component ? `(${entry.component}) ` : "";
+      const ev = entry.event ? `${entry.event}: ` : "";
+      lines.push(`- ${ts}${lvl}${comp}${ev}${redactHome(entry.message || "")}`);
+    }
+  }
+
   return lines.join("\n");
+}
+
+function collectRecentLogs(logFile, maxLines = 40) {
+  const result = [];
+  try {
+    if (fs.existsSync(logFile)) {
+      const raw = fs.readFileSync(logFile, "utf8");
+      const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+      const tail = lines.slice(-maxLines);
+      for (const line of tail) {
+        try {
+          const parsed = JSON.parse(line);
+          result.push({
+            timestamp: parsed.timestamp,
+            level: parsed.level,
+            component: parsed.component,
+            event: parsed.event,
+            message: parsed.error?.message || (typeof parsed.data === "string" ? parsed.data : JSON.stringify(parsed.data)),
+          });
+        } catch {
+          result.push({ message: redactHome(line) });
+        }
+      }
+    }
+  } catch {}
+
+  // Также проверяем backend.log от C# трея / встроенного процесса
+  try {
+    const backendLog = path.resolve(process.cwd(), "backend.log");
+    if (fs.existsSync(backendLog)) {
+      const raw = fs.readFileSync(backendLog, "utf8");
+      const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+      const tail = lines.slice(-20);
+      for (const line of tail) {
+        result.push({ component: "backend-native", event: "stdout", message: redactHome(line) });
+      }
+    }
+  } catch {}
+
+  return result;
 }
 
 async function checkCommand(command) {

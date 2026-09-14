@@ -153,6 +153,21 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           </div>
         </div>
       </div>
+      <div id="authErrorOverlay" class="settingsOverlay confirmOverlay hidden" aria-hidden="true">
+        <div class="settingsPanel confirmPanel" role="dialog" aria-modal="true" aria-labelledby="authErrorTitle">
+          <div class="settingsHead">
+            <h2 id="authErrorTitle">⚠️ Ошибка авторизации</h2>
+            <button id="authErrorClose" class="iconBtn" type="button" aria-label="${t("app.close")}">✕</button>
+          </div>
+          <div class="confirmBody">
+            <p id="authErrorMessage" class="confirmMessage" style="white-space: pre-wrap; font-size: 13px; line-height: 1.5;"></p>
+            <div class="confirmActions" style="margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;">
+              <button id="authErrorCopy" class="iconBtn" type="button" style="padding: 6px 12px; font-weight: 500;">📋 Скопировать для поддержки</button>
+              <button id="authErrorDismiss" class="iconBtn primaryBtn" type="button" style="padding: 6px 14px;">Понятно</button>
+            </div>
+          </div>
+        </div>
+      </div>
       <div id="updateToast" class="updateToast hidden" aria-hidden="true">
         <button id="updateToastDismiss" class="updateToastClose" type="button" aria-label="${t("app.close")}">✕</button>
         <div class="updateToastTitle">Появилось новое обновление</div>
@@ -1188,17 +1203,70 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
     let newChatSelectedProvider = localStorage.getItem(PROVIDER_PICK_KEY) || "deepseek";
     let newChatSelectedMode = localStorage.getItem(NEWCHAT_MODE_KEY) || "fast";
 
-    async function connectProvider(id, { confirmFirst = true } = {}) {
+    function showAuthErrorModal(providerLabel, errorText) {
+      const overlay = document.getElementById("authErrorOverlay");
+      if (!overlay) {
+        alert(t("provider.connectFailed", { label: providerLabel, message: errorText }));
+        return;
+      }
+      const titleEl = document.getElementById("authErrorTitle");
+      const msgEl = document.getElementById("authErrorMessage");
+      const copyBtn = document.getElementById("authErrorCopy");
+      const dismissBtn = document.getElementById("authErrorDismiss");
+      const closeBtn = document.getElementById("authErrorClose");
+
+      if (titleEl) titleEl.textContent = "⚠️ Ошибка входа: " + providerLabel;
+      if (msgEl) {
+        msgEl.textContent = errorText || "Неизвестная ошибка запуска браузера.";
+      }
+
+      const close = () => {
+        overlay.classList.add("hidden");
+        overlay.setAttribute("aria-hidden", "true");
+      };
+
+      if (closeBtn) closeBtn.onclick = close;
+      if (dismissBtn) dismissBtn.onclick = close;
+      if (copyBtn) {
+        copyBtn.onclick = async () => {
+          const textToCopy = [
+            "=== Ошибка авторизации: " + providerLabel + " ===",
+            "Сообщение: " + (errorText || "N/A"),
+            "Время: " + new Date().toISOString(),
+            "UserAgent: " + navigator.userAgent,
+          ].join("\\n");
+          try {
+            await navigator.clipboard.writeText(textToCopy);
+            copyBtn.textContent = "✅ Скопировано в буфер";
+            setTimeout(() => {
+              copyBtn.textContent = "📋 Скопировать для поддержки";
+            }, 3000);
+          } catch {
+            prompt("Скопируйте текст ошибки вручную:", textToCopy);
+          }
+        };
+      }
+
+      overlay.classList.remove("hidden");
+      overlay.setAttribute("aria-hidden", "false");
+    }
+
+    async function connectProvider(id, { confirmFirst = false } = {}) {
       const info = PROVIDER_INFO[id];
       if (!info) return;
       const label = info.label;
       const providerButton = newChatProviderPicker.querySelector('[data-provider="' + id + '"] .reconnectLink');
       if (providerButton?.disabled) return;
-      const confirmKey = id === "chatgpt" ? "provider.chatgptConnectConfirm" : "provider.connectConfirm";
-      if (confirmFirst && !confirm(
-        t(confirmKey, { label }),
-      )) return;
-      if (providerButton) providerButton.disabled = true;
+      if (confirmFirst) {
+        const confirmKey = id === "chatgpt" ? "provider.chatgptConnectConfirm" : "provider.connectConfirm";
+        if (!confirm(t(confirmKey, { label }))) return;
+      }
+      if (providerButton) {
+        providerButton.disabled = true;
+        providerButton.dataset.prevText = providerButton.textContent;
+        providerButton.textContent = "⏳ " + (t("app.loading") || "Запуск...");
+      }
+      setStatus("Запуск браузера для авторизации в " + label + "...");
       try {
         const r = await fetch("/api/providers/" + id + "/login", { method: "POST" });
         const j = await r.json().catch(() => ({}));
@@ -1207,15 +1275,15 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           setAgentDrawerTab("browser");
           openAgentDrawer();
           notifyBrowserTab("chatgpt", { force: true });
-          alert(t("provider.chatgptEmbedLogin"));
         }
         if (j.loginStarted || j.embedLogin) {
-          for (let attempt = 0; attempt < 120; attempt += 1) {
-            await new Promise((resolve) => setTimeout(resolve, 5000));
+          for (let attempt = 0; attempt < 240; attempt += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
             await refreshAvailableProviders();
             const loginStatus = providerLoginStates.get(id);
             if (loginStatus?.state === "error") {
-              alert(t("provider.connectFailed", { label, message: loginStatus.error || "Browser launch failed" }));
+              setStatus(loginStatus.error || "Ошибка запуска браузера", true);
+              showAuthErrorModal(label, loginStatus.error || "Не удалось запустить браузер для авторизации.");
               return;
             }
             if (availableProviders.includes(id)) {
@@ -1223,11 +1291,12 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
               localStorage.setItem(PROVIDER_PICK_KEY, id);
               renderProviderPicker();
               renderModePickerForProvider();
-              alert(t("provider.connectedAlert", { label }));
+              setStatus(t("provider.connectedAlert", { label }));
               return;
             }
           }
-          alert(id === "chatgpt" ? t("provider.chatgptEmbedLoginTimeout", { label }) : t("provider.tokenMissing", { id }));
+          const timeoutMsg = id === "chatgpt" ? t("provider.chatgptEmbedLoginTimeout", { label }) : t("provider.tokenMissing", { id });
+          showAuthErrorModal(label, timeoutMsg);
           return;
         }
         await refreshAvailableProviders();
@@ -1236,14 +1305,20 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           localStorage.setItem(PROVIDER_PICK_KEY, id);
           renderProviderPicker();
           renderModePickerForProvider();
-          alert(t("provider.connectedAlert", { label }));
+          setStatus(t("provider.connectedAlert", { label }));
         } else {
-          alert(t("provider.tokenMissing", { id }));
+          showAuthErrorModal(label, t("provider.tokenMissing", { id }));
         }
       } catch (e) {
-        alert(t("provider.connectFailed", { label, message: e.message }));
+        setStatus(e.message, true);
+        showAuthErrorModal(label, e.message);
       } finally {
-        if (providerButton) providerButton.disabled = false;
+        if (providerButton) {
+          providerButton.disabled = false;
+          if (providerButton.dataset.prevText) {
+            providerButton.textContent = providerButton.dataset.prevText;
+          }
+        }
       }
     }
 
@@ -3308,7 +3383,15 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       copyBtn.type = "button";
       copyBtn.className = "apiKeyBtn";
       copyBtn.textContent = t("health.copyReport") || "Скопировать отчёт";
-      actions.append(refreshBtn, copyBtn);
+      const downloadBtn = document.createElement("button");
+      downloadBtn.type = "button";
+      downloadBtn.className = "apiKeyBtn";
+      downloadBtn.textContent = "📥 Скачать (.txt)";
+      downloadBtn.title = "Скачать полный диагностический отчёт с логами для отправки разработчику";
+      downloadBtn.addEventListener("click", () => {
+        window.open("/api/diagnostics/download", "_blank");
+      });
+      actions.append(refreshBtn, copyBtn, downloadBtn);
       header.append(heading, actions);
       groupEl.appendChild(header);
 
@@ -3377,6 +3460,13 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
         }
 
         systemGrid.innerHTML = "";
+        if (data.browsers) {
+          systemGrid.appendChild(makeCard("Microsoft Edge", data.browsers.edge?.available ? "ok" : "missing", data.browsers.edge?.path || "Edge не найден", data.browsers.edge?.available));
+          systemGrid.appendChild(makeCard("Google Chrome", data.browsers.chrome?.available ? "ok" : "missing", data.browsers.chrome?.path || "Chrome не найден", data.browsers.chrome?.available));
+          if (data.browsers.brave?.available) {
+            systemGrid.appendChild(makeCard("Brave Browser", "ok", data.browsers.brave?.path || "", true));
+          }
+        }
         systemGrid.appendChild(makeCard("Workspace", data.workspace?.exists ? "ok" : "missing", data.workspace?.root || "-", data.workspace?.exists));
         systemGrid.appendChild(makeCard("Git", data.git?.available ? (data.git.branch || "ok") : "missing", data.git?.dirty ? "dirty worktree" : (data.git?.commit || ""), data.git?.available));
         systemGrid.appendChild(makeCard("Telegram", data.telegram?.enabled ? "enabled" : "off", data.telegram?.hasBotToken ? "token configured" : "no token", !data.telegram?.enabled || data.telegram?.hasBotToken));

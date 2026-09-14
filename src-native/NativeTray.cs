@@ -84,11 +84,27 @@ namespace WebAIFreeAPI.Native
             var menu = new ContextMenuStrip();
             var itemOpen = new ToolStripMenuItem("Открыть WebAIFreeAPI", null, (s, e) => { if (onOpenApp != null) onOpenApp(); });
             var itemTerminal = new ToolStripMenuItem("⚡ Консоль PowerShell", null, (s, e) => { if (onOpenTerminal != null) onOpenTerminal(); });
+            var itemLogs = new ToolStripMenuItem("📁 Папка с логами", null, (s, e) =>
+            {
+                try
+                {
+                    string userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    string logsDir = Path.Combine(userHome, ".ai-free", "logs");
+                    if (!Directory.Exists(logsDir))
+                    {
+                        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                        logsDir = Directory.Exists(Path.Combine(baseDir, "logs")) ? Path.Combine(baseDir, "logs") : baseDir;
+                    }
+                    Process.Start(new ProcessStartInfo("explorer.exe", logsDir) { UseShellExecute = true });
+                }
+                catch {}
+            });
             var itemSettings = new ToolStripMenuItem("Настройки...", null, (s, e) => { if (onOpenSettings != null) onOpenSettings(); });
             var itemExit = new ToolStripMenuItem("Выход", null, (s, e) => { if (onExit != null) onExit(); });
 
             menu.Items.Add(itemOpen);
             menu.Items.Add(itemTerminal);
+            menu.Items.Add(itemLogs);
             menu.Items.Add(itemSettings);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(itemExit);
