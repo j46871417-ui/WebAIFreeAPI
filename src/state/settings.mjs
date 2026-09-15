@@ -439,6 +439,9 @@ export function saveSettings(settings) {
       autoSkillDefault: settings?.ui?.autoSkillDefault === undefined
         ? current.ui?.autoSkillDefault !== false
         : settings.ui.autoSkillDefault !== false,
+      defaultWorkspace: typeof settings?.ui?.defaultWorkspace === "string"
+        ? (settings.ui.defaultWorkspace.trim() || null)
+        : (current.ui?.defaultWorkspace || null),
     },
     telegram: settings?.telegram
       ? normalizeTelegramSettings(settings.telegram)

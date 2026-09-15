@@ -1,5 +1,7 @@
 // Парсинг slash-команд /code и /skill для code-agent.
 
+import path from "node:path";
+
 export function parseAgentTaskPrompt(prompt) {
   const text = String(prompt || "").trim();
   if (!text) return null;
@@ -48,10 +50,13 @@ export function parseAgentTaskPrompt(prompt) {
     const task = instruction
       ? `Прочитай файл "${filePath}" и выполни задачу: ${instruction}`
       : `Прочитай и проанализируй файл "${filePath}". Дай подробный обзор его структуры, назначения и ключевого содержимого.`;
+    const resolvedFilePath = path.resolve(filePath);
     return {
       mode: "code",
       command: "file",
       skillId: null,
+      filePath: resolvedFilePath,
+      workspace: path.dirname(resolvedFilePath),
       task,
       empty: false,
     };
@@ -79,10 +84,13 @@ export function parseAgentTaskPrompt(prompt) {
     const task = instruction
       ? `Изучи содержимое директории "${folderPath}" и выполни задачу: ${instruction}`
       : `Изучи структуру файлов и подпапок в директории "${folderPath}". Дай структурированный обзор файлов и их роли в проекте.`;
+    const resolvedFolderPath = path.resolve(folderPath);
     return {
       mode: "code",
       command: "folder",
       skillId: null,
+      folderPath: resolvedFolderPath,
+      workspace: resolvedFolderPath,
       task,
       empty: false,
     };
@@ -151,6 +159,10 @@ export function resolveAgentTaskInput(prompt, {
       empty: parsed.empty,
       slash: true,
       browserOnly: false,
+      command: parsed.command || null,
+      folderPath: parsed.folderPath || null,
+      filePath: parsed.filePath || null,
+      workspace: parsed.workspace || null,
     };
   }
 

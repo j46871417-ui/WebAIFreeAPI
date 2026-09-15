@@ -2238,8 +2238,30 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       renderedConversationId = conversation.id;
       chatAutoFollow = shouldFollow;
       activeTitle.textContent = conversation.title;
-      workspace.textContent = conversation.workspace || appState.workspaceRoot;
-      if (appState.stateFile) workspace.title = t("chat.history", { file: appState.stateFile });
+      const currentWs = conversation.workspace || appState.workspaceRoot || "";
+      workspace.textContent = "📁 " + currentWs;
+      workspace.title = "Рабочая папка проекта: " + currentWs + " (кликните, чтобы изменить)";
+      workspace.style.cursor = "pointer";
+      workspace.onclick = async () => {
+        const next = prompt("Укажите путь к рабочей папке для этого чата:", currentWs);
+        if (next !== null && next.trim() && next.trim() !== currentWs) {
+          try {
+            const trimmed = next.trim();
+            const data = await api("/api/conversations/" + conversation.id, {
+              method: "PATCH",
+              body: { workspace: trimmed }
+            });
+            if (data?.conversation) {
+              conversation.workspace = data.conversation.workspace;
+              activeConversation = data.conversation;
+              renderConversation(activeConversation);
+              setStatus("Рабочая папка изменена на: " + conversation.workspace);
+            }
+          } catch (err) {
+            setStatus("Не удалось изменить папку: " + err.message, true);
+          }
+        }
+      };
       // Бейдж режима: показывает, какая модель привязана к этому чату.
       // Берём label из PROVIDER_INFO с учётом провайдера чата.
       const mode = conversation.mode || "fast";
@@ -3562,6 +3584,77 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       });
       autoSkillRow.append(autoSkillCb, autoSkillText);
       groupEl.appendChild(autoSkillRow);
+
+      const wsHeading = document.createElement("div");
+      wsHeading.className = "name";
+      wsHeading.style.marginTop = "14px";
+      wsHeading.style.marginBottom = "4px";
+      wsHeading.style.fontWeight = "600";
+      wsHeading.textContent = "Рабочая папка по умолчанию (Workspace)";
+
+      const wsDesc = document.createElement("div");
+      wsDesc.className = "desc";
+      wsDesc.style.marginBottom = "8px";
+      wsDesc.textContent = "Используется для новых чатов и работы с локальными файлами, если не выбрана другая папка.";
+
+      const wsRow = document.createElement("div");
+      wsRow.style.display = "flex";
+      wsRow.style.gap = "8px";
+      wsRow.style.marginBottom = "8px";
+
+      const wsInput = document.createElement("input");
+      wsInput.type = "text";
+      wsInput.className = "settingsInput";
+      wsInput.style.flex = "1";
+      wsInput.style.padding = "6px 10px";
+      wsInput.style.borderRadius = "6px";
+      wsInput.style.border = "1px solid var(--line)";
+      wsInput.style.background = "var(--bg-input, rgba(0,0,0,0.2))";
+      wsInput.style.color = "inherit";
+      wsInput.style.fontSize = "12px";
+      wsInput.value = ui?.defaultWorkspace || appState.workspaceRoot || "";
+      wsInput.placeholder = "C:\\path\\to\\project";
+
+      const wsSaveBtn = document.createElement("button");
+      wsSaveBtn.type = "button";
+      wsSaveBtn.className = "apiKeyBtn primaryUpdateBtn";
+      wsSaveBtn.textContent = "Сохранить";
+      wsSaveBtn.addEventListener("click", async () => {
+        try {
+          const val = wsInput.value.trim();
+          await saveUiSettings({ defaultWorkspace: val || null }, collectAllowedCommands());
+          setStatus("Рабочая папка по умолчанию сохранена!");
+        } catch (err) {
+          setStatus("Ошибка сохранения: " + err.message, true);
+        }
+      });
+
+      wsRow.append(wsInput, wsSaveBtn);
+
+      const quickRow = document.createElement("div");
+      quickRow.style.display = "flex";
+      quickRow.style.gap = "6px";
+      quickRow.style.flexWrap = "wrap";
+      quickRow.style.marginBottom = "8px";
+
+      const quickItems = [
+        { label: "🏠 Домашняя", path: browseHome_ || "~" },
+        { label: "📄 Документы", path: (browseHome_ ? browseHome_ + "\\Documents" : "~/Documents") },
+        { label: "🖥️ Рабочий стол", path: (browseHome_ ? browseHome_ + "\\Desktop" : "~/Desktop") },
+      ];
+
+      for (const q of quickItems) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "togglePill";
+        btn.textContent = q.label;
+        btn.addEventListener("click", () => {
+          wsInput.value = q.path;
+        });
+        quickRow.appendChild(btn);
+      }
+
+      groupEl.append(wsHeading, wsDesc, wsRow, quickRow);
 
       target.appendChild(groupEl);
 

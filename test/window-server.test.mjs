@@ -8,7 +8,10 @@ import {
   isChatGPTLoginRecoveryRequired,
   shouldAutoRunCodeTask,
 } from "../src/window-app/server.mjs";
-import { resolveConversationAgentTask } from "../src/window-app/agent-task.mjs";
+import {
+  applyAgentTaskInputToConversation,
+  resolveConversationAgentTask,
+} from "../src/window-app/agent-task.mjs";
 
 describe("shouldAutoRunCodeTask", () => {
   it("routes direct project work to the code agent", () => {
@@ -18,6 +21,12 @@ describe("shouldAutoRunCodeTask", () => {
     assert.equal(shouldAutoRunCodeTask("создай файл notes.txt"), true);
     assert.equal(shouldAutoRunCodeTask("Проанализируй содержание по пути C:\\Users\\gabov\\Documents\\antigravity\\happy-bose"), true);
     assert.equal(shouldAutoRunCodeTask("посмотри файлы в папке C:\\project"), true);
+    assert.equal(shouldAutoRunCodeTask("Что находится в папке 111"), true);
+    assert.equal(shouldAutoRunCodeTask("что в папке 111"), true);
+    assert.equal(shouldAutoRunCodeTask("какие файлы в папке 111"), true);
+    assert.equal(shouldAutoRunCodeTask("содержимое папки 111"), true);
+    assert.equal(shouldAutoRunCodeTask("открой Dockerfile"), true);
+    assert.equal(shouldAutoRunCodeTask("что в файле main.py"), true);
   });
 
   it("keeps informational prompts in normal chat", () => {
@@ -93,3 +102,19 @@ describe("running clarification capture", () => {
     assert.deepEqual(takeRunningClarifications(conversation), ["уточнение"]);
   });
 });
+
+describe("applyAgentTaskInputToConversation", () => {
+  it("persists workspace and enables coderMode on /folder and /file commands", () => {
+    const conv = { id: "conv-1", workspace: null, coderMode: false };
+    const agentInput = resolveConversationAgentTask("/folder C:\\projects\\my-app что ты видишь", conv);
+    assert.equal(agentInput.run, true);
+    assert.equal(agentInput.slash, true);
+    assert.equal(agentInput.command, "folder");
+    assert.ok(agentInput.workspace);
+
+    applyAgentTaskInputToConversation(conv, agentInput);
+    assert.equal(conv.workspace, "C:\\projects\\my-app");
+    assert.equal(conv.coderMode, true);
+  });
+});
+

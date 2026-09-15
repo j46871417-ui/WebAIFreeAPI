@@ -26,6 +26,16 @@ export function resolveConversationAgentTask(prompt, conversation, {
   });
 }
 
+export function applyAgentTaskInputToConversation(conversation, agentInput) {
+  if (!agentInput?.run || !conversation) return;
+  if (agentInput.workspace) {
+    conversation.workspace = agentInput.workspace;
+  }
+  if (agentInput.slash && (agentInput.command === "folder" || agentInput.command === "file" || agentInput.command === "code")) {
+    conversation.coderMode = true;
+  }
+}
+
 export function buildAgentTaskOptions(conversation, body, { hardwareMode, systemPrompt, agentInput }) {
   const skillId = agentInput?.skillId || conversation.skillId || body.skillId || null;
   return {
