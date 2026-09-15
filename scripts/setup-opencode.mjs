@@ -143,6 +143,30 @@ const opencodeConfig = {
         },
       },
     },
+    "ai-free-grok": {
+      npm: "@ai-sdk/openai-compatible",
+      name: "WebAIFreeAPI (Grok)",
+      options: {
+        baseURL: "http://127.0.0.1:4317/v1",
+        apiKey: settings.apiKeys.grok,
+      },
+      models: {
+        "grok-3": { name: "Grok 3", limit: { context: 128000, output: 8192 } },
+        "grok-3-reasoner": { name: "Grok 3 (Thinking)", reasoning: true, limit: { context: 128000, output: 8192 } },
+      },
+    },
+    "ai-free-mistral": {
+      npm: "@ai-sdk/openai-compatible",
+      name: "WebAIFreeAPI (Mistral)",
+      options: {
+        baseURL: "http://127.0.0.1:4317/v1",
+        apiKey: settings.apiKeys.mistral,
+      },
+      models: {
+        "mistral-large": { name: "Mistral Large", limit: { context: 128000, output: 8192 } },
+        "pixtral-large": { name: "Pixtral Large", vision: true, limit: { context: 128000, output: 8192 } },
+      },
+    },
   },
 };
 

@@ -1398,6 +1398,43 @@ export async function runWindowApp({
                   },
                 },
               },
+              "ai-free-chatgpt": {
+                npm: "@ai-sdk/openai-compatible",
+                name: "WebAIFreeAPI (ChatGPT)",
+                options: {
+                  baseURL: `http://127.0.0.1:${port}/v1`,
+                  apiKey: keys.chatgpt,
+                },
+                models: {
+                  "gpt-5.5-instant": { name: "GPT-5.5 Instant", limit: { context: 128000, output: 8192 } },
+                  "gpt-4o": { name: "GPT-4o", limit: { context: 128000, output: 4096 } },
+                  "o3-mini": { name: "o3 mini", reasoning: true, limit: { context: 128000, output: 8192 } },
+                },
+              },
+              "ai-free-grok": {
+                npm: "@ai-sdk/openai-compatible",
+                name: "WebAIFreeAPI (Grok)",
+                options: {
+                  baseURL: `http://127.0.0.1:${port}/v1`,
+                  apiKey: keys.grok,
+                },
+                models: {
+                  "grok-3": { name: "Grok 3", limit: { context: 128000, output: 8192 } },
+                  "grok-3-reasoner": { name: "Grok 3 (Thinking)", reasoning: true, limit: { context: 128000, output: 8192 } },
+                },
+              },
+              "ai-free-mistral": {
+                npm: "@ai-sdk/openai-compatible",
+                name: "WebAIFreeAPI (Mistral)",
+                options: {
+                  baseURL: `http://127.0.0.1:${port}/v1`,
+                  apiKey: keys.mistral,
+                },
+                models: {
+                  "mistral-large": { name: "Mistral Large", limit: { context: 128000, output: 8192 } },
+                  "pixtral-large": { name: "Pixtral Large", vision: true, limit: { context: 128000, output: 8192 } },
+                },
+              },
             },
           };
 
