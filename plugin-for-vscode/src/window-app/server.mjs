@@ -69,6 +69,7 @@ import {
 } from "./provider-frame-chatgpt.mjs";
 import {
   AGENT_TASK_EMPTY_HELP,
+  applyAgentTaskInputToConversation,
   buildAgentTaskOptions,
   finalizeCodeTaskMessage,
   resolveConversationAgentTask,
@@ -1479,7 +1480,9 @@ export async function runWindowApp({
       if (req.method === "POST" && url.pathname === "/api/conversations") {
         const body = await readJsonBody(req);
 
-        let workspace = String(body.workspace || workspaceRoot).trim() || workspaceRoot;
+        const currentSettings = loadSettings();
+        const fallbackWs = currentSettings.ui?.defaultWorkspace || workspaceRoot;
+        let workspace = String(body.workspace || fallbackWs).trim() || fallbackWs;
         if (workspace.startsWith("~/") || workspace === "~") {
           workspace = path.join(os.homedir(), workspace.slice(1));
         }
@@ -1604,6 +1607,10 @@ export async function runWindowApp({
         }
         if (body.skillId === null || typeof body.skillId === "string") {
           conversation.skillId = body.skillId ? String(body.skillId) : null;
+        }
+        if (typeof body.workspace === "string") {
+          const trimmed = body.workspace.trim();
+          conversation.workspace = trimmed ? path.resolve(trimmed) : null;
         }
         conversation.updatedAt = new Date().toISOString();
         saveWindowState(workspaceRoot, state);
@@ -1832,6 +1839,7 @@ export async function runWindowApp({
             // сразу с running:true, UI делает polling до завершения.
             const agentModes = await resolveAgentModes(prompt);
             const agentInput = resolveConversationAgentTask(prompt, conversation, agentModes);
+            applyAgentTaskInputToConversation(conversation, agentInput);
             const hardwareMode = conversation.hardwareMode === true;
             if (agentInput.run) {
               const task = agentInput.task;
@@ -2080,6 +2088,7 @@ export async function runWindowApp({
 
           const agentModes = await resolveAgentModes(prompt);
           const agentInput = resolveConversationAgentTask(prompt, conversation, agentModes);
+          applyAgentTaskInputToConversation(conversation, agentInput);
           const runChatGPTCodeAgent = agentInput.run;
           const hardwareMode = conversation.hardwareMode === true;
           if (runChatGPTCodeAgent) {
@@ -2446,6 +2455,7 @@ export async function runWindowApp({
 
         const agentModes = await resolveAgentModes(prompt);
         const agentInput = resolveConversationAgentTask(prompt, conversation, agentModes);
+        applyAgentTaskInputToConversation(conversation, agentInput);
         const dsHardwareMode = conversation.hardwareMode === true;
         if (agentInput.run) {
           const task = agentInput.task;
@@ -3007,7 +3017,37 @@ export function shouldAutoRunCodeTask(prompt) {
   const normalized = text.toLowerCase();
   const hasAny = (terms) => terms.some((term) => normalized.includes(term));
 
-  const hasExplicitPath = /[a-zA-Z]:[\\/][^\s]+|(?:\.{1,2}[\\/]|[\\/])[^\s]+|\b(по пути|в папке|в файле|директори|содержимое|содержание)\b/u.test(normalized);
+  const hasExplicitPath =
+    /[a-zA-Z]:[\\/][^\s]+|(?:\.{1,2}[\\/]|[\\/])[^\s]+/u.test(normalized)
+    || hasAny([
+      "по пути", "в папке", "в папку", "из папки", "папка", "папку", "папке", "папки",
+      "в файле", "в файл", "из файла", "директори", "каталог",
+      "содержимое", "содержание", "структур"
+    ])
+    || /\b(folder|directory|dir|file|path|content|contents)\b/i.test(normalized);
+
+  const isContentOrStructureQuery =
+    hasAny([
+      "что находится в", "что лежит в", "что внутри", "что в папке", "что в файле",
+      "что в директории", "что в каталоге", "какие файлы", "список файлов",
+      "дерево файлов", "файлы в", "файлы папки", "содержимое папки", "содержимое файла",
+      "что в папку", "что лежит в папке", "что внутри папки"
+    ])
+    || /\b(what(?:'s| is)? in|what is inside|contents of|list files|files in)\b/i.test(normalized);
+
+  if (hasExplicitPath && isContentOrStructureQuery) {
+    return true;
+  }
+
+  const hasKnownFilename =
+    /\b(dockerfile|makefile|cmakelists\.txt|requirements\.txt|package\.json|cargo\.toml|go\.mod|gemfile|license|readme|\.env)\b/i.test(normalized);
+
+  if (hasKnownFilename && hasAny([
+    "прочитай", "прочитать", "посмотри", "посмотреть", "открой", "открыть", "покажи", "показать",
+    "что в", "изучи", "проверь", "измени", "исправь", "обнови", "read", "open", "show", "inspect", "check"
+  ])) {
+    return true;
+  }
 
   if (/^(как|что|почему|зачем|объясни|расскажи|покажи пример|можешь объяснить)\b/u.test(normalized)) {
     if (!hasExplicitPath) return false;
@@ -3020,6 +3060,7 @@ export function shouldAutoRunCodeTask(prompt) {
     "проанализируй", "проанализировать", "анализ", "посмотри", "посмотреть", "прочитай",
     "прочитать", "прочти", "изучи", "изучить", "исследуй", "исследовать", "найди", "найти",
     "открой", "открыть", "покажи", "показать", "проверь", "проверить", "список", "структур",
+    "находится", "находятся", "лежит", "лежат", "внутри", "содержимое",
     "analyze", "inspect", "read", "examine", "explore", "find", "open", "show", "list",
   ])) {
     return true;
@@ -3034,7 +3075,7 @@ export function shouldAutoRunCodeTask(prompt) {
       "собрать", "протестируй", "протестировать", "переведи", "перевести",
       "проанализируй", "проанализировать", "анализ", "посмотри", "посмотреть", "прочитай", "прочитать",
       "прочти", "изучи", "изучить", "исследуй", "исследовать", "найди", "найти", "открой", "открыть",
-      "покажи", "показать"
+      "покажи", "показать", "находится", "находятся", "лежит", "лежат", "внутри", "содержимое", "содержит"
     ])
     || /\b(add|create|make|edit|update|change|fix|repair|remove|delete|rename|implement|write|modify|install|run|test|verify|check|build|refactor|wire|integrate|analyze|inspect|read|examine|explore|find|open|show)\b/u.test(normalized);
 
