@@ -4334,6 +4334,9 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       const masterKey = keys.all || keys.qwen || keys.deepseek || "sk-master-user-key";
       const qwenKey = keys.qwen || masterKey;
       const deepseekKey = keys.deepseek || masterKey;
+      const chatgptKey = keys.chatgpt || masterKey;
+      const grokKey = keys.grok || masterKey;
+      const mistralKey = keys.mistral || masterKey;
 
       const groupEl = document.createElement("div");
       groupEl.className = "settingsGroup apiSettings";
@@ -4356,6 +4359,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
         { id: "windsurf", name: "Windsurf (Cascade)" },
         { id: "jetbrains", name: "JetBrains (CodeGPT)" },
         { id: "opencode", name: "OpenCode Desktop" },
+        { id: "openrouter", name: "OpenRouter / Другие клиенты" },
         { id: "aider", name: "Aider (CLI)" },
         { id: "zed", name: "Zed" },
       ];
@@ -4487,6 +4491,43 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
                   "deepseek-chat": { "name": "DeepSeek Chat", "tools": true },
                   "deepseek-reasoner": { "name": "DeepSeek Reasoner", "tools": true }
                 }
+              },
+              "ai-free-chatgpt": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "WebAIFreeAPI (ChatGPT)",
+                "options": {
+                  "baseURL": baseUrl,
+                  "apiKey": chatgptKey
+                },
+                "models": {
+                  "gpt-5.5-instant": { "name": "GPT-5.5 Instant" },
+                  "gpt-4o": { "name": "GPT-4o" },
+                  "o3-mini": { "name": "o3 mini", "tools": true }
+                }
+              },
+              "ai-free-grok": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "WebAIFreeAPI (Grok)",
+                "options": {
+                  "baseURL": baseUrl,
+                  "apiKey": grokKey
+                },
+                "models": {
+                  "grok-3": { "name": "Grok 3" },
+                  "grok-3-reasoner": { "name": "Grok 3 (Thinking)", "tools": true }
+                }
+              },
+              "ai-free-mistral": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "WebAIFreeAPI (Mistral)",
+                "options": {
+                  "baseURL": baseUrl,
+                  "apiKey": mistralKey
+                },
+                "models": {
+                  "mistral-large": { "name": "Mistral Large" },
+                  "pixtral-large": { "name": "Pixtral Large" }
+                }
               }
             }
           }, null, 2);
@@ -4517,6 +4558,21 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
             }
           });
           extraAction = autoBtn;
+        } else if (id === "openrouter") {
+          title.textContent = "Настройка OpenRouter-клиентов (LibreChat, NextChat, SillyTavern и др.)";
+          steps.innerHTML = "<li>Любое стороннее приложение с поддержкой кастомного эндпоинта OpenAI или OpenRouter подключается к WebAIFreeAPI напрямую.</li>"
+            + "<li>В поле <strong>API Base URL</strong> укажите: <code>" + baseUrl + "</code>.</li>"
+            + "<li>В поле <strong>API Key</strong> введите ваш единый мастер-ключ: <code>" + masterKey + "</code>.</li>"
+            + "<li>Вам доступны модели всех 5 провайдеров без дополнительных настроек.</li>";
+          codeContent = "# Параметры подключения (OpenAI / OpenRouter Compatible):\\n"
+            + "Base URL: " + baseUrl + "\\n"
+            + "API Key:  " + masterKey + "\\n\\n"
+            + "# Основные модели:\\n"
+            + "qwen3.7-max, qwen3.7-plus, qwen3-coder-plus\\n"
+            + "deepseek-chat, deepseek-reasoner, deepseek-v4-flash\\n"
+            + "gpt-5.5-instant, gpt-4o, o3-mini\\n"
+            + "grok-3, grok-3-reasoner\\n"
+            + "mistral-large, pixtral-large";
         } else if (id === "aider") {
           title.textContent = "Настройка Aider (терминальный кодинг-агент)";
           steps.innerHTML = "<li>Задайте переменные окружения перед запуском Aider в терминале:</li>";
