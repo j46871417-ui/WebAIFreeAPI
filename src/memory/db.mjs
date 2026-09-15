@@ -15,6 +15,7 @@ const require = createRequire(import.meta.url);
 let sqliteDb = null;
 let jsonItems = null;
 let backend = null;
+let hasFts = false;
 
 export function closeMemoryBackend() {
   if (sqliteDb) {
@@ -22,11 +23,13 @@ export function closeMemoryBackend() {
     sqliteDb = null;
   }
   backend = null;
+  hasFts = false;
 }
 
 export function resetMemoryBackendForTests() {
   closeMemoryBackend();
   jsonItems = null;
+  hasFts = false;
 }
 
 function normalizeItem(raw = {}) {
@@ -90,19 +93,26 @@ function openSqliteDb(DatabaseSync) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-    CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
-      id UNINDEXED,
-      type,
-      content,
-      tags,
-      workspace,
-      tokenize='unicode61'
-    );
     CREATE TABLE IF NOT EXISTS memory_vectors (
       id TEXT PRIMARY KEY,
       vec TEXT NOT NULL
     );
   `);
+  try {
+    db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+        id UNINDEXED,
+        type,
+        content,
+        tags,
+        workspace,
+        tokenize='unicode61'
+      );
+    `);
+    hasFts = true;
+  } catch {
+    hasFts = false;
+  }
   migrateLegacyJson(db);
   return db;
 }
@@ -198,11 +208,15 @@ function upsertSqliteItem(db, item) {
     updated_at: item.updatedAt,
   });
 
-  db.prepare(`DELETE FROM memory_fts WHERE id = ?`).run(item.id);
-  db.prepare(`
-    INSERT INTO memory_fts (id, type, content, tags, workspace)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(item.id, item.type, item.content, item.tags.join(" "), item.workspace);
+  if (hasFts) {
+    try {
+      db.prepare(`DELETE FROM memory_fts WHERE id = ?`).run(item.id);
+      db.prepare(`
+        INSERT INTO memory_fts (id, type, content, tags, workspace)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(item.id, item.type, item.content, item.tags.join(" "), item.workspace);
+    } catch {}
+  }
 }
 
 function upsertItemVector(db, item) {
@@ -281,7 +295,9 @@ export function deleteMemoryItem(id) {
 
   if (backend === "sqlite") {
     const result = sqliteDb.prepare(`DELETE FROM memory_items WHERE id = ?`).run(target);
-    sqliteDb.prepare(`DELETE FROM memory_fts WHERE id = ?`).run(target);
+    if (hasFts) {
+      try { sqliteDb.prepare(`DELETE FROM memory_fts WHERE id = ?`).run(target); } catch {}
+    }
     deleteItemVector(sqliteDb, target);
     deleteMemoryMarkdown(target);
     return result.changes > 0;
@@ -348,6 +364,9 @@ function listRecentSqlite(workspace, limit) {
 }
 
 function searchSqlite(query, workspace, limit) {
+  if (!hasFts) {
+    return searchKeywordItems(listRecentSqlite("", 200), query, workspace, limit);
+  }
   const match = buildFtsMatchQuery(query);
   if (!match) return listRecentSqlite(workspace, limit);
 
