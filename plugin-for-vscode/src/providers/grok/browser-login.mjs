@@ -32,7 +32,25 @@ export async function loginGrokAndSave(timeoutMs = 5 * 60 * 1000) {
       }
 
       const currentUrl = page.url();
-      const notSignIn = !currentUrl.includes("/sign-in") && !currentUrl.includes("/sign-up");
+      let isGrok = false;
+      try {
+        const u = new URL(currentUrl);
+        isGrok = (u.hostname === "grok.com" || u.hostname.endsWith(".grok.com")) &&
+          !u.pathname.startsWith("/sign-in") &&
+          !u.pathname.startsWith("/sign-up") &&
+          !u.pathname.startsWith("/login") &&
+          !u.pathname.startsWith("/auth");
+      } catch {}
+
+      if (!isGrok) {
+        // Пользователь находится на внешнем OAuth (Twitter/X, Google) или редиректе
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        continue;
+      }
+
+      const grokCookies = lastCookies.filter((c) =>
+        c.domain && (/(^|\.)grok\.com$/i.test(c.domain) || /(^|\.)x\.com$/i.test(c.domain))
+      );
 
       let hasChatInterface = false;
       let hasSignInButton = true;
@@ -51,11 +69,17 @@ export async function loginGrokAndSave(timeoutMs = 5 * 60 * 1000) {
             return signPatterns.some((p) => t === p || t.startsWith(p)) || h.includes("/login") || h.includes("/sign-in");
           });
         });
-        hasSsoCookie = lastCookies.some((c) => c.name.includes("sso") || c.name === "auth_token" || c.name.includes("session"));
+        hasSsoCookie = grokCookies.some((c) =>
+          c.name.includes("sso") ||
+          c.name === "auth_token" ||
+          c.name === "twid" ||
+          c.name === "xai_session" ||
+          (c.name.includes("session") && !c.name.includes("intercom"))
+        );
       } catch {}
 
-      if (notSignIn && hasChatInterface && !hasSignInButton && hasSsoCookie) {
-        fs.writeFileSync(GROK_AUTH_FILE, JSON.stringify(lastCookies, null, 2));
+      if (hasChatInterface && !hasSignInButton && hasSsoCookie) {
+        fs.writeFileSync(GROK_AUTH_FILE, JSON.stringify(grokCookies, null, 2));
         await page.waitForTimeout(1500).catch(() => {});
         await context.close().catch(() => {});
         return { ok: true };
@@ -66,11 +90,6 @@ export async function loginGrokAndSave(timeoutMs = 5 * 60 * 1000) {
   } catch (err) {
     console.error("[grok-login] Error during login session:", err);
   } finally {
-    if (lastCookies.length) {
-      try {
-        fs.writeFileSync(GROK_AUTH_FILE, JSON.stringify(lastCookies, null, 2));
-      } catch {}
-    }
     await context.close().catch(() => {});
   }
 

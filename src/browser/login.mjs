@@ -106,7 +106,10 @@ export async function waitForAuthenticatedApiCall(context, { timeoutMs = 5 * 60 
       if (done) return;
       try {
         const url = response.url();
-        if (!url.includes("/api/v0/")) return;
+        let u;
+        try { u = new URL(url); } catch { return; }
+        if (u.hostname !== "chat.deepseek.com") return;
+        if (!u.pathname.startsWith("/api/v0/")) return;
         if (response.status() !== 200) return;
         const reqHeaders = response.request().headers();
         const authHdr = reqHeaders["authorization"] || reqHeaders["Authorization"];

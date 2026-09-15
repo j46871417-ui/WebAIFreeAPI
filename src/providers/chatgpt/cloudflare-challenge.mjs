@@ -62,37 +62,34 @@ export async function trySolveTurnstileCheckbox(page, { debug = false } = {}) {
     for (const frame of page.frames()) {
       if (!/challenges\.cloudflare|turnstile|cdn-cgi/i.test(frame.url())) continue;
       const checkbox = frame.locator(
-        'input[type="checkbox"], .ctp-checkbox-label, label.cb-lb, #challenge-stage input, .mark',
+        'input[type="checkbox"], .ctp-checkbox-label, label.cb-lb, #challenge-stage input, .mark, div#cf-stage input',
       );
       if (await checkbox.count() > 0) {
         const el = checkbox.first();
+        try {
+          if (debug) console.log("[cloudflare] attempting direct frame locator click");
+          await el.click({ timeout: 2000 });
+          return true;
+        } catch {}
         const box = await el.boundingBox().catch(() => null);
         if (box) {
           const clickX = box.x + box.width / 2;
           const clickY = box.y + box.height / 2;
           if (debug) console.log(`[cloudflare] turnstile click (${Math.round(clickX)}, ${Math.round(clickY)})`);
-          await page.mouse.move(clickX, clickY, { steps: 10 });
-          await sleep(120 + Math.random() * 80);
-          await page.mouse.down();
-          await sleep(60 + Math.random() * 60);
-          await page.mouse.up();
+          await humanClickAt(page, clickX, clickY);
           return true;
         }
       }
     }
 
-    const iframe = page.locator('iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"]').first();
+    const iframe = page.locator('iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"], iframe[title*="Cloudflare" i], iframe[title*="Turnstile" i]').first();
     if (await iframe.count() > 0) {
       const box = await iframe.boundingBox().catch(() => null);
       if (box) {
         const clickX = box.x + Math.min(36, box.width * 0.15);
         const clickY = box.y + box.height / 2;
         if (debug) console.log(`[cloudflare] iframe click (${Math.round(clickX)}, ${Math.round(clickY)})`);
-        await page.mouse.move(clickX, clickY, { steps: 10 });
-        await sleep(120 + Math.random() * 80);
-        await page.mouse.down();
-        await sleep(60 + Math.random() * 60);
-        await page.mouse.up();
+        await humanClickAt(page, clickX, clickY);
         return true;
       }
     }
@@ -103,18 +100,16 @@ export async function trySolveTurnstileCheckbox(page, { debug = false } = {}) {
 }
 
 export async function humanClickAt(page, x, y) {
-  const steps = 8 + Math.floor(Math.random() * 6);
+  const steps = 10 + Math.floor(Math.random() * 6);
   await page.mouse.move(x, y, { steps });
-  await sleep(90 + Math.random() * 110);
+  await sleep(120 + Math.random() * 80);
   await page.mouse.down();
-  await sleep(55 + Math.random() * 75);
+  await sleep(60 + Math.random() * 60);
   await page.mouse.up();
 }
 
 export async function tryAssistCloudflareClick(page, x, y, { debug = false } = {}) {
   await humanClickAt(page, x, y);
-  await sleep(400);
-  await trySolveTurnstileCheckbox(page, { debug });
   return true;
 }
 

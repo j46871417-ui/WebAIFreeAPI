@@ -19,6 +19,21 @@ import fs from "node:fs";
 import path from "node:path";
 import { QWEN_BASE_URL } from "./config.mjs";
 
+export function isJwtActive(token) {
+  if (!token || typeof token !== "string") return false;
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    if (typeof payload.exp === "number") {
+      return payload.exp * 1000 > Date.now() + 30_000;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function readQwenAuth(file) {
   if (!fs.existsSync(file)) return null;
   try {

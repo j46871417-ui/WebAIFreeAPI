@@ -29,6 +29,7 @@ import {
 } from "./config.mjs";
 import {
   applyQwenCookiesToContext,
+  isJwtActive,
   qwenCookieHeaderFromArray,
   readQwenAuth,
   writeQwenAuth,
@@ -75,10 +76,10 @@ export async function importQwenFromJson(jsonPath, authFile = QWEN_AUTH_FILE) {
     );
   }
 
-  const looksLikeJwt = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(tokenCookie.value);
-  if (!looksLikeJwt) {
+  const jwtValid = isJwtActive(tokenCookie.value);
+  if (!jwtValid) {
     console.warn(
-      `⚠️ token не выглядит как JWT (3 части через точку). Возможно файл устарел или повреждён.`,
+      `⚠️ token не является активным JWT или его срок действия истёк. Проверь экспорт.`,
     );
   }
 
@@ -125,7 +126,15 @@ export async function importQwenFromJson(jsonPath, authFile = QWEN_AUTH_FILE) {
 // Главный entry-point для `npm run login-qwen` и in-app re-login.
 export async function loginQwenAndSave(authFile = QWEN_AUTH_FILE, { clearSession = false } = {}) {
   const profileDir = QWEN_BROWSER_PROFILE;
-  const previousToken = clearSession ? (readQwenAuth(authFile)?.token || "") : "";
+  let clearSessionFinal = clearSession;
+  const previousToken = clearSessionFinal ? (readQwenAuth(authFile)?.token || "") : "";
+  if (!clearSessionFinal) {
+    const existing = readQwenAuth(authFile)?.token || "";
+    if (existing && !isJwtActive(existing)) {
+      console.log("🔒 Предыдущий JWT-токен Qwen истёк — сбрасываю старую сессию для нового входа.");
+      clearSessionFinal = true;
+    }
+  }
   const { getChatGPTChromium } = await import("../chatgpt/engine.mjs");
   const chromium = await getChatGPTChromium();
   // Переиспользуем launch-функцию от DeepSeek — она запускает реальный Chrome.
@@ -158,7 +167,7 @@ export async function loginQwenAndSave(authFile = QWEN_AUTH_FILE, { clearSession
 
   const page = context.pages()[0] || (await context.newPage());
 
-  if (clearSession) {
+  if (clearSessionFinal) {
     console.log("🔒 Сбрасываю старую сессию Qwen в профиле — нужен новый вход.");
     await context.clearCookies();
     await page.evaluate(() => {
@@ -171,7 +180,7 @@ export async function loginQwenAndSave(authFile = QWEN_AUTH_FILE, { clearSession
   console.log("🔓 Qwen login window открыто (chat.qwen.ai).");
   console.log("   • Залогинься любым способом (Google OAuth, email/пароль).");
   console.log("   • НИЧЕГО нажимать в терминале не нужно.");
-  if (clearSession) {
+  if (clearSessionFinal) {
     console.log("   • Окно не закроется, пока не завершишь вход заново (старый токен сброшен).");
   } else {
     console.log("   • Окно закроется автоматически, когда появится JWT-токен.");
@@ -228,9 +237,9 @@ async function waitForQwenToken(
     const tokenCookie = cookies.find((c) => c.name === QWEN_TOKEN_COOKIE_NAME);
     const allRequired = QWEN_REQUIRED_COOKIES.every((n) => cookies.some((c) => c.name === n));
     const token = tokenCookie?.value || "";
-    const looksLikeJwt = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token);
+    const jwtActive = isJwtActive(token);
 
-    if (allRequired && looksLikeJwt) {
+    if (allRequired && jwtActive) {
       if (previousToken && token === previousToken) {
         if (!staleTokenLogged) {
           staleTokenLogged = true;
@@ -261,11 +270,11 @@ async function captureQwenAuthFromContext(context, authFile, profileDir) {
   const cookies = await context.cookies(QWEN_BASE_URL);
   const tokenCookie = cookies.find((c) => c.name === QWEN_TOKEN_COOKIE_NAME);
   const token = tokenCookie?.value || "";
-  const looksLikeJwt = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token);
+  const jwtActive = isJwtActive(token);
 
-  if (!looksLikeJwt) {
+  if (!jwtActive) {
     throw new Error(
-      "В профиле Qwen нет валидного JWT (cookie token). Залогинься: npm run login-qwen",
+      "В профиле Qwen нет активного JWT (cookie token). Залогинься: npm run login-qwen",
     );
   }
 

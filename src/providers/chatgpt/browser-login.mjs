@@ -295,6 +295,14 @@ export async function applyChatGPTStealth(context) {
 }
 
 async function readSessionFromPage(page) {
+  try {
+    const u = new URL(page.url());
+    if (u.hostname !== "chatgpt.com" && !u.hostname.endsWith(".chatgpt.com")) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
   return page.evaluate(async () => {
     const response = await fetch("/api/auth/session", {
       method: "GET",
@@ -305,7 +313,7 @@ async function readSessionFromPage(page) {
       return null;
     }
     return response.json();
-  });
+  }).catch(() => null);
 }
 
 export function isSuccessfulChatGPTSession(body) {
@@ -634,7 +642,11 @@ export async function importChatGPTFromJson(jsonPath, authFile = CHATGPT_AUTH_FI
   }
 
   const profileDir = CHATGPT_BROWSER_PROFILE;
-  const userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+  const userAgent = process.platform === "win32"
+    ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+    : (process.platform === "darwin"
+        ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+        : "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36");
 
   writeChatGPTAuth(authFile, {
     cookies,

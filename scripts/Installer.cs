@@ -123,7 +123,7 @@ namespace AiFreeInstaller
             else
                 targetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WebAIFreeAPI");
 
-            this.Text = "Установка WebAIFreeAPI v1.9.5";
+            this.Text = "Установка WebAIFreeAPI v1.9.6";
             this.Size = new Size(540, 320);
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
@@ -134,7 +134,7 @@ namespace AiFreeInstaller
             } catch {}
 
             titleLabel = new Label() {
-                Text = "Мастер установки WebAIFreeAPI v1.9.5",
+                Text = "Мастер установки WebAIFreeAPI v1.9.6",
                 Font = new Font("Segoe UI", 12, FontStyle.Bold),
                 Location = new Point(25, 18),
                 AutoSize = true
