@@ -30,3 +30,14 @@ REFACTOR_NOTES.md
 api/README.md
 .kilo/
 bin/*.bundle.mjs
+
+# Debug artifacts
+dump_*.mjs
+*-dom-dump.html
+*_text.txt
+test_output.txt
+commit_msg.txt
+msg.txt
+request.json
+opencode_latest.json
+*.tmp
