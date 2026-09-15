@@ -4453,6 +4453,8 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
         { id: "jetbrains", name: "JetBrains (CodeGPT)" },
         { id: "opencode", name: "OpenCode Desktop" },
         { id: "openrouter", name: "OpenRouter / Другие клиенты" },
+        { id: "claudecode", name: "Claude Code" },
+        { id: "antigravity", name: "Gemini CLI / Antigravity" },
         { id: "aider", name: "Aider (CLI)" },
         { id: "zed", name: "Zed" },
       ];
@@ -4705,6 +4707,39 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
               }
             }
           }, null, 2);
+        } else if (id === "claudecode") {
+          const anthropicUrl = info.anthropicBaseUrl || (baseUrl.endsWith("/v1") ? baseUrl.slice(0, -3) : baseUrl);
+          title.textContent = "Настройка Claude Code (CLI агент от Anthropic)";
+          steps.innerHTML = "<li>Claude Code поддерживает подключение через кастомный <code>ANTHROPIC_BASE_URL</code>.</li>"
+            + "<li>Задайте переменные окружения в терминале перед запуском <code>claude</code>:</li>"
+            + "<li>Поддерживаются модели: <code>qwen3.7-max</code>, <code>deepseek-chat</code>, <code>claude-3-7-sonnet-20250219</code>.</li>";
+          codeContent = "# Windows CMD:\\n"
+            + "set ANTHROPIC_BASE_URL=" + anthropicUrl + "\\n"
+            + "set ANTHROPIC_API_KEY=" + masterKey + "\\n"
+            + "claude --model qwen3.7-max\\n\\n"
+            + "# PowerShell:\\n"
+            + "$env:ANTHROPIC_BASE_URL='" + anthropicUrl + "'\\n"
+            + "$env:ANTHROPIC_API_KEY='" + masterKey + "'\\n"
+            + "claude --model qwen3.7-max\\n\\n"
+            + "# Linux / macOS Bash:\\n"
+            + "export ANTHROPIC_BASE_URL='" + anthropicUrl + "'\\n"
+            + "export ANTHROPIC_API_KEY='" + masterKey + "'\\n"
+            + "claude --model qwen3.7-max";
+        } else if (id === "antigravity") {
+          title.textContent = "Настройка Gemini CLI / Google Antigravity";
+          steps.innerHTML = "<li>Для использования моделей WebAIFreeAPI в Gemini CLI и Antigravity укажите локальный OpenAI-совместимый эндпоинт:</li>"
+            + "<li>Сервер <code>" + baseUrl + "</code> транслирует запросы во все доступные нейросети.</li>";
+          codeContent = "# Windows CMD:\\n"
+            + "set OPENAI_BASE_URL=" + baseUrl + "\\n"
+            + "set OPENAI_API_KEY=" + masterKey + "\\n\\n"
+            + "# PowerShell:\\n"
+            + "$env:OPENAI_BASE_URL='" + baseUrl + "'\\n"
+            + "$env:OPENAI_API_KEY='" + masterKey + "'\\n\\n"
+            + "# Linux / macOS Bash:\\n"
+            + "export OPENAI_BASE_URL='" + baseUrl + "'\\n"
+            + "export OPENAI_API_KEY='" + masterKey + "'\\n\\n"
+            + "# Доступные модели:\\n"
+            + "qwen3.7-max, deepseek-chat, deepseek-reasoner, chatgpt-auto, grok-3, mistral-large";
         }
 
         header.appendChild(title);
