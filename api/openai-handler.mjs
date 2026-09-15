@@ -82,18 +82,22 @@ async function getDeepSeekClient() {
 
 let chatgptClient = null;
 async function getChatGPTClient() {
-  if (chatgptClient) return chatgptClient;
-  const auth = readChatGPTAuth(CHATGPT_AUTH_FILE);
-  if (!auth?.accessToken) {
-    throw new Error("ChatGPT не подключён. Нажмите «Авторизоваться» на карточке ChatGPT в приложении.");
-  }
-  chatgptClient = new ChatGPTChatClient({
-    accessToken: auth.accessToken,
-    cookies: auth.cookies,
+  if (!chatgptClient) {
+    const { isChatGPTAuthUsable, readChatGPTAuth } = await import("../src/providers/chatgpt/auth-files.mjs");
+    const { CHATGPT_AUTH_FILE } = await import("../src/providers/chatgpt/config.mjs");
+    const auth = readChatGPTAuth(CHATGPT_AUTH_FILE);
+    if (!isChatGPTAuthUsable(auth)) {
+      throw new Error("ChatGPT не подключён. Нажмите «Авторизоваться» на карточке ChatGPT в приложении.");
+    }
+    const { ChatGPTChatClient } = await import("../src/providers/chatgpt/client.mjs");
+    chatgptClient = new ChatGPTChatClient({
+      accessToken: auth.accessToken,
+      cookies: auth.cookies,
     cookieHeader: auth.cookieHeader,
     userAgent: auth.userAgent,
     debug: Boolean(process.env.API_DEBUG),
   });
+  }
   return chatgptClient;
 }
 

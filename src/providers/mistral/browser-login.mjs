@@ -32,15 +32,37 @@ export async function loginMistralAndSave(timeoutMs = 5 * 60 * 1000) {
       }
 
       const currentUrl = page.url();
-      const notAuthPage = !currentUrl.includes("/login") && !currentUrl.includes("/auth");
+      let isChatMistral = false;
+      try {
+        const u = new URL(currentUrl);
+        isChatMistral = u.hostname === "chat.mistral.ai" &&
+          !u.pathname.startsWith("/auth") &&
+          !u.pathname.startsWith("/login") &&
+          !u.pathname.startsWith("/signin") &&
+          !u.pathname.startsWith("/callback");
+      } catch {}
 
-      // Проверяем куки на наличие реального токена/сессии (а не гостевого anonymousUser)
-      const hasAnon = lastCookies.some((c) => c.name === "anonymousUser");
-      const hasAuthToken = lastCookies.some((c) =>
-        c.name.includes("session-token") ||
+      if (!isChatMistral) {
+        // Пользователь находится на внешнем OAuth провайдере (Google, Microsoft, auth.mistral.ai)
+        // или в процессе редиректа. Окно закрывать НЕЛЬЗЯ.
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        continue;
+      }
+
+      // Фильтруем куки строго для домена mistral.ai
+      const mistralCookies = lastCookies.filter((c) =>
+        c.domain && /(^|\.)mistral\.ai$/i.test(c.domain)
+      );
+
+      // Проверяем куки на наличие реального токена/сессии (а не гостевого anonymousUser или intercom-session)
+      const hasAnon = mistralCookies.some((c) => c.name === "anonymousUser");
+      const hasAuthToken = mistralCookies.some((c) =>
         c.name === "mistral_session" ||
-        c.name === "token" ||
-        (c.name.includes("session") && !c.name.includes("anonymous"))
+        c.name.includes("session-token") ||
+        c.name === "app_session" ||
+        c.name === "__Secure-next-auth.session-token" ||
+        c.name === "authjs.session-token" ||
+        (c.name.includes("session") && !c.name.includes("intercom") && !c.name.includes("anonymous"))
       );
 
       // Проверяем интерфейс страницы: пропала ли кнопка входа и появился ли профиль
@@ -76,10 +98,10 @@ export async function loginMistralAndSave(timeoutMs = 5 * 60 * 1000) {
         hasUserProfile = domCheck.profile;
       } catch {}
 
-      const isActuallyLoggedIn = !hasSignInButton && (hasUserProfile || hasAuthToken);
+      const isActuallyLoggedIn = !hasAnon && !hasSignInButton && (hasUserProfile || hasAuthToken);
 
-      if (isActuallyLoggedIn && notAuthPage) {
-        fs.writeFileSync(MISTRAL_AUTH_FILE, JSON.stringify(lastCookies, null, 2));
+      if (isActuallyLoggedIn) {
+        fs.writeFileSync(MISTRAL_AUTH_FILE, JSON.stringify(mistralCookies, null, 2));
         await page.waitForTimeout(1500).catch(() => {});
         await context.close().catch(() => {});
         return { ok: true };
@@ -90,22 +112,6 @@ export async function loginMistralAndSave(timeoutMs = 5 * 60 * 1000) {
   } catch (err) {
     console.error("[mistral-login] Error during login session:", err);
   } finally {
-    if (lastCookies.length) {
-      const hasAnon = lastCookies.some((c) => c.name === "anonymousUser");
-      const hasAuthToken = lastCookies.some((c) =>
-        c.name.includes("session") ||
-        c.name.includes("auth") ||
-        c.name.includes("token") ||
-        c.name.includes("jwt") ||
-        c.name.includes("user_id") ||
-        c.name.includes("account")
-      );
-      if (hasAuthToken && !hasAnon) {
-        try {
-          fs.writeFileSync(MISTRAL_AUTH_FILE, JSON.stringify(lastCookies, null, 2));
-        } catch {}
-      }
-    }
     await context.close().catch(() => {});
   }
 

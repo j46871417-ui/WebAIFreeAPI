@@ -52,8 +52,11 @@ const BROWSER_IDLE_CLOSE_MS = getChatGPTBrowserIdleCloseDelay();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const DEFAULT_UA =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+const DEFAULT_UA = process.platform === "win32"
+  ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+  : (process.platform === "darwin"
+      ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+      : "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36");
 const NAV_TIMEOUT_MS = Number(process.env.CHATGPT_NAV_TIMEOUT_MS || 35_000);
 const READY_DELAY_MS = Number(process.env.CHATGPT_READY_DELAY_MS || 1500);
 const COMPOSER_TIMEOUT_MS = Number(process.env.CHATGPT_COMPOSER_TIMEOUT_MS || 25_000);
@@ -499,14 +502,17 @@ async function createProxy({ debug, adoptedSession = null }) {
 
       let session = null;
       try {
-        session = await page.evaluate(async () => {
-          const r = await fetch("/api/auth/session", {
-            credentials: "include",
-            headers: { Accept: "application/json" },
+        const u = new URL(page.url());
+        if (u.hostname === "chatgpt.com" || u.hostname.endsWith(".chatgpt.com")) {
+          session = await page.evaluate(async () => {
+            const r = await fetch("/api/auth/session", {
+              credentials: "include",
+              headers: { Accept: "application/json" },
+            });
+            if (!r.ok) return null;
+            return r.json();
           });
-          if (!r.ok) return null;
-          return r.json();
-        });
+        }
       } catch {}
 
       if (session?.error === "RefreshAccessTokenError") {
@@ -725,6 +731,10 @@ async function createProxy({ debug, adoptedSession = null }) {
   // Возвращает true/false/null (null — не удалось определить).
   async function checkLoggedIn() {
     try {
+      const u = new URL(page.url());
+      if (u.hostname !== "chatgpt.com" && !u.hostname.endsWith(".chatgpt.com")) {
+        return null;
+      }
       return await page.evaluate(async () => {
         try {
           const r = await fetch("/api/auth/session", {

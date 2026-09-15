@@ -9,6 +9,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { DEFAULT_AUTH_FILE, AUTH_DIR } from "../config.mjs";
 import { QWEN_AUTH_FILE } from "./qwen/config.mjs";
+import { isJwtActive } from "./qwen/auth-files.mjs";
 import { CHATGPT_AUTH_FILE } from "./chatgpt/config.mjs";
 import { isChatGPTAuthUsable, readChatGPTAuth } from "./chatgpt/auth-files.mjs";
 
@@ -21,7 +22,15 @@ export const PROVIDERS = {
     name: "DeepSeek",
     description: "chat.deepseek.com — основная модель + Code Agent + поиск",
     authFile: DEFAULT_AUTH_FILE,
-    hasAuth: () => fs.existsSync(DEFAULT_AUTH_FILE),
+    hasAuth: () => {
+      try {
+        if (!fs.existsSync(DEFAULT_AUTH_FILE) || fs.statSync(DEFAULT_AUTH_FILE).size <= 5) return false;
+        const raw = JSON.parse(fs.readFileSync(DEFAULT_AUTH_FILE, "utf-8"));
+        return Boolean(raw && (raw.userToken || raw.token) && Array.isArray(raw.cookies) && raw.cookies.some((c) => c.name === "ds_session_id"));
+      } catch {
+        return false;
+      }
+    },
     async login(args = {}) {
       const { loginAndSaveAuth } = await import("../browser/login.mjs");
       await loginAndSaveAuth(args.authFile || DEFAULT_AUTH_FILE);
@@ -30,9 +39,17 @@ export const PROVIDERS = {
   qwen: {
     id: "qwen",
     name: "Qwen",
-    description: "chat.qwen.ai — альтернатива от Alibaba (free, mongo щедрые лимиты)",
+    description: "chat.qwen.ai — альтернатива от Alibaba (free, много щедрые лимиты)",
     authFile: QWEN_AUTH_FILE,
-    hasAuth: () => fs.existsSync(QWEN_AUTH_FILE),
+    hasAuth: () => {
+      try {
+        if (!fs.existsSync(QWEN_AUTH_FILE) || fs.statSync(QWEN_AUTH_FILE).size <= 5) return false;
+        const raw = JSON.parse(fs.readFileSync(QWEN_AUTH_FILE, "utf-8"));
+        return Boolean(raw?.token && isJwtActive(raw.token));
+      } catch {
+        return false;
+      }
+    },
     async login() {
       const { loginQwenAndSave } = await import("./qwen/browser-login.mjs");
       await loginQwenAndSave();
@@ -56,7 +73,13 @@ export const PROVIDERS = {
     authFile: GROK_AUTH_FILE,
     hasAuth: () => {
       try {
-        return fs.existsSync(GROK_AUTH_FILE) && fs.statSync(GROK_AUTH_FILE).size > 5;
+        if (!fs.existsSync(GROK_AUTH_FILE) || fs.statSync(GROK_AUTH_FILE).size <= 5) return false;
+        const cookies = JSON.parse(fs.readFileSync(GROK_AUTH_FILE, "utf-8"));
+        if (!Array.isArray(cookies) || cookies.length === 0) return false;
+        return cookies.some((c) =>
+          c.domain && (/(^|\.)grok\.com$/i.test(c.domain) || /(^|\.)x\.com$/i.test(c.domain)) &&
+          (c.name.includes("sso") || c.name === "auth_token" || c.name === "twid" || c.name === "xai_session" || (c.name.includes("session") && !c.name.includes("intercom")))
+        );
       } catch {
         return false;
       }
@@ -76,17 +99,18 @@ export const PROVIDERS = {
         if (!fs.existsSync(MISTRAL_AUTH_FILE) || fs.statSync(MISTRAL_AUTH_FILE).size <= 5) return false;
         const cookies = JSON.parse(fs.readFileSync(MISTRAL_AUTH_FILE, "utf-8"));
         if (!Array.isArray(cookies) || cookies.length === 0) return false;
-        const hasAnon = cookies.some((c) => c.name === "anonymousUser");
-        const hasAuthToken = cookies.some((c) =>
-          c.name.includes("session") ||
-          c.name.includes("auth") ||
-          c.name.includes("token") ||
-          c.name.includes("jwt") ||
-          c.name.includes("user_id") ||
-          c.name.includes("account")
+        const mistralCookies = cookies.filter((c) => c.domain && /(^|\.)mistral\.ai$/i.test(c.domain));
+        const hasAnon = mistralCookies.some((c) => c.name === "anonymousUser");
+        if (hasAnon) return false;
+        const hasAuthToken = mistralCookies.some((c) =>
+          c.name === "mistral_session" ||
+          c.name.includes("session-token") ||
+          c.name === "app_session" ||
+          c.name === "__Secure-next-auth.session-token" ||
+          c.name === "authjs.session-token" ||
+          (c.name.includes("session") && !c.name.includes("intercom") && !c.name.includes("anonymous"))
         );
-        if (hasAnon && !hasAuthToken) return false;
-        return cookies.length > 0;
+        return hasAuthToken;
       } catch {
         return false;
       }

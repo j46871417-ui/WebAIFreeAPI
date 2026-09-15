@@ -94,6 +94,25 @@ async function createMistralBrowserProxy({ debug = false } = {}) {
       await page.waitForTimeout(2000);
     }
     await dismissModals();
+
+    const pageState = await page.evaluate(() => {
+      const title = document.title || "";
+      if (title.includes("Один момент") || title.includes("Just a moment") || document.querySelector("#challenge-running")) {
+        return "Сайт chat.mistral.ai заблокирован проверкой Cloudflare. Требуется повторный вход через кнопку «Авторизоваться».";
+      }
+      const buttons = Array.from(document.querySelectorAll("button, a"));
+      const hasSignIn = buttons.some((b) => {
+        const t = (b.innerText || b.getAttribute("aria-label") || "").toLowerCase().trim();
+        return t === "sign in" || t === "log in" || t === "войти";
+      });
+      if (hasSignIn) {
+        return "Сессия Mistral не авторизована (отображается кнопка входа). Нажмите «Авторизоваться» на карточке модели.";
+      }
+      return null;
+    }).catch(() => null);
+    if (pageState) {
+      throw new Error(`Mistral: ${pageState}`);
+    }
   }
 
   async function findComposer() {
@@ -165,10 +184,6 @@ async function createMistralBrowserProxy({ debug = false } = {}) {
           '.prose, [data-message-author-role="assistant"], div[class*="message"], div[class*="response"]'
         );
         if (!messageContainers.length) {
-          const allP = document.querySelectorAll('main p, [role="main"] p');
-          if (allP.length) {
-            return Array.from(allP).map(p => p.innerText).join("\n");
-          }
           return "";
         }
         const last = messageContainers[messageContainers.length - 1];

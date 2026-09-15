@@ -57,7 +57,7 @@ async function launchShellContext(chromium, appUrl) {
     try {
       return await chromium.launchPersistentContext(APP_WINDOW_PROFILE, {
         ...launchOptions,
-        channel: "chrome",
+        channel: "msedge",
       });
     } catch {
       throw bundledError;
