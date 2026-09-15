@@ -96,6 +96,98 @@ import { createFileLogger } from "../logging/logger.mjs";
 const appLogger = createFileLogger({ component: "window-server" });
 const STREAM_SAVE_THROTTLE_MS = 1000;
 
+export function buildOpenCodeConfig({ port = 4317, keys = {} } = {}) {
+  return {
+    $schema: "https://opencode.ai/config.json",
+    model: "ai-free-qwen/qwen3.7-max",
+    small_model: "ai-free-deepseek/deepseek-chat",
+    provider: {
+      "ai-free-qwen": {
+        npm: "@ai-sdk/openai-compatible",
+        name: "WebAIFreeAPI (Qwen)",
+        options: {
+          baseURL: `http://127.0.0.1:${port}/v1`,
+          apiKey: keys.qwen,
+        },
+        models: {
+          "qwen3.7-max": {
+            name: "Qwen 3.7 Max",
+            tools: true,
+            limit: { context: 128000, output: 8192 },
+          },
+          "qwen3.7-plus": {
+            name: "Qwen 3.7 Plus",
+            limit: { context: 128000, output: 8192 },
+          },
+          "qwen3-coder-plus": {
+            name: "Qwen 3 Coder Plus",
+            tools: true,
+            limit: { context: 128000, output: 8192 },
+          },
+        },
+      },
+      "ai-free-deepseek": {
+        npm: "@ai-sdk/openai-compatible",
+        name: "WebAIFreeAPI (DeepSeek)",
+        options: {
+          baseURL: `http://127.0.0.1:${port}/v1`,
+          apiKey: keys.deepseek,
+        },
+        models: {
+          "deepseek-chat": {
+            name: "DeepSeek Chat",
+            tools: true,
+            limit: { context: 128000, output: 8192 },
+          },
+          "deepseek-reasoner": {
+            name: "DeepSeek Reasoner (R1)",
+            reasoning: true,
+            tools: true,
+            limit: { context: 128000, output: 8192 },
+          },
+        },
+      },
+      "ai-free-chatgpt": {
+        npm: "@ai-sdk/openai-compatible",
+        name: "WebAIFreeAPI (ChatGPT)",
+        options: {
+          baseURL: `http://127.0.0.1:${port}/v1`,
+          apiKey: keys.chatgpt,
+        },
+        models: {
+          "gpt-5.5-instant": { name: "GPT-5.5 Instant", limit: { context: 128000, output: 8192 } },
+          "gpt-4o": { name: "GPT-4o", limit: { context: 128000, output: 4096 } },
+          "o3-mini": { name: "o3 mini", reasoning: true, limit: { context: 128000, output: 8192 } },
+        },
+      },
+      "ai-free-grok": {
+        npm: "@ai-sdk/openai-compatible",
+        name: "WebAIFreeAPI (Grok)",
+        options: {
+          baseURL: `http://127.0.0.1:${port}/v1`,
+          apiKey: keys.grok,
+        },
+        models: {
+          "grok-3": { name: "Grok 3", limit: { context: 128000, output: 8192 } },
+          "grok-3-reasoner": { name: "Grok 3 (Thinking)", reasoning: true, limit: { context: 128000, output: 8192 } },
+        },
+      },
+      "ai-free-mistral": {
+        npm: "@ai-sdk/openai-compatible",
+        name: "WebAIFreeAPI (Mistral)",
+        options: {
+          baseURL: `http://127.0.0.1:${port}/v1`,
+          apiKey: keys.mistral,
+        },
+        models: {
+          "mistral-large": { name: "Mistral Large", limit: { context: 128000, output: 8192 } },
+          "pixtral-large": { name: "Pixtral Large", vision: true, limit: { context: 128000, output: 8192 } },
+        },
+      },
+    },
+  };
+}
+
 export function isChatGPTLoginRecoveryRequired(error) {
   const message = String(error?.message || error || "");
   return Boolean(error?.needsChatGPTLogin)
@@ -1347,96 +1439,7 @@ export async function runWindowApp({
             path.join(homedir, ".opencode"),
             path.join(appData, "opencode"),
           ];
-          const keys = ensureAllOpenAICompatApiKeys();
-          const opencodeConfig = {
-            $schema: "https://opencode.ai/config.json",
-            model: "ai-free-qwen/qwen3.7-max",
-            small_model: "ai-free-deepseek/deepseek-chat",
-            provider: {
-              "ai-free-qwen": {
-                npm: "@ai-sdk/openai-compatible",
-                name: "WebAIFreeAPI (Qwen)",
-                options: {
-                  baseURL: `http://127.0.0.1:${port}/v1`,
-                  apiKey: keys.qwen,
-                },
-                models: {
-                  "qwen3.7-max": {
-                    name: "Qwen 3.7 Max",
-                    tools: true,
-                    limit: { context: 128000, output: 8192 },
-                  },
-                  "qwen3.7-plus": {
-                    name: "Qwen 3.7 Plus",
-                    limit: { context: 128000, output: 8192 },
-                  },
-                  "qwen3-coder-plus": {
-                    name: "Qwen 3 Coder Plus",
-                    tools: true,
-                    limit: { context: 128000, output: 8192 },
-                  },
-                },
-              },
-              "ai-free-deepseek": {
-                npm: "@ai-sdk/openai-compatible",
-                name: "WebAIFreeAPI (DeepSeek)",
-                options: {
-                  baseURL: `http://127.0.0.1:${port}/v1`,
-                  apiKey: keys.deepseek,
-                },
-                models: {
-                  "deepseek-chat": {
-                    name: "DeepSeek Chat",
-                    tools: true,
-                    limit: { context: 128000, output: 8192 },
-                  },
-                  "deepseek-reasoner": {
-                    name: "DeepSeek Reasoner (R1)",
-                    reasoning: true,
-                    tools: true,
-                    limit: { context: 128000, output: 8192 },
-                  },
-                },
-              },
-              "ai-free-chatgpt": {
-                npm: "@ai-sdk/openai-compatible",
-                name: "WebAIFreeAPI (ChatGPT)",
-                options: {
-                  baseURL: `http://127.0.0.1:${port}/v1`,
-                  apiKey: keys.chatgpt,
-                },
-                models: {
-                  "gpt-5.5-instant": { name: "GPT-5.5 Instant", limit: { context: 128000, output: 8192 } },
-                  "gpt-4o": { name: "GPT-4o", limit: { context: 128000, output: 4096 } },
-                  "o3-mini": { name: "o3 mini", reasoning: true, limit: { context: 128000, output: 8192 } },
-                },
-              },
-              "ai-free-grok": {
-                npm: "@ai-sdk/openai-compatible",
-                name: "WebAIFreeAPI (Grok)",
-                options: {
-                  baseURL: `http://127.0.0.1:${port}/v1`,
-                  apiKey: keys.grok,
-                },
-                models: {
-                  "grok-3": { name: "Grok 3", limit: { context: 128000, output: 8192 } },
-                  "grok-3-reasoner": { name: "Grok 3 (Thinking)", reasoning: true, limit: { context: 128000, output: 8192 } },
-                },
-              },
-              "ai-free-mistral": {
-                npm: "@ai-sdk/openai-compatible",
-                name: "WebAIFreeAPI (Mistral)",
-                options: {
-                  baseURL: `http://127.0.0.1:${port}/v1`,
-                  apiKey: keys.mistral,
-                },
-                models: {
-                  "mistral-large": { name: "Mistral Large", limit: { context: 128000, output: 8192 } },
-                  "pixtral-large": { name: "Pixtral Large", vision: true, limit: { context: 128000, output: 8192 } },
-                },
-              },
-            },
-          };
+          const opencodeConfig = buildOpenCodeConfig({ port, keys });
 
           const configuredPaths = [];
           for (const dir of opencodeDirs) {
