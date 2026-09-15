@@ -1,1 +1,0 @@
-fix: enable grok and mistral conversation creation and chat in desktop app  
