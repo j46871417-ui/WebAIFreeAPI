@@ -1356,6 +1356,23 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       newChatProviderPicker.innerHTML = "";
       for (const id of Object.keys(PROVIDER_INFO)) {
         const info = PROVIDER_INFO[id];
+        if (id === "gemini") {
+          const btn = document.createElement("div");
+          btn.setAttribute("role", "button");
+          btn.tabIndex = 0;
+          btn.className = "providerOption gemini disabled";
+          btn.dataset.provider = "gemini";
+          btn.dataset.authed = "0";
+          btn.style.opacity = "0.75";
+          btn.style.cursor = "not-allowed";
+          btn.title = "Провайдер Gemini находится в разработке";
+          btn.innerHTML =
+            '<div class="providerOptionTitle">GM Gemini <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#e65100;color:#fff;margin-left:6px;font-weight:bold;">В разработке</span></div>' +
+            '<div class="providerOptionSub">В разработке</div>' +
+            '<button type="button" class="reconnectLink" disabled style="opacity:0.7;cursor:not-allowed;background:transparent;border:1px dashed #e65100;color:#ff9800;">В разработке</button>';
+          newChatProviderPicker.appendChild(btn);
+          continue;
+        }
         const isAuthed = availableProviders.includes(id);
         const btn = document.createElement("div");
         btn.setAttribute("role", "button");
@@ -1414,6 +1431,12 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       if (!opt) return;
       const id = opt.dataset.provider;
 
+      if (id === "gemini") {
+        event.stopPropagation();
+        setStatus("⚠️ Провайдер Gemini находится в разработке и временно недоступен", true);
+        return;
+      }
+
       // Если провайдер еще не авторизован — любой клик по нему запускает нативное окно входа
       if (opt.dataset.authed !== "1") {
         event.stopPropagation();
@@ -1439,6 +1462,11 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       if (event.key !== "Enter" && event.key !== " ") return;
       const opt = event.target.closest(".providerOption");
       if (!opt || event.target.closest(".reconnectLink")) return;
+      if (opt.dataset.provider === "gemini") {
+        event.preventDefault();
+        setStatus("⚠️ Провайдер Gemini находится в разработке и временно недоступен", true);
+        return;
+      }
       event.preventDefault();
       opt.click();
     });
@@ -1490,6 +1518,10 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       }
       const displayForChat = displayParts.join("\\n\\n");
       const sendProvider = activeConversation.provider || "deepseek";
+      if (sendProvider === "gemini") {
+        setStatus("⚠️ Провайдер Gemini находится в разработке и временно недоступен", true);
+        return;
+      }
       const sentDraftText = messageInput.value;
       const sentAttachments = attachments;
       const sentConvId = activeConversation.id;
@@ -2424,8 +2456,18 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       setComposerEnabled(!isConversationSending(conversation.id));
       messages.innerHTML = "";
 
+      if (prov === "gemini") {
+        const banner = document.createElement("div");
+        banner.className = "geminiDevBanner";
+        banner.style.cssText = "background:rgba(255,152,0,0.12);border:1px solid #ff9800;border-radius:8px;padding:14px 18px;margin:16px 16px 8px;display:flex;align-items:center;gap:12px;color:#ffb74d;";
+        banner.innerHTML = '<span style="font-size:24px;line-height:1;">🚧</span><div><strong style="display:block;color:#ffa726;font-size:14px;margin-bottom:3px;">Провайдер в разработке</strong><span style="font-size:13px;color:#ddd;">Поддержка Gemini временно отключена и находится в разработке. Пожалуйста, используйте DeepSeek, Qwen, ChatGPT, Grok, Mistral или Claude.</span></div>';
+        messages.appendChild(banner);
+      }
+
       if (!conversation.messages.length) {
-        messages.innerHTML = '<div class="empty">' + t("app.firstMessage") + '</div>';
+        if (prov !== "gemini") {
+          messages.innerHTML = '<div class="empty">' + t("app.firstMessage") + '</div>';
+        }
         return;
       }
 
@@ -2908,6 +2950,10 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
         messageInput.placeholder = t("composer.chooseChat");
         return;
       }
+      if (activeConversation.provider === "gemini") {
+        messageInput.placeholder = "Провайдер Gemini в разработке — отправка отключена";
+        return;
+      }
       if (activeConversation.coderMode === true) {
         messageInput.placeholder = t("composer.coderActive");
         return;
@@ -2918,6 +2964,13 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
     }
 
     function setComposerEnabled(enabled) {
+      if (activeConversation?.provider === "gemini") {
+        messageInput.disabled = true;
+        sendBtn.disabled = true;
+        messageInput.placeholder = "Провайдер Gemini в разработке — отправка отключена";
+        updateStopButton();
+        return;
+      }
       updateMessagePlaceholder();
       const isSending = isConversationSending();
       const canType = Boolean(enabled && activeConversation && !isSending);

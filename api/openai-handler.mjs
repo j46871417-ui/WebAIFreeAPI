@@ -541,19 +541,7 @@ async function handleChatCompletions(req, res) {
       return sendJson(res, toOpenAIResponse(modelName, result.text, body.tools));
     }
     if (mapping.provider === "gemini") {
-      const client = await getGeminiClient();
-      if (body.stream === true) {
-        return handleGeminiStream(client, prompt, modelName, mapping.model, res, {
-          tools: body.tools,
-          signal: abortController.signal,
-        });
-      }
-      const result = await client.complete({
-        prompt,
-        model: mapping.model,
-        signal: abortController.signal,
-      });
-      return sendJson(res, toOpenAIResponse(modelName, result.text, body.tools));
+      return sendError(res, 400, "Провайдер Gemini находится в разработке и временно недоступен.");
     }
     return sendError(res, 500, `Unknown provider: ${mapping.provider}`);
   } catch (e) {

@@ -168,14 +168,15 @@ export const PROVIDER_CATALOG = {
     id: "gemini",
     label: "Gemini",
     icon: "GM",
-    sub: "gemini.google.com",
+    sub: "В разработке",
+    inDevelopment: true,
     defaultMode: "default",
     defaultModel: "gemini-3.1-pro",
     modes: [
       {
         id: "default",
-        title: "Gemini",
-        sub: "Google DeepMind",
+        title: "Gemini (В разработке)",
+        sub: "В разработке",
         model: "gemini-3.1-pro",
       },
     ],
