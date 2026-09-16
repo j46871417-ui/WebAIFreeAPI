@@ -4649,9 +4649,9 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
                   "apiKey": geminiKey
                 },
                 "models": {
-                  "gemini-2.5-pro": { "name": "Gemini 2.5 Pro", "tools": true },
-                  "gemini-2.5-flash": { "name": "Gemini 2.5 Flash", "tools": true },
-                  "gemini-2.0-flash": { "name": "Gemini 2.0 Flash", "tools": true }
+                  "gemini-3.1-pro": { "name": "Gemini 3.1 Pro", "tools": true },
+                  "gemini-3.8-flash": { "name": "Gemini 3.8 Flash", "tools": true },
+                  "gemini-3.5-flash-lite": { "name": "Gemini 3.5 Flash Lite", "tools": true }
                 }
               }
             }
@@ -4698,7 +4698,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
             + "gpt-5.5-instant, gpt-4o, o3-mini\\n"
             + "grok-3, grok-3-reasoner\\n"
             + "mistral-large, pixtral-large\\n"
-            + "claude-3-7-sonnet, gemini-2.5-pro";
+            + "claude-3-7-sonnet, gemini-3.1-pro, gemini-3.8-flash, gemini-3.5-flash-lite";
         } else if (id === "aider") {
           title.textContent = "Настройка Aider (терминальный кодинг-агент)";
           steps.innerHTML = "<li>Задайте переменные окружения перед запуском Aider в терминале:</li>";
@@ -4770,7 +4770,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
             + "export OPENAI_BASE_URL='" + baseUrl + "'\\n"
             + "export OPENAI_API_KEY='" + masterKey + "'\\n\\n"
             + "# Доступные модели:\\n"
-            + "qwen3.7-max, deepseek-chat, deepseek-reasoner, chatgpt-auto, grok-3, mistral-large, claude-3-7-sonnet, gemini-2.5-pro";
+            + "qwen3.7-max, deepseek-chat, deepseek-reasoner, chatgpt-auto, grok-3, mistral-large, claude-3-7-sonnet, gemini-3.1-pro";
         }
 
         header.appendChild(title);

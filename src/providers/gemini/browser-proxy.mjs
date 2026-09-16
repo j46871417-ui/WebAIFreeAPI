@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { GEMINI_AUTH_FILE, GEMINI_BASE_URL, GEMINI_BROWSER_PROFILE } from "./config.mjs";
+import { GEMINI_AUTH_FILE, GEMINI_BASE_URL, GEMINI_BROWSER_PROFILE, GEMINI_DEFAULT_MODEL } from "./config.mjs";
 import { launchPersistentDeepSeekContext } from "../../browser/launch.mjs";
 
 let sharedProxyPromise = null;
@@ -30,16 +30,40 @@ export function scheduleGeminiBrowserIdleClose(timeoutMs = 120_000) {
   if (typeof idleTimer.unref === "function") idleTimer.unref();
 }
 
+const DEFAULT_UA = process.platform === "win32"
+  ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+  : "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
+
 async function createGeminiBrowserProxy({ debug = false } = {}) {
   const { getChatGPTChromium } = await import("../chatgpt/engine.mjs");
   const chromium = await getChatGPTChromium();
 
-  const headless = process.env.GEMINI_HEADLESS !== "0";
+  const isHeadedDebug = process.env.GEMINI_HEADLESS === "0";
+  const offscreen = !isHeadedDebug;
+  const windowArgs = offscreen
+    ? [
+        "--window-position=-24000,-24000",
+        "--window-size=1280,900",
+        "--start-minimized",
+      ]
+    : [];
+
   const context = await launchPersistentDeepSeekContext(
     chromium,
     GEMINI_BROWSER_PROFILE,
-    headless
+    false,
+    {
+      args: windowArgs,
+      ignoreDefaultArgs: ["--enable-automation"],
+      userAgent: DEFAULT_UA,
+      locale: "ru-RU",
+      viewport: { width: 1280, height: 900 },
+    }
   );
+
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  });
 
   if (fs.existsSync(GEMINI_AUTH_FILE)) {
     try {
@@ -73,7 +97,12 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
   async function ensurePageReady() {
     const currentUrl = page.url();
     if (!currentUrl.includes("gemini.google.com")) {
-      await page.goto(GEMINI_BASE_URL, { waitUntil: "domcontentloaded", timeout: 45_000 });
+      try {
+        await page.goto(GEMINI_BASE_URL, { waitUntil: "domcontentloaded", timeout: 45_000 });
+      } catch (err) {
+        await page.waitForTimeout(1500);
+        await page.goto(GEMINI_BASE_URL, { waitUntil: "domcontentloaded", timeout: 45_000 }).catch(() => {});
+      }
       await page.waitForTimeout(2000);
     }
     await dismissModals();
@@ -97,6 +126,34 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
     if (pageState) {
       throw new Error("Gemini: " + pageState);
     }
+  }
+
+  async function selectGeminiModel(modelId) {
+    if (!modelId) return;
+    try {
+      const { findProviderModel } = await import("../model-catalog.mjs");
+      const model = findProviderModel("gemini", modelId);
+      const labels = Array.isArray(model?.webLabels) ? model.webLabels : [];
+      if (!labels.length) return;
+
+      const picker = page.locator('button[aria-haspopup="menu"], [data-test-id*="model"], [aria-label*="модель" i], [aria-label*="model" i]').first();
+      if (!(await picker.count().catch(() => 0))) return;
+      const current = String(await picker.innerText().catch(() => "")).trim().toLowerCase();
+      if (labels.some((l) => current.includes(l.toLowerCase()))) return;
+
+      await picker.click({ timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(300);
+
+      for (const label of labels) {
+        const item = page.locator(`[role="menuitem"]:has-text("${label}"), [role="option"]:has-text("${label}"), button:has-text("${label}")`).first();
+        if (await item.count().catch(() => 0) && await item.isVisible().catch(() => false)) {
+          await item.click({ timeout: 5000 });
+          await page.waitForTimeout(500);
+          return;
+        }
+      }
+      await page.keyboard.press("Escape").catch(() => {});
+    } catch {}
   }
 
   async function findComposer() {
@@ -124,6 +181,7 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
   async function sendChat({ prompt, model = null, onDelta = null, signal = null }) {
     if (idleTimer) clearTimeout(idleTimer);
     await ensurePageReady();
+    await selectGeminiModel(model);
 
     const composer = await findComposer();
     if (!composer) {
@@ -207,7 +265,7 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
 
     return {
       text: lastText,
-      model: model || "gemini-2.5-pro",
+      model: model || GEMINI_DEFAULT_MODEL,
     };
   }
 

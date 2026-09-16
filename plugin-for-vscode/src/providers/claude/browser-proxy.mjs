@@ -30,16 +30,40 @@ export function scheduleClaudeBrowserIdleClose(timeoutMs = 120_000) {
   if (typeof idleTimer.unref === "function") idleTimer.unref();
 }
 
+const DEFAULT_UA = process.platform === "win32"
+  ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+  : "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
+
 async function createClaudeBrowserProxy({ debug = false } = {}) {
   const { getChatGPTChromium } = await import("../chatgpt/engine.mjs");
   const chromium = await getChatGPTChromium();
 
-  const headless = process.env.CLAUDE_HEADLESS !== "0";
+  const isHeadedDebug = process.env.CLAUDE_HEADLESS === "0";
+  const offscreen = !isHeadedDebug;
+  const windowArgs = offscreen
+    ? [
+        "--window-position=-24000,-24000",
+        "--window-size=1280,900",
+        "--start-minimized",
+      ]
+    : [];
+
   const context = await launchPersistentDeepSeekContext(
     chromium,
     CLAUDE_BROWSER_PROFILE,
-    headless
+    false,
+    {
+      args: windowArgs,
+      ignoreDefaultArgs: ["--enable-automation"],
+      userAgent: DEFAULT_UA,
+      locale: "ru-RU",
+      viewport: { width: 1280, height: 900 },
+    }
   );
+
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  });
 
   if (fs.existsSync(CLAUDE_AUTH_FILE)) {
     try {

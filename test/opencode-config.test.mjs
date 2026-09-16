@@ -39,7 +39,7 @@ describe("OpenCode configuration generator", () => {
     }
 
     assert.ok(providers["ai-free-claude"].models["claude-3-7-sonnet"]);
-    assert.ok(providers["ai-free-gemini"].models["gemini-2.5-pro"]);
+    assert.ok(providers["ai-free-gemini"].models["gemini-3.1-pro"]);
 
     assert.equal(providers["ai-free-qwen"].options.apiKey, "sk-qwen-test");
     assert.equal(providers["ai-free-deepseek"].options.apiKey, "sk-deepseek-test");
