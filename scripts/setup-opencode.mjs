@@ -188,9 +188,9 @@ const opencodeConfig = {
         apiKey: settings.apiKeys.gemini,
       },
       models: {
-        "gemini-2.5-pro": { name: "Gemini 2.5 Pro", reasoning: true, limit: { context: 1000000, output: 8192 } },
-        "gemini-2.5-flash": { name: "Gemini 2.5 Flash", limit: { context: 1000000, output: 8192 } },
-        "gemini-2.0-flash": { name: "Gemini 2.0 Flash", limit: { context: 1000000, output: 8192 } },
+        "gemini-3.1-pro": { name: "Gemini 3.1 Pro", reasoning: true, limit: { context: 1000000, output: 8192 } },
+        "gemini-3.8-flash": { name: "Gemini 3.8 Flash", limit: { context: 1000000, output: 8192 } },
+        "gemini-3.5-flash-lite": { name: "Gemini 3.5 Flash Lite", limit: { context: 1000000, output: 8192 } },
       },
     },
   },
