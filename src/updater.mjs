@@ -197,6 +197,7 @@ async function readRemotePackage() {
     const apiRes = await fetch(RELEASES_API_URL, {
       headers: { "User-Agent": "AI-Free-Updater", "Accept": "application/vnd.github+json" },
       cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
     });
     if (apiRes.ok) {
       const release = await apiRes.json();
@@ -213,7 +214,10 @@ async function readRemotePackage() {
     }
   } catch {}
 
-  const response = await fetch(RAW_PACKAGE_URL, { cache: "no-store" });
+  const response = await fetch(RAW_PACKAGE_URL, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(5_000),
+  });
   if (!response.ok) {
     throw new Error(`GitHub вернул HTTP ${response.status}`);
   }
@@ -227,7 +231,7 @@ async function readRemotePackage() {
 
 async function readLocalCommit(root, gitCommand) {
   try {
-    return await runGit(["rev-parse", "HEAD"], { cwd: root, gitCommand });
+    return await runGit(["rev-parse", "HEAD"], { cwd: root, gitCommand, timeout: 5_000 });
   } catch {
     return "";
   }
@@ -238,7 +242,7 @@ async function readRemoteCommit(root, gitCommand) {
     const output = await runGit(["ls-remote", "origin", `refs/heads/${DEFAULT_BRANCH}`], {
       cwd: root,
       gitCommand,
-      timeout: 120_000,
+      timeout: 5_000,
     });
     return output.split(/\s+/)[0] || "";
   } catch {

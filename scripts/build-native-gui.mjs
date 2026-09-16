@@ -88,22 +88,30 @@ try {
   const stat = fs.statSync(outputExe);
   console.log(`\nCompilation successful! Binary: ${outputExe} (${(stat.size / 1024).toFixed(1)} KB)`);
 
+  const safeCopy = (src, dest) => {
+    try {
+      fs.copyFileSync(src, dest);
+    } catch (e) {
+      if (e.code !== "EBUSY") throw e;
+    }
+  };
+
   // Copy WebView2 DLLs
-  fs.copyFileSync(path.join(rootDir, "webview2-sdk", "runtimes", "win-x64", "native", "WebView2Loader.dll"), path.join(binDir, "WebView2Loader.dll"));
-  fs.copyFileSync(path.join(rootDir, "webview2-sdk", "lib", "net45", "Microsoft.Web.WebView2.Core.dll"), path.join(binDir, "Microsoft.Web.WebView2.Core.dll"));
-  fs.copyFileSync(path.join(rootDir, "webview2-sdk", "lib", "net45", "Microsoft.Web.WebView2.WinForms.dll"), path.join(binDir, "Microsoft.Web.WebView2.WinForms.dll"));
+  safeCopy(path.join(rootDir, "webview2-sdk", "runtimes", "win-x64", "native", "WebView2Loader.dll"), path.join(binDir, "WebView2Loader.dll"));
+  safeCopy(path.join(rootDir, "webview2-sdk", "lib", "net45", "Microsoft.Web.WebView2.Core.dll"), path.join(binDir, "Microsoft.Web.WebView2.Core.dll"));
+  safeCopy(path.join(rootDir, "webview2-sdk", "lib", "net45", "Microsoft.Web.WebView2.WinForms.dll"), path.join(binDir, "Microsoft.Web.WebView2.WinForms.dll"));
   
   // Copy to dist
   const distExe = path.join(distDir, "WebAIFreeAPI.exe");
-  fs.copyFileSync(outputExe, distExe);
-  fs.copyFileSync(path.join(binDir, "WebView2Loader.dll"), path.join(distDir, "WebView2Loader.dll"));
-  fs.copyFileSync(path.join(binDir, "Microsoft.Web.WebView2.Core.dll"), path.join(distDir, "Microsoft.Web.WebView2.Core.dll"));
-  fs.copyFileSync(path.join(binDir, "Microsoft.Web.WebView2.WinForms.dll"), path.join(distDir, "Microsoft.Web.WebView2.WinForms.dll"));
+  safeCopy(outputExe, distExe);
+  safeCopy(path.join(binDir, "WebView2Loader.dll"), path.join(distDir, "WebView2Loader.dll"));
+  safeCopy(path.join(binDir, "Microsoft.Web.WebView2.Core.dll"), path.join(distDir, "Microsoft.Web.WebView2.Core.dll"));
+  safeCopy(path.join(binDir, "Microsoft.Web.WebView2.WinForms.dll"), path.join(distDir, "Microsoft.Web.WebView2.WinForms.dll"));
 
   const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8"));
   const version = pkg.version || "1.5.0";
   const versionedExe = path.join(distDir, `WebAIFreeAPI_v${version}.exe`);
-  fs.copyFileSync(outputExe, versionedExe);
+  safeCopy(outputExe, versionedExe);
   console.log(`Copied to: ${distExe} and ${versionedExe}`);
 } catch (err) {
   console.error("Compilation failed:", err.message);
