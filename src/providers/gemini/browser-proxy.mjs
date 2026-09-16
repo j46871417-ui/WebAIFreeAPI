@@ -131,22 +131,32 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
   async function selectGeminiModel(modelId) {
     if (!modelId) return;
     try {
-      const { findProviderModel } = await import("../model-catalog.mjs");
-      const model = findProviderModel("gemini", modelId);
-      const labels = Array.isArray(model?.webLabels) ? model.webLabels : [];
-      if (!labels.length) return;
-
-      const picker = page.locator('button[aria-haspopup="menu"], [data-test-id*="model"], [aria-label*="модель" i], [aria-label*="model" i]').first();
+      const picker = page.locator('button[data-test-id="bard-mode-menu-button"]').first();
       if (!(await picker.count().catch(() => 0))) return;
+
       const current = String(await picker.innerText().catch(() => "")).trim().toLowerCase();
-      if (labels.some((l) => current.includes(l.toLowerCase()))) return;
+      let targetPattern = "";
+      if (modelId.includes("flash-lite") || modelId.includes("lite")) {
+        targetPattern = "flash-lite";
+      } else if (modelId.includes("flash")) {
+        targetPattern = "3.8 flash";
+      } else if (modelId.includes("pro")) {
+        targetPattern = "3.1 pro";
+      }
+
+      if (targetPattern && current.includes(targetPattern)) {
+        return;
+      }
 
       await picker.click({ timeout: 5000 }).catch(() => {});
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(400);
 
-      for (const label of labels) {
-        const item = page.locator(`[role="menuitem"]:has-text("${label}"), [role="option"]:has-text("${label}"), button:has-text("${label}")`).first();
-        if (await item.count().catch(() => 0) && await item.isVisible().catch(() => false)) {
+      const menuItems = page.locator('gem-menu-item, [data-test-id^="bard-mode-option"]');
+      const count = await menuItems.count().catch(() => 0);
+      for (let i = 0; i < count; i++) {
+        const item = menuItems.nth(i);
+        const text = String(await item.innerText().catch(() => "")).toLowerCase();
+        if (targetPattern && text.includes(targetPattern)) {
           await item.click({ timeout: 5000 });
           await page.waitForTimeout(500);
           return;
@@ -158,9 +168,10 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
 
   async function findComposer() {
     const selectors = [
+      'div.ql-editor',
+      'rich-textarea [contenteditable="true"]',
       'rich-textarea div[contenteditable="true"]',
       'div[contenteditable="true"][role="textbox"]',
-      'div[contenteditable="true"]',
       'textarea'
     ];
     for (let attempt = 0; attempt < 25; attempt++) {
@@ -185,7 +196,7 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
 
     const composer = await findComposer();
     if (!composer) {
-      throw new Error("Gemini: поле ввода сообщения не найдено на странице. Возможно, требуется авторизация через кнопку «Авторизоваться» в карточке модели.");
+      throw new Error("Gemini: поле ввода сообщения не найдено на странице. Проверьте авторизацию.");
     }
 
     try {
@@ -197,12 +208,44 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
     if (typeof composer?.focus === "function") {
       await composer.focus().catch(() => {});
     }
-    await page.keyboard.insertText(prompt);
-    await page.waitForTimeout(300);
 
-    const submitBtn = page.locator('button[aria-label*="Отправить" i], button[aria-label*="Send" i], button.send-button').last();
-    if (await submitBtn.count().catch(() => 0) && await submitBtn.isVisible().catch(() => false)) {
-      await submitBtn.click({ force: true, timeout: 2000 }).catch(async () => {
+    await page.keyboard.press("Control+A");
+    await page.keyboard.press("Backspace");
+
+    if (prompt.length > 200) {
+      await page.evaluate((text) => {
+        const el = document.querySelector('div.ql-editor, rich-textarea [contenteditable="true"]');
+        if (!el) return;
+        el.focus();
+        const dt = new DataTransfer();
+        dt.setData("text/plain", text);
+        const ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+        el.dispatchEvent(ev);
+      }, prompt);
+      const hasContent = await page.evaluate(() => {
+        const el = document.querySelector('div.ql-editor, rich-textarea [contenteditable="true"]');
+        return Boolean(el && el.innerText.trim());
+      });
+      if (!hasContent) {
+        await page.keyboard.type(prompt, { delay: 1 });
+      }
+    } else {
+      await page.keyboard.type(prompt, { delay: 1 });
+    }
+    await page.waitForTimeout(400);
+
+    let submitBtn = null;
+    for (let i = 0; i < 15; i++) {
+      const btn = page.locator('button[aria-label*="Отправить" i], button[aria-label*="Send" i], .send-button button, gem-icon-button.send-button').first();
+      if (await btn.count().catch(() => 0) && await btn.isVisible().catch(() => false)) {
+        submitBtn = btn;
+        break;
+      }
+      await page.waitForTimeout(200);
+    }
+
+    if (submitBtn) {
+      await submitBtn.click({ timeout: 5000 }).catch(async () => {
         await page.keyboard.press("Enter");
       });
     } else {
@@ -214,7 +257,7 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
     const startTime = Date.now();
     const timeoutMs = 150_000;
 
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(800);
 
     while (Date.now() - startTime < timeoutMs) {
       if (signal?.aborted) {
@@ -223,13 +266,18 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
 
       const currentText = await page.evaluate(() => {
         const messageContainers = document.querySelectorAll(
-          'message-content, model-response, .model-response-text, [class*="response-content"]'
+          'message-content, .markdown-main-panel, .model-response-text, [class*="response-content"]'
         );
         if (!messageContainers.length) {
           return "";
         }
         const last = messageContainers[messageContainers.length - 1];
-        return last ? (last.innerText || "").trim() : "";
+        if (!last) return "";
+        let text = (last.innerText || "").trim();
+        if (text.startsWith("Ответ Gemini")) {
+          text = text.replace(/^Ответ Gemini\s*/, "").trim();
+        }
+        return text;
       });
 
       if (currentText) {
@@ -248,12 +296,22 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
       }
 
       const isGenerating = await page.evaluate(() => {
-        const stopBtn = document.querySelector('button[aria-label*="Остановить" i], button[aria-label*="Stop" i], button.stop-button');
+        const stopBtn = document.querySelector('button[aria-label*="Остановить" i], button[aria-label*="Stop" i], button.stop-button, [data-test-id*="stop"]');
         return Boolean(stopBtn);
       }).catch(() => false);
 
-      if (!isGenerating && lastText && unchangedCount >= 4) {
+      if (!isGenerating && lastText && unchangedCount >= 3) {
         break;
+      }
+
+      if (!isGenerating && !lastText && (Date.now() - startTime > 20_000)) {
+        const errorAlert = await page.evaluate(() => {
+          const alert = document.querySelector('[role="alert"], .error-message');
+          return alert ? (alert.innerText || "").trim() : null;
+        }).catch(() => null);
+        if (errorAlert) {
+          throw new Error("Gemini: " + errorAlert);
+        }
       }
 
       await page.waitForTimeout(500);
