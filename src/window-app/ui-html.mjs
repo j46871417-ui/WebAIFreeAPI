@@ -1558,7 +1558,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           })),
         };
 
-        if (["qwen", "chatgpt", "deepseek", "grok", "mistral"].includes(sendProvider)) {
+        if (["qwen", "chatgpt", "deepseek", "grok", "mistral", "claude", "gemini"].includes(sendProvider)) {
           await postStreamingMessage(sentConvId, messageBody, sendProvider);
           return;
         }
@@ -4337,6 +4337,8 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
         { id: "chatgpt", name: "ChatGPT", url: base + "/chatgpt" },
         { id: "grok", name: "Grok", url: base + "/grok" },
         { id: "mistral", name: "Mistral", url: base + "/mistral" },
+        { id: "claude", name: "Claude", url: base + "/claude" },
+        { id: "gemini", name: "Gemini", url: base + "/gemini" },
       ];
 
       for (const p of providerItems) {
@@ -4430,6 +4432,8 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       const chatgptKey = keys.chatgpt || masterKey;
       const grokKey = keys.grok || masterKey;
       const mistralKey = keys.mistral || masterKey;
+      const claudeKey = keys.claude || masterKey;
+      const geminiKey = keys.gemini || masterKey;
 
       const groupEl = document.createElement("div");
       groupEl.className = "settingsGroup apiSettings";
@@ -4623,6 +4627,32 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
                   "mistral-large": { "name": "Mistral Large" },
                   "pixtral-large": { "name": "Pixtral Large" }
                 }
+              },
+              "ai-free-claude": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "WebAIFreeAPI (Claude)",
+                "options": {
+                  "baseURL": baseUrl,
+                  "apiKey": claudeKey
+                },
+                "models": {
+                  "claude-3-7-sonnet": { "name": "Claude 3.7 Sonnet", "tools": true },
+                  "claude-3-5-sonnet": { "name": "Claude 3.5 Sonnet", "tools": true },
+                  "claude-3-5-haiku": { "name": "Claude 3.5 Haiku", "tools": true }
+                }
+              },
+              "ai-free-gemini": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "WebAIFreeAPI (Gemini)",
+                "options": {
+                  "baseURL": baseUrl,
+                  "apiKey": geminiKey
+                },
+                "models": {
+                  "gemini-2.5-pro": { "name": "Gemini 2.5 Pro", "tools": true },
+                  "gemini-2.5-flash": { "name": "Gemini 2.5 Flash", "tools": true },
+                  "gemini-2.0-flash": { "name": "Gemini 2.0 Flash", "tools": true }
+                }
               }
             }
           }, null, 2);
@@ -4658,7 +4688,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           steps.innerHTML = "<li>Любое стороннее приложение с поддержкой кастомного эндпоинта OpenAI или OpenRouter подключается к WebAIFreeAPI напрямую.</li>"
             + "<li>В поле <strong>API Base URL</strong> укажите: <code>" + baseUrl + "</code>.</li>"
             + "<li>В поле <strong>API Key</strong> введите ваш единый мастер-ключ: <code>" + masterKey + "</code>.</li>"
-            + "<li>Вам доступны модели всех 5 провайдеров без дополнительных настроек.</li>";
+            + "<li>Вам доступны модели всех провайдеров без дополнительных настроек.</li>";
           codeContent = "# Параметры подключения (OpenAI / OpenRouter Compatible):\\n"
             + "Base URL: " + baseUrl + "\\n"
             + "API Key:  " + masterKey + "\\n\\n"
@@ -4667,7 +4697,8 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
             + "deepseek-chat, deepseek-reasoner, deepseek-v4-flash\\n"
             + "gpt-5.5-instant, gpt-4o, o3-mini\\n"
             + "grok-3, grok-3-reasoner\\n"
-            + "mistral-large, pixtral-large";
+            + "mistral-large, pixtral-large\\n"
+            + "claude-3-7-sonnet, gemini-2.5-pro";
         } else if (id === "aider") {
           title.textContent = "Настройка Aider (терминальный кодинг-агент)";
           steps.innerHTML = "<li>Задайте переменные окружения перед запуском Aider в терминале:</li>";
@@ -4739,7 +4770,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
             + "export OPENAI_BASE_URL='" + baseUrl + "'\\n"
             + "export OPENAI_API_KEY='" + masterKey + "'\\n\\n"
             + "# Доступные модели:\\n"
-            + "qwen3.7-max, deepseek-chat, deepseek-reasoner, chatgpt-auto, grok-3, mistral-large";
+            + "qwen3.7-max, deepseek-chat, deepseek-reasoner, chatgpt-auto, grok-3, mistral-large, claude-3-7-sonnet, gemini-2.5-pro";
         }
 
         header.appendChild(title);

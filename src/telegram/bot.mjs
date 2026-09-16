@@ -2,7 +2,7 @@ import path from "node:path";
 
 import { loadSettings, saveSettings } from "../state/settings.mjs";
 
-const PROVIDERS = new Set(["deepseek", "qwen", "chatgpt"]);
+const PROVIDERS = new Set(["deepseek", "qwen", "chatgpt", "grok", "mistral", "claude", "gemini"]);
 const POLL_TIMEOUT_SEC = 25;
 const IDLE_DELAY_MS = 3000;
 const MAX_TELEGRAM_MESSAGE = 3900;

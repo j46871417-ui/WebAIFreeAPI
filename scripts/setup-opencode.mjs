@@ -24,7 +24,7 @@ if (!settings.openAICompat.apiKeys || typeof settings.openAICompat.apiKeys !== "
 if (!settings.apiKeys || typeof settings.apiKeys !== "object") {
   settings.apiKeys = {};
 }
-for (const p of ["deepseek", "qwen", "chatgpt", "grok", "mistral", "all"]) {
+for (const p of ["deepseek", "qwen", "chatgpt", "grok", "mistral", "claude", "gemini", "all"]) {
   const existing = settings.openAICompat.apiKeys[p] || settings.apiKeys[p];
   if (!existing || existing.includes("GhC8UKD")) {
     const key = `sk-${crypto.randomBytes(32).toString("base64url")}`;
@@ -165,6 +165,32 @@ const opencodeConfig = {
       models: {
         "mistral-large": { name: "Mistral Large", limit: { context: 128000, output: 8192 } },
         "pixtral-large": { name: "Pixtral Large", vision: true, limit: { context: 128000, output: 8192 } },
+      },
+    },
+    "ai-free-claude": {
+      npm: "@ai-sdk/openai-compatible",
+      name: "WebAIFreeAPI (Claude)",
+      options: {
+        baseURL: "http://127.0.0.1:4317/v1",
+        apiKey: settings.apiKeys.claude,
+      },
+      models: {
+        "claude-3-7-sonnet": { name: "Claude 3.7 Sonnet", reasoning: true, limit: { context: 200000, output: 8192 } },
+        "claude-3-5-sonnet": { name: "Claude 3.5 Sonnet", limit: { context: 200000, output: 8192 } },
+        "claude-3-5-haiku": { name: "Claude 3.5 Haiku", limit: { context: 200000, output: 8192 } },
+      },
+    },
+    "ai-free-gemini": {
+      npm: "@ai-sdk/openai-compatible",
+      name: "WebAIFreeAPI (Gemini)",
+      options: {
+        baseURL: "http://127.0.0.1:4317/v1",
+        apiKey: settings.apiKeys.gemini,
+      },
+      models: {
+        "gemini-2.5-pro": { name: "Gemini 2.5 Pro", reasoning: true, limit: { context: 1000000, output: 8192 } },
+        "gemini-2.5-flash": { name: "Gemini 2.5 Flash", limit: { context: 1000000, output: 8192 } },
+        "gemini-2.0-flash": { name: "Gemini 2.0 Flash", limit: { context: 1000000, output: 8192 } },
       },
     },
   },
