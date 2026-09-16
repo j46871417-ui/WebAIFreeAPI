@@ -22,6 +22,9 @@ export class ClaudeChatClient {
         },
       });
       return result;
+    } catch (err) {
+      resetClaudeBrowserProxy();
+      throw err;
     } finally {
       scheduleClaudeBrowserIdleClose();
     }

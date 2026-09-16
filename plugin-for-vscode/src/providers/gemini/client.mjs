@@ -22,6 +22,9 @@ export class GeminiChatClient {
         },
       });
       return result;
+    } catch (err) {
+      resetGeminiBrowserProxy();
+      throw err;
     } finally {
       scheduleGeminiBrowserIdleClose();
     }

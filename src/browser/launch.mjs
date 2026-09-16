@@ -17,6 +17,11 @@ export async function launchPersistentDeepSeekContext(chromium, profileDir, head
     ...overrides,
   };
 
+  const proxyServer = overrides.proxy || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.ALL_PROXY;
+  if (proxyServer && !options.proxy) {
+    options.proxy = typeof proxyServer === "string" ? { server: proxyServer } : proxyServer;
+  }
+
   const detected = detectBrowserChannels();
   const candidateAttempts = [];
 

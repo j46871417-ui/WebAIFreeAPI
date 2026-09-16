@@ -17,8 +17,9 @@ export async function getClaudeBrowserProxy({ debug = false } = {}) {
 
 export function resetClaudeBrowserProxy() {
   if (sharedProxyPromise) {
-    sharedProxyPromise.then((p) => p.close().catch(() => {})).catch(() => {});
+    const p = sharedProxyPromise;
     sharedProxyPromise = null;
+    p.then((proxy) => proxy.close().catch(() => {})).catch(() => {});
   }
 }
 
@@ -38,20 +39,19 @@ async function createClaudeBrowserProxy({ debug = false } = {}) {
   const { getChatGPTChromium } = await import("../chatgpt/engine.mjs");
   const chromium = await getChatGPTChromium();
 
-  const isHeadedDebug = process.env.CLAUDE_HEADLESS === "0";
-  const offscreen = !isHeadedDebug;
-  const windowArgs = offscreen
-    ? [
+  const isHeaded = process.env.CLAUDE_HEADLESS === "0";
+  const headless = !isHeaded;
+  const windowArgs = isHeaded
+    ? []
+    : [
         "--window-position=-24000,-24000",
         "--window-size=1280,900",
-        "--start-minimized",
-      ]
-    : [];
+      ];
 
   const context = await launchPersistentDeepSeekContext(
     chromium,
     CLAUDE_BROWSER_PROFILE,
-    false,
+    headless,
     {
       args: windowArgs,
       ignoreDefaultArgs: ["--enable-automation"],
@@ -60,6 +60,10 @@ async function createClaudeBrowserProxy({ debug = false } = {}) {
       viewport: { width: 1280, height: 900 },
     }
   );
+
+  context.on("close", () => {
+    sharedProxyPromise = null;
+  });
 
   await context.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
@@ -167,6 +171,13 @@ async function createClaudeBrowserProxy({ debug = false } = {}) {
     if (typeof composer?.focus === "function") {
       await composer.focus().catch(() => {});
     }
+    const initialResponseCount = await page.evaluate(() => {
+      const messageContainers = document.querySelectorAll(
+        '.font-claude-message, div.standard-markdown, [data-is-streaming="true"], div[class*="message"]'
+      );
+      return messageContainers.length;
+    }).catch(() => 0);
+
     await page.keyboard.insertText(prompt);
     await page.waitForTimeout(300);
 
@@ -191,16 +202,16 @@ async function createClaudeBrowserProxy({ debug = false } = {}) {
         throw new Error("Request aborted by client");
       }
 
-      const currentText = await page.evaluate(() => {
+      const currentText = await page.evaluate((initCount) => {
         const messageContainers = document.querySelectorAll(
           '.font-claude-message, div.standard-markdown, [data-is-streaming="true"], div[class*="message"]'
         );
-        if (!messageContainers.length) {
+        if (messageContainers.length <= initCount) {
           return "";
         }
         const last = messageContainers[messageContainers.length - 1];
         return last ? (last.innerText || "").trim() : "";
-      });
+      }, initialResponseCount);
 
       if (currentText) {
         if (currentText !== lastText) {
@@ -222,7 +233,12 @@ async function createClaudeBrowserProxy({ debug = false } = {}) {
         return Boolean(stopBtn);
       }).catch(() => false);
 
-      if (!isGenerating && lastText && unchangedCount >= 4) {
+      const isDone = lastText && (
+        (!isGenerating && unchangedCount >= 2) ||
+        (unchangedCount >= 6)
+      );
+
+      if (isDone) {
         break;
       }
 
@@ -230,7 +246,7 @@ async function createClaudeBrowserProxy({ debug = false } = {}) {
     }
 
     if (!lastText) {
-      throw new Error("Claude: не получен ответ от модели. Проверьте окно браузера или лимиты сообщений.");
+      throw new Error("Claude: не получен ответ от модели. Проверьте VPN/прокси, окно браузера или лимиты сообщений.");
     }
 
     return {
