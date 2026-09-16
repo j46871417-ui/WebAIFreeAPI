@@ -1075,6 +1075,9 @@ export async function runWindowApp({
         if (!provider) {
           return sendJson(res, { error: `Unknown provider: ${providerId}` }, 404);
         }
+        if (providerId === "gemini") {
+          return sendJson(res, { error: "Провайдер Gemini находится в разработке и временно недоступен." }, 400);
+        }
         try {
           if (providerLoginJobs.has(providerId)) {
             return sendJson(res, {
@@ -2377,7 +2380,10 @@ export async function runWindowApp({
             return sendJson(res, { conversation });
           }
         }
-        if (convProvider === "grok" || convProvider === "mistral" || convProvider === "claude" || convProvider === "gemini") {
+        if (convProvider === "gemini") {
+          return sendJson(res, { error: "Провайдер Gemini находится в разработке и временно недоступен." }, 400);
+        }
+        if (convProvider === "grok" || convProvider === "mistral" || convProvider === "claude") {
           const now = new Date().toISOString();
           const isFirstUserMessage = !conversation.messages.some((message) => message.role === "user");
           if (isFirstUserMessage && shouldAutoTitle(conversation)) {

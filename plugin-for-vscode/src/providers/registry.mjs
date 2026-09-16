@@ -148,24 +148,12 @@ export const PROVIDERS = {
   gemini: {
     id: "gemini",
     name: "Gemini",
-    description: "gemini.google.com — флагманские модели Gemini 2.5 от Google DeepMind",
+    description: "gemini.google.com — в разработке",
+    inDevelopment: true,
     authFile: GEMINI_AUTH_FILE,
-    hasAuth: () => {
-      try {
-        if (!fs.existsSync(GEMINI_AUTH_FILE) || fs.statSync(GEMINI_AUTH_FILE).size <= 5) return false;
-        const cookies = JSON.parse(fs.readFileSync(GEMINI_AUTH_FILE, "utf-8"));
-        if (!Array.isArray(cookies) || cookies.length === 0) return false;
-        return cookies.some((c) =>
-          c.domain && /(^|\.)google\.com$/i.test(c.domain) &&
-          (c.name === "__Secure-1PSID" || c.name === "SAPISID" || c.name === "SSID" || c.name === "SID")
-        );
-      } catch {
-        return false;
-      }
-    },
+    hasAuth: () => false,
     async login() {
-      const { loginGeminiAndSave } = await import("./gemini/browser-login.mjs");
-      await loginGeminiAndSave();
+      throw new Error("Провайдер Gemini находится в разработке и временно недоступен.");
     },
   },
 };
