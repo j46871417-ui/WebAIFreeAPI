@@ -17,8 +17,9 @@ export async function getGeminiBrowserProxy({ debug = false } = {}) {
 
 export function resetGeminiBrowserProxy() {
   if (sharedProxyPromise) {
-    sharedProxyPromise.then((p) => p.close().catch(() => {})).catch(() => {});
+    const p = sharedProxyPromise;
     sharedProxyPromise = null;
+    p.then((proxy) => proxy.close().catch(() => {})).catch(() => {});
   }
 }
 
@@ -38,22 +39,15 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
   const { getChatGPTChromium } = await import("../chatgpt/engine.mjs");
   const chromium = await getChatGPTChromium();
 
-  const isHeadedDebug = process.env.GEMINI_HEADLESS === "0";
-  const offscreen = !isHeadedDebug;
-  const windowArgs = offscreen
-    ? [
-        "--window-position=-24000,-24000",
-        "--window-size=1280,900",
-        "--start-minimized",
-      ]
-    : [];
+  const isHeaded = process.env.GEMINI_HEADLESS === "0";
+  const headless = !isHeaded;
 
   const context = await launchPersistentDeepSeekContext(
     chromium,
     GEMINI_BROWSER_PROFILE,
-    false,
+    headless,
     {
-      args: windowArgs,
+      args: [],
       ignoreDefaultArgs: ["--enable-automation"],
       userAgent: DEFAULT_UA,
       locale: "ru-RU",
@@ -61,37 +55,22 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
     }
   );
 
+  context.on("close", () => {
+    sharedProxyPromise = null;
+  });
+
   await context.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
   });
 
-  if (fs.existsSync(GEMINI_AUTH_FILE)) {
-    try {
-      const cookies = JSON.parse(fs.readFileSync(GEMINI_AUTH_FILE, "utf-8"));
-      if (Array.isArray(cookies) && cookies.length) {
-        await context.addCookies(cookies);
-      }
-    } catch (e) {
-      if (debug) console.log("[gemini-proxy] could not restore cookies:", e.message);
-    }
-  }
-
   const page = (await context.pages())[0] || await context.newPage();
+  try {
+    await page.goto(GEMINI_BASE_URL, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    await page.waitForTimeout(2000);
+  } catch {}
 
   async function dismissModals() {
-    await page.evaluate(() => {
-      const dismissPatterns = [
-        "accept", "agree", "understand", "согласиться", "одобрить", "allow", "allow all", "accept all",
-        "not now", "no thanks", "close", "закрыть", "понятно", "ок", "ok", "got it"
-      ];
-      const buttons = Array.from(document.querySelectorAll("button"));
-      for (const b of buttons) {
-        const t = (b.innerText || b.getAttribute("aria-label") || "").trim().toLowerCase();
-        if (dismissPatterns.some((p) => t === p || t.startsWith(p))) {
-          try { b.click(); } catch {}
-        }
-      }
-    }).catch(() => {});
+    // Do not click arbitrary buttons matching 'ok' or 'close' on Gemini
   }
 
   async function ensurePageReady() {
@@ -135,18 +114,13 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
       if (!(await picker.count().catch(() => 0))) return;
 
       const current = String(await picker.innerText().catch(() => "")).trim().toLowerCase();
-      let targetPattern = "";
-      if (modelId.includes("flash-lite") || modelId.includes("lite")) {
-        targetPattern = "flash-lite";
-      } else if (modelId.includes("flash")) {
-        targetPattern = "3.8 flash";
-      } else if (modelId.includes("pro")) {
-        targetPattern = "3.1 pro";
-      }
+      const isLite = modelId.includes("flash-lite") || modelId.includes("lite");
+      const isPro = modelId.includes("pro");
+      const isFlash = !isLite && !isPro && modelId.includes("flash");
 
-      if (targetPattern && current.includes(targetPattern)) {
-        return;
-      }
+      if (isLite && (current.includes("lite") || current.includes("flash-lite"))) return;
+      if (isFlash && current.includes("flash") && !current.includes("lite")) return;
+      if (isPro && current.includes("pro")) return;
 
       await picker.click({ timeout: 5000 }).catch(() => {});
       await page.waitForTimeout(400);
@@ -156,7 +130,12 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
       for (let i = 0; i < count; i++) {
         const item = menuItems.nth(i);
         const text = String(await item.innerText().catch(() => "")).toLowerCase();
-        if (targetPattern && text.includes(targetPattern)) {
+        let match = false;
+        if (isLite && text.includes("flash-lite")) match = true;
+        else if (isFlash && (text.includes("3.8 flash") || (text.includes("flash") && !text.includes("lite")))) match = true;
+        else if (isPro && text.includes("pro")) match = true;
+
+        if (match) {
           await item.click({ timeout: 5000 });
           await page.waitForTimeout(500);
           return;
@@ -166,88 +145,35 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
     } catch {}
   }
 
-  async function findComposer() {
-    const selectors = [
-      'div.ql-editor',
-      'rich-textarea [contenteditable="true"]',
-      'rich-textarea div[contenteditable="true"]',
-      'div[contenteditable="true"][role="textbox"]',
-      'textarea'
-    ];
-    for (let attempt = 0; attempt < 25; attempt++) {
-      await dismissModals();
-      for (const sel of selectors) {
-        const loc = page.locator(sel).first();
-        if (await loc.count().catch(() => 0)) {
-          if (await loc.isVisible().catch(() => false)) {
-            return loc;
-          }
-        }
-      }
-      await page.waitForTimeout(1000);
-    }
-    return null;
-  }
-
   async function sendChat({ prompt, model = null, onDelta = null, signal = null }) {
     if (idleTimer) clearTimeout(idleTimer);
+    if (debug) console.log("[gemini] ensurePageReady");
     await ensurePageReady();
+    if (debug) console.log("[gemini] selectGeminiModel:", model);
     await selectGeminiModel(model);
 
-    const composer = await findComposer();
-    if (!composer) {
-      throw new Error("Gemini: поле ввода сообщения не найдено на странице. Проверьте авторизацию.");
-    }
+    const initialCount = await page.evaluate(() => {
+      return document.querySelectorAll('message-content, .markdown-main-panel, .model-response-text, [class*="response-content"]').length;
+    }).catch(() => 0);
 
-    try {
-      await composer.click({ timeout: 2000 });
-    } catch {
+    const editor = page.locator('div.ql-editor, rich-textarea [contenteditable="true"]').first();
+    await editor.click({ timeout: 5000 }).catch(async () => {
       await dismissModals();
-      await composer.click({ force: true, timeout: 2000 }).catch(() => {});
-    }
-    if (typeof composer?.focus === "function") {
-      await composer.focus().catch(() => {});
-    }
+      await editor.click({ force: true, timeout: 5000 }).catch(() => {});
+    });
+    await page.waitForTimeout(200);
 
     await page.keyboard.press("Control+A");
     await page.keyboard.press("Backspace");
+    await page.waitForTimeout(100);
 
-    if (prompt.length > 200) {
-      await page.evaluate((text) => {
-        const el = document.querySelector('div.ql-editor, rich-textarea [contenteditable="true"]');
-        if (!el) return;
-        el.focus();
-        const dt = new DataTransfer();
-        dt.setData("text/plain", text);
-        const ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
-        el.dispatchEvent(ev);
-      }, prompt);
-      const hasContent = await page.evaluate(() => {
-        const el = document.querySelector('div.ql-editor, rich-textarea [contenteditable="true"]');
-        return Boolean(el && el.innerText.trim());
-      });
-      if (!hasContent) {
-        await page.keyboard.type(prompt, { delay: 1 });
-      }
-    } else {
-      await page.keyboard.type(prompt, { delay: 1 });
-    }
-    await page.waitForTimeout(400);
+    await page.keyboard.type(prompt, { delay: prompt.length > 500 ? 1 : 5 });
+    await page.waitForTimeout(300);
 
-    let submitBtn = null;
-    for (let i = 0; i < 15; i++) {
-      const btn = page.locator('button[aria-label*="Отправить" i], button[aria-label*="Send" i], .send-button button, gem-icon-button.send-button').first();
-      if (await btn.count().catch(() => 0) && await btn.isVisible().catch(() => false)) {
-        submitBtn = btn;
-        break;
-      }
-      await page.waitForTimeout(200);
-    }
-
-    if (submitBtn) {
-      await submitBtn.click({ timeout: 5000 }).catch(async () => {
-        await page.keyboard.press("Enter");
-      });
+    const submitBtn = page.locator('button[aria-label*="Отправить" i], button[aria-label*="Send" i], .send-button button').first();
+    const btnCount = await submitBtn.count().catch(() => 0);
+    if (btnCount) {
+      await submitBtn.click();
     } else {
       await page.keyboard.press("Enter");
     }
@@ -255,70 +181,70 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
     let lastText = "";
     let unchangedCount = 0;
     const startTime = Date.now();
-    const timeoutMs = 150_000;
-
-    await page.waitForTimeout(800);
+    const timeoutMs = 120_000;
 
     while (Date.now() - startTime < timeoutMs) {
       if (signal?.aborted) {
         throw new Error("Request aborted by client");
       }
 
-      const currentText = await page.evaluate(() => {
+      await page.waitForTimeout(500);
+
+      const state = await page.evaluate((initCount) => {
         const messageContainers = document.querySelectorAll(
           'message-content, .markdown-main-panel, .model-response-text, [class*="response-content"]'
         );
-        if (!messageContainers.length) {
-          return "";
+        if (messageContainers.length <= initCount) {
+          const body = document.body ? document.body.innerText : "";
+          const isBlocked = body.includes("не поддерживается в вашей стране") || body.includes("isn't supported in your country");
+          const isRussianIp = body.includes("Россия") || body.includes("Russia");
+          return { ready: false, text: "", isGenerating: false, isBlocked, isRussianIp };
         }
         const last = messageContainers[messageContainers.length - 1];
-        if (!last) return "";
-        let text = (last.innerText || "").trim();
-        if (text.startsWith("Ответ Gemini")) {
-          text = text.replace(/^Ответ Gemini\s*/, "").trim();
+        let t = (last?.innerText || "").trim();
+        if (t.startsWith("Ответ Gemini")) {
+          t = t.replace(/^Ответ Gemini\s*/, "").trim();
         }
-        return text;
-      });
+        const stopBtn = document.querySelector('button[aria-label*="Остановить" i], button[aria-label*="Stop" i], button.stop-button, [data-test-id*="stop"]');
+        const sendBtn = document.querySelector('button[aria-label*="Отправить" i], button[aria-label*="Send" i], .send-button button');
+        const hasSendBtn = Boolean(sendBtn && sendBtn.getClientRects().length > 0);
+        return { ready: true, text: t, isGenerating: Boolean(stopBtn), hasSendBtn };
+      }, initialCount);
 
-      if (currentText) {
-        if (currentText !== lastText) {
+      if (!state.ready && !lastText && Date.now() - startTime > 15_000) {
+        if (state.isBlocked || state.isRussianIp) {
+          throw new Error("Gemini не отвечает: обнаружен IP РФ (Google блокирует Gemini в России). Включите VPN/прокси для работы с Gemini.");
+        }
+      }
+
+      if (state.ready && state.text) {
+        if (state.text !== lastText) {
           unchangedCount = 0;
           if (onDelta) {
-            const delta = currentText.startsWith(lastText)
-              ? currentText.slice(lastText.length)
-              : currentText;
-            onDelta(delta, currentText);
+            const delta = state.text.startsWith(lastText)
+              ? state.text.slice(lastText.length)
+              : state.text;
+            onDelta(delta, state.text);
           }
-          lastText = currentText;
+          lastText = state.text;
         } else {
           unchangedCount++;
         }
       }
 
-      const isGenerating = await page.evaluate(() => {
-        const stopBtn = document.querySelector('button[aria-label*="Остановить" i], button[aria-label*="Stop" i], button.stop-button, [data-test-id*="stop"]');
-        return Boolean(stopBtn);
-      }).catch(() => false);
+      const isDone = lastText && (
+        state.hasSendBtn ||
+        (!state.isGenerating && unchangedCount >= 2) ||
+        (unchangedCount >= 6)
+      );
 
-      if (!isGenerating && lastText && unchangedCount >= 3) {
+      if (state.ready && isDone) {
         break;
       }
-
-      if (!isGenerating && !lastText && (Date.now() - startTime > 20_000)) {
-        const errorAlert = await page.evaluate(() => {
-          const alert = document.querySelector('[role="alert"], .error-message');
-          return alert ? (alert.innerText || "").trim() : null;
-        }).catch(() => null);
-        if (errorAlert) {
-          throw new Error("Gemini: " + errorAlert);
-        }
-      }
-
-      await page.waitForTimeout(500);
     }
 
     if (!lastText) {
-      throw new Error("Gemini: не получен ответ от модели. Проверьте окно браузера или лимиты сообщений.");
+      throw new Error("Gemini: не получен ответ от модели. Проверьте VPN/прокси или сессию аккаунта.");
     }
 
     return {
