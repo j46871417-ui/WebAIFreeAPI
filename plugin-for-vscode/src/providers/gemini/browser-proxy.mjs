@@ -79,11 +79,15 @@ async function createGeminiBrowserProxy({ debug = false } = {}) {
     await dismissModals();
 
     const pageState = await page.evaluate(() => {
+      const hasComposer = Boolean(document.querySelector('rich-textarea, div[contenteditable="true"], [role="textbox"], textarea'));
+      if (hasComposer) {
+        return null;
+      }
       const buttons = Array.from(document.querySelectorAll("button, a"));
       const hasSignIn = buttons.some((b) => {
         const t = (b.innerText || b.getAttribute("aria-label") || "").toLowerCase().trim();
         const h = (b.getAttribute("href") || "").toLowerCase();
-        return (t === "войти" || t === "sign in" || t === "log in") || h.includes("accounts.google.com");
+        return (t === "войти" || t === "sign in" || t === "log in") && (h.includes("servicelogin") || h.includes("interactivelogin") || !h);
       });
       if (hasSignIn) {
         return "Сессия Gemini не авторизована (отображается кнопка входа). Нажмите «Авторизоваться» на карточке модели.";
