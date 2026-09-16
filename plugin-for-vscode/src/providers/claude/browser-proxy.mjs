@@ -83,6 +83,10 @@ async function createClaudeBrowserProxy({ debug = false } = {}) {
       if (title.includes("Just a moment") || document.querySelector("#challenge-running")) {
         return "Сайт claude.ai заблокирован проверкой Cloudflare. Требуется повторный вход через кнопку «Авторизоваться».";
       }
+      const hasComposer = Boolean(document.querySelector('fieldset div[contenteditable="true"], div.ProseMirror, div[contenteditable="true"], textarea'));
+      if (hasComposer) {
+        return null;
+      }
       const buttons = Array.from(document.querySelectorAll("button, a"));
       const hasSignIn = buttons.some((b) => {
         const t = (b.innerText || b.getAttribute("aria-label") || "").toLowerCase().trim();

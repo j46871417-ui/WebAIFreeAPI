@@ -134,7 +134,7 @@ export const PROVIDERS = {
         if (!Array.isArray(cookies) || cookies.length === 0) return false;
         return cookies.some((c) =>
           c.domain && /(^|\.)claude\.ai$/i.test(c.domain) &&
-          (c.name === "sessionKey" || c.name.includes("session") || c.name === "cf_clearance")
+          (c.name === "sessionKey" || (c.name.includes("session") && !c.name.includes("intercom")))
         );
       } catch {
         return false;
