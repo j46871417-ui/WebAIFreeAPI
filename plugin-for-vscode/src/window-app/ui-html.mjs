@@ -340,6 +340,18 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
 
     let appState = { conversations: [], activeConversationId: null, workspaceRoot: "" };
     let activeConversation = null;
+    const fullConversations = new Map();
+    function rememberConversation(conv) {
+      if (conv && conv.id) {
+        fullConversations.set(conv.id, conv);
+      }
+      return conv;
+    }
+    function getFullConversation(id) {
+      if (!id) return null;
+      if (activeConversation && activeConversation.id === id) return activeConversation;
+      return fullConversations.get(id) || null;
+    }
     let sending = false;
     const sendingConversations = new Set();
     function isConversationSending(id = activeConversation?.id) {
@@ -1517,6 +1529,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
             images: imageFiles.map((image) => "data:" + image.mimeType + ";base64," + image.dataBase64),
           } : {}),
         });
+        rememberConversation(activeConversation);
         renderConversation(activeConversation);
 
         // ChatGPT получает картинки inline. DeepSeek загружает их и передаёт
@@ -1533,7 +1546,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           } else {
             for (let i = 0; i < imageFiles.length; i += 1) {
               const img = imageFiles[i];
-              const num = imageFiles.length > 1 ? \` (\${i + 1}/\${imageFiles.length})\` : "";
+              const num = imageFiles.length > 1 ? " (" + (i + 1) + "/" + imageFiles.length + ")" : "";
               setStatus(t("composer.uploadingImage", { num, name: img.name }));
               const result = await api("/api/upload", {
                 method: "POST",
@@ -1579,6 +1592,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
         // даём юзеру переключаться по чатам. Polling сам подхватит результат.
         if (data.running) {
           activeConversation = data.conversation;
+          rememberConversation(activeConversation);
           await loadState(activeConversation.id);
           renderConversation(activeConversation);
           setStatus(t("composer.backgroundTask"));
@@ -1588,6 +1602,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
 
         if (data.needsChatGPTLogin) {
           activeConversation = data.conversation;
+          rememberConversation(activeConversation);
           renderConversation(activeConversation);
           setAgentDrawerTab("browser");
           ensureAgentBrowserLoaded(activeConversation?.workspace || appState.workspaceRoot);
@@ -1597,6 +1612,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
         }
 
         activeConversation = data.conversation;
+        rememberConversation(activeConversation);
         await loadState(activeConversation.id);
         renderConversation(activeConversation, { animateLastAssistant: true });
         setStatus("");
@@ -1616,7 +1632,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           setComposerEnabled(true);
           messageInput.focus();
         } else {
-          setComposerEnabled(true);
+          setComposerEnabled(!isConversationSending(activeConversation?.id));
         }
         renderList();
       }
@@ -1657,6 +1673,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       if (appState.activeConversationId) {
         const data = await api("/api/conversations/" + appState.activeConversationId);
         activeConversation = data.conversation;
+        rememberConversation(activeConversation);
         renderConversation(activeConversation);
       } else {
         activeConversation = null;
@@ -1694,7 +1711,9 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       return prev.updatedAt !== next.updatedAt || prev.messageCount !== next.messageCount;
     }
     function runningIdsChanged(prev = [], next = []) {
-      return prev.length !== next.length || prev.some((id, index) => id !== next[index]);
+      const p = Array.isArray(prev) ? prev : [];
+      const n = Array.isArray(next) ? next : [];
+      return p.length !== n.length || p.some((id, index) => id !== n[index]);
     }
     async function refreshExternalState() {
       if (externalStateRefreshing || sending || shutdownStarted) return;
@@ -1856,9 +1875,15 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           }
         });
         const openConversation = async () => {
+          const cached = getFullConversation(conversation.id);
           const data = await api("/api/conversations/" + conversation.id);
           appState.activeConversationId = conversation.id;
-          activeConversation = data.conversation;
+          if (cached && isConversationSending(conversation.id)) {
+            activeConversation = cached;
+          } else {
+            activeConversation = data.conversation;
+            rememberConversation(activeConversation);
+          }
           renderList();
           renderConversation(activeConversation);
           setComposerEnabled(!isConversationSending(activeConversation.id));
@@ -3038,14 +3063,19 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
     }
 
     async function postStreamingMessage(convId, body, provider) {
-      const targetConv = appState.conversations?.find((c) => c.id === convId) || activeConversation;
-      if (targetConv && !targetConv.messages.some((m) => m.streaming)) {
-        targetConv.messages.push({
-          role: "assistant",
-          content: "",
-          streaming: true,
-          createdAt: new Date().toISOString(),
-        });
+      const targetConv = getFullConversation(convId);
+      if (targetConv) {
+        if (!Array.isArray(targetConv.messages)) {
+          targetConv.messages = [];
+        }
+        if (!targetConv.messages.some((m) => m && m.streaming)) {
+          targetConv.messages.push({
+            role: "assistant",
+            content: "",
+            streaming: true,
+            createdAt: new Date().toISOString(),
+          });
+        }
       }
       if (activeConversation?.id === convId) {
         renderConversation(activeConversation);
@@ -3061,8 +3091,9 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       if (!contentType.includes("ndjson")) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || t("app.requestFailed"));
-        const conv = appState.conversations?.find((c) => c.id === convId) || activeConversation;
-        if (conv && data.conversation) Object.assign(conv, data.conversation);
+        if (data.conversation) {
+          rememberConversation(data.conversation);
+        }
         if (data.running) {
           if (activeConversation?.id === convId) {
             activeConversation = data.conversation;
@@ -3113,15 +3144,14 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           let event;
           try { event = JSON.parse(line); } catch { continue; }
           if (event.type === "start") {
-            const conv = appState.conversations?.find((c) => c.id === convId);
-            if (conv && event.conversation) Object.assign(conv, event.conversation);
+            if (event.conversation) rememberConversation(event.conversation);
             if (activeConversation?.id === convId) {
-              activeConversation = event.conversation || conv;
+              activeConversation = event.conversation || activeConversation;
               renderConversation(activeConversation);
             }
           } else if (event.type === "delta") {
-            const conv = appState.conversations?.find((c) => c.id === convId);
-            if (conv) {
+            const conv = getFullConversation(convId);
+            if (conv && Array.isArray(conv.messages)) {
               const last = conv.messages[conv.messages.length - 1];
               if (last && last.role === "assistant") {
                 last.content = event.content;
@@ -3132,19 +3162,17 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
               setStatus(t("composer.writingStatus"));
             }
           } else if (event.type === "done") {
-            const conv = appState.conversations?.find((c) => c.id === convId);
-            if (conv && event.conversation) Object.assign(conv, event.conversation);
+            if (event.conversation) rememberConversation(event.conversation);
             if (activeConversation?.id === convId) {
-              activeConversation = event.conversation || conv;
+              activeConversation = event.conversation || activeConversation;
               renderConversation(activeConversation);
               setStatus("");
             }
             streamDone = true;
           } else if (event.type === "error") {
-            const conv = appState.conversations?.find((c) => c.id === convId);
-            if (conv && event.conversation) Object.assign(conv, event.conversation);
+            if (event.conversation) rememberConversation(event.conversation);
             if (activeConversation?.id === convId) {
-              activeConversation = event.conversation || conv;
+              activeConversation = event.conversation || activeConversation;
               renderConversation(activeConversation);
               setStatus(event.message || "", true);
             }
