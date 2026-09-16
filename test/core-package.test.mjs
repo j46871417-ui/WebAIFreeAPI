@@ -36,9 +36,11 @@ describe("@ai-free/core unified shared package", () => {
     assert.ok(PROVIDER_CATALOG.chatgpt, "Core must export chatgpt catalog");
     assert.ok(PROVIDER_CATALOG.grok, "Core must export grok catalog");
     assert.ok(PROVIDER_CATALOG.mistral, "Core must export mistral catalog");
+    assert.ok(PROVIDER_CATALOG.claude, "Core must export claude catalog");
+    assert.ok(PROVIDER_CATALOG.gemini, "Core must export gemini catalog");
     assert.ok(OPENAI_COMPAT_MODELS.length > 10, "Core must export OpenAI-compatible model list");
     assert.equal(getProviderCatalog("deepseek").id, "deepseek");
-    assert.deepEqual(getProviderIds(), ["deepseek", "qwen", "chatgpt", "grok", "mistral"]);
+    assert.deepEqual(getProviderIds(), ["deepseek", "qwen", "chatgpt", "grok", "mistral", "claude", "gemini"]);
     assert.ok(findModel("deepseek-v4-pro"), "findModel should locate deepseek-v4-pro");
     assert.ok(findProviderModel("qwen", "qwen3.7-plus"), "findProviderModel should locate qwen3.7-plus");
   });

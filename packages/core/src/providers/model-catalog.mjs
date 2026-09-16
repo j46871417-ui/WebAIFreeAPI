@@ -143,6 +143,50 @@ export const PROVIDER_CATALOG = {
       { id: "pixtral-large", label: "Pixtral Large", apiModel: "pixtral-large", webLabels: ["Pixtral Large"], vision: true },
     ],
   },
+  claude: {
+    id: "claude",
+    label: "Claude",
+    icon: "CL",
+    sub: "claude.ai",
+    defaultMode: "default",
+    defaultModel: "claude-3-7-sonnet",
+    modes: [
+      {
+        id: "default",
+        title: "Claude",
+        sub: "Anthropic Claude",
+        model: "claude-3-7-sonnet",
+      },
+    ],
+    models: [
+      { id: "claude-3-7-sonnet", label: "Claude 3.7 Sonnet", apiModel: "claude-3-7-sonnet", webLabels: ["Sonnet 3.7", "Claude 3.7 Sonnet"], reasoning: true },
+      { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet", apiModel: "claude-3-5-sonnet", webLabels: ["Sonnet 3.5", "Claude 3.5 Sonnet"] },
+      { id: "claude-3-5-haiku", label: "Claude 3.5 Haiku", apiModel: "claude-3-5-haiku", webLabels: ["Haiku 3.5", "Claude 3.5 Haiku"] },
+    ],
+  },
+  gemini: {
+    id: "gemini",
+    label: "Gemini",
+    icon: "GM",
+    sub: "gemini.google.com",
+    defaultMode: "default",
+    defaultModel: "gemini-2.5-pro",
+    modes: [
+      {
+        id: "default",
+        title: "Gemini",
+        sub: "Google DeepMind",
+        model: "gemini-2.5-pro",
+      },
+    ],
+    models: [
+      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", apiModel: "gemini-2.5-pro", webLabels: ["2.5 Pro", "Gemini 2.5 Pro"], reasoning: true },
+      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", apiModel: "gemini-2.5-flash", webLabels: ["2.5 Flash", "Gemini 2.5 Flash"] },
+      { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", apiModel: "gemini-2.0-flash", webLabels: ["2.0 Flash", "Gemini 2.0 Flash"] },
+      { id: "gemini-1.5-pro", label: "Gemini 1.5 Pro", apiModel: "gemini-1.5-pro", webLabels: ["1.5 Pro"], legacy: true },
+      { id: "gemini-1.5-flash", label: "Gemini 1.5 Flash", apiModel: "gemini-1.5-flash", webLabels: ["1.5 Flash"], legacy: true },
+    ],
+  },
 };
 
 export const OPENAI_COMPAT_MODELS = Object.values(PROVIDER_CATALOG).flatMap((provider) =>

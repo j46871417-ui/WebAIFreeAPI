@@ -63,6 +63,8 @@ export function parseArgs(argv) {
     else if (arg === "--import-chatgpt") args.importChatGPTFile = argv[++i];
     else if (arg === "--login-grok") args.loginGrok = true;
     else if (arg === "--login-mistral") args.loginMistral = true;
+    else if (arg === "--login-claude") args.loginClaude = true;
+    else if (arg === "--login-gemini") args.loginGemini = true;
     else if (arg === "--welcome") args.forceWelcome = true;
     else if (arg === "--port") args.port = Number(argv[++i]);
     else if (arg === "--api-port") args.apiPort = Number(argv[++i]);
