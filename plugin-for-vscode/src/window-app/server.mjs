@@ -375,6 +375,26 @@ export async function runWindowApp({
     return mistralChatClient;
   }
 
+  let claudeChatClient = null;
+  async function getOrCreateClaudeClient() {
+    if (claudeChatClient) return claudeChatClient;
+    const { ClaudeChatClient } = await import("../providers/claude/client.mjs");
+    claudeChatClient = new ClaudeChatClient({
+      debug: Boolean(process.env.API_DEBUG),
+    });
+    return claudeChatClient;
+  }
+
+  let geminiChatClient = null;
+  async function getOrCreateGeminiClient() {
+    if (geminiChatClient) return geminiChatClient;
+    const { GeminiChatClient } = await import("../providers/gemini/client.mjs");
+    geminiChatClient = new GeminiChatClient({
+      debug: Boolean(process.env.API_DEBUG),
+    });
+    return geminiChatClient;
+  }
+
   function isChatGPTAuthError(error) {
     const message = String(error?.message || error || "");
     if (/unusual activity/i.test(message)) return false;
@@ -1054,6 +1074,14 @@ export async function runWindowApp({
             if (providerId === "mistral") {
               const { resetMistralBrowserProxy } = await import("../providers/mistral/browser-proxy.mjs");
               resetMistralBrowserProxy();
+            }
+            if (providerId === "claude") {
+              const { resetClaudeBrowserProxy } = await import("../providers/claude/browser-proxy.mjs");
+              resetClaudeBrowserProxy();
+            }
+            if (providerId === "gemini") {
+              const { resetGeminiBrowserProxy } = await import("../providers/gemini/browser-proxy.mjs");
+              resetGeminiBrowserProxy();
             }
           })();
           providerLoginStates.set(providerId, { state: "running", error: "" });
@@ -2322,7 +2350,7 @@ export async function runWindowApp({
             return sendJson(res, { conversation });
           }
         }
-        if (convProvider === "grok" || convProvider === "mistral") {
+        if (convProvider === "grok" || convProvider === "mistral" || convProvider === "claude" || convProvider === "gemini") {
           const now = new Date().toISOString();
           const isFirstUserMessage = !conversation.messages.some((message) => message.role === "user");
           if (isFirstUserMessage && shouldAutoTitle(conversation)) {
@@ -2361,9 +2389,11 @@ export async function runWindowApp({
           };
 
           try {
-            const client = convProvider === "grok"
-              ? await getOrCreateGrokClient()
-              : await getOrCreateMistralClient();
+            let client;
+            if (convProvider === "grok") client = await getOrCreateGrokClient();
+            else if (convProvider === "mistral") client = await getOrCreateMistralClient();
+            else if (convProvider === "claude") client = await getOrCreateClaudeClient();
+            else if (convProvider === "gemini") client = await getOrCreateGeminiClient();
 
             const result = await client.complete({
               prompt,

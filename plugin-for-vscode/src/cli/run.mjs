@@ -69,6 +69,18 @@ export async function run() {
     return;
   }
 
+  if (args.loginClaude) {
+    const { loginClaudeAndSave } = await import("../providers/claude/browser-login.mjs");
+    await loginClaudeAndSave();
+    return;
+  }
+
+  if (args.loginGemini) {
+    const { loginGeminiAndSave } = await import("../providers/gemini/browser-login.mjs");
+    await loginGeminiAndSave();
+    return;
+  }
+
   if (args.acp) {
     const { runAcpServer } = await import("../acp/server.mjs");
     await runAcpServer();

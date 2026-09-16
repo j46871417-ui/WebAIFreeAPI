@@ -35,6 +35,8 @@ import { CHATGPT_AUTH_FILE } from "../src/providers/chatgpt/config.mjs";
 import { ChatGPTChatClient } from "../src/providers/chatgpt/client.mjs";
 import { GrokChatClient } from "../src/providers/grok/client.mjs";
 import { MistralChatClient } from "../src/providers/mistral/client.mjs";
+import { ClaudeChatClient } from "../src/providers/claude/client.mjs";
+import { GeminiChatClient } from "../src/providers/gemini/client.mjs";
 import { createFileLogger } from "../src/logging/logger.mjs";
 import { runWithEmptyStreamRetry } from "./stream-retry.mjs";
 import { globalChatSessionManager } from "./chat-session-manager.mjs";
@@ -129,12 +131,40 @@ async function getMistralClient() {
   return mistralClient;
 }
 
+let claudeClient = null;
+async function getClaudeClient() {
+  if (claudeClient) return claudeClient;
+  const { CLAUDE_AUTH_FILE } = await import("../src/providers/claude/config.mjs");
+  const fs = await import("node:fs");
+  if (!fs.existsSync(CLAUDE_AUTH_FILE)) {
+    throw new Error("Claude не подключён. Нажмите «Авторизоваться» на карточке Claude в приложении.");
+  }
+  claudeClient = new ClaudeChatClient({
+    debug: Boolean(process.env.API_DEBUG),
+  });
+  return claudeClient;
+}
+
+let geminiClient = null;
+async function getGeminiClient() {
+  if (geminiClient) return geminiClient;
+  const { GEMINI_AUTH_FILE } = await import("../src/providers/gemini/config.mjs");
+  const fs = await import("node:fs");
+  if (!fs.existsSync(GEMINI_AUTH_FILE)) {
+    throw new Error("Gemini не подключён. Нажмите «Авторизоваться» на карточке Gemini в приложении.");
+  }
+  geminiClient = new GeminiChatClient({
+    debug: Boolean(process.env.API_DEBUG),
+  });
+  return geminiClient;
+}
+
 export async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
   // Поддержка выделенных путей по провайдерам:
-  // e.g. /v1/deepseek/chat/completions, /v1/qwen/models, /v1/chatgpt/..., /v1/grok/..., /v1/mistral/...
-  const KNOWN_PROVIDERS = ["deepseek", "qwen", "chatgpt", "grok", "mistral"];
+  // e.g. /v1/deepseek/chat/completions, /v1/qwen/models, /v1/chatgpt/..., /v1/grok/..., /v1/mistral/..., /v1/claude/..., /v1/gemini/...
+  const KNOWN_PROVIDERS = ["deepseek", "qwen", "chatgpt", "grok", "mistral", "claude", "gemini"];
   let pathname = url.pathname;
   let pathProvider = null;
   for (const p of KNOWN_PROVIDERS) {
@@ -484,6 +514,36 @@ async function handleChatCompletions(req, res) {
       const client = await getMistralClient();
       if (body.stream === true) {
         return handleMistralStream(client, prompt, modelName, mapping.model, res, {
+          tools: body.tools,
+          signal: abortController.signal,
+        });
+      }
+      const result = await client.complete({
+        prompt,
+        model: mapping.model,
+        signal: abortController.signal,
+      });
+      return sendJson(res, toOpenAIResponse(modelName, result.text, body.tools));
+    }
+    if (mapping.provider === "claude") {
+      const client = await getClaudeClient();
+      if (body.stream === true) {
+        return handleClaudeStream(client, prompt, modelName, mapping.model, res, {
+          tools: body.tools,
+          signal: abortController.signal,
+        });
+      }
+      const result = await client.complete({
+        prompt,
+        model: mapping.model,
+        signal: abortController.signal,
+      });
+      return sendJson(res, toOpenAIResponse(modelName, result.text, body.tools));
+    }
+    if (mapping.provider === "gemini") {
+      const client = await getGeminiClient();
+      if (body.stream === true) {
+        return handleGeminiStream(client, prompt, modelName, mapping.model, res, {
           tools: body.tools,
           signal: abortController.signal,
         });
@@ -1435,6 +1495,84 @@ async function handleMistralStream(client, prompt, modelName, model, res, { tool
       return;
     }
     console.error("[API] Mistral stream error:", e.message);
+    sendStreamError(res, modelName, e.message);
+  }
+}
+
+// Обработка streaming-запроса к Claude.
+async function handleClaudeStream(client, prompt, modelName, model, res, { tools = [], signal = null } = {}) {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const parser = new StreamParser(modelName, res, { tools });
+  try {
+    const completionResult = await client.complete({
+      prompt,
+      model,
+      signal,
+      onText: (textDelta) => {
+        if (signal?.aborted || res.destroyed || res.writableEnded) {
+          const abortErr = new Error("Request aborted by client");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
+        parser.onText(textDelta);
+      },
+    });
+    if (signal?.aborted || res.destroyed || res.writableEnded) return;
+    parser.onEnd();
+    res.write("data: [DONE]\n\n");
+    res.end();
+    return {
+      sessionId: null,
+      lastAssistantMessageId: null,
+    };
+  } catch (e) {
+    if (signal?.aborted || e?.name === "AbortError" || res.destroyed || res.writableEnded) {
+      return;
+    }
+    console.error("[API] Claude stream error:", e.message);
+    sendStreamError(res, modelName, e.message);
+  }
+}
+
+// Обработка streaming-запроса к Gemini.
+async function handleGeminiStream(client, prompt, modelName, model, res, { tools = [], signal = null } = {}) {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const parser = new StreamParser(modelName, res, { tools });
+  try {
+    const completionResult = await client.complete({
+      prompt,
+      model,
+      signal,
+      onText: (textDelta) => {
+        if (signal?.aborted || res.destroyed || res.writableEnded) {
+          const abortErr = new Error("Request aborted by client");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
+        parser.onText(textDelta);
+      },
+    });
+    if (signal?.aborted || res.destroyed || res.writableEnded) return;
+    parser.onEnd();
+    res.write("data: [DONE]\n\n");
+    res.end();
+    return {
+      sessionId: null,
+      lastAssistantMessageId: null,
+    };
+  } catch (e) {
+    if (signal?.aborted || e?.name === "AbortError" || res.destroyed || res.writableEnded) {
+      return;
+    }
+    console.error("[API] Gemini stream error:", e.message);
     sendStreamError(res, modelName, e.message);
   }
 }

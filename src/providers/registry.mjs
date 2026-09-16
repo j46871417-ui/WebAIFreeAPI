@@ -15,6 +15,8 @@ import { isChatGPTAuthUsable, readChatGPTAuth } from "./chatgpt/auth-files.mjs";
 
 export const GROK_AUTH_FILE = path.join(AUTH_DIR, "grok-state.json");
 export const MISTRAL_AUTH_FILE = path.join(AUTH_DIR, "mistral-state.json");
+export const CLAUDE_AUTH_FILE = path.join(AUTH_DIR, "claude-state.json");
+export const GEMINI_AUTH_FILE = path.join(AUTH_DIR, "gemini-state.json");
 
 export const PROVIDERS = {
   deepseek: {
@@ -118,6 +120,52 @@ export const PROVIDERS = {
     async login() {
       const { loginMistralAndSave } = await import("./mistral/browser-login.mjs");
       await loginMistralAndSave();
+    },
+  },
+  claude: {
+    id: "claude",
+    name: "Claude",
+    description: "claude.ai — модели Claude 3.7 Sonnet и Haiku от Anthropic",
+    authFile: CLAUDE_AUTH_FILE,
+    hasAuth: () => {
+      try {
+        if (!fs.existsSync(CLAUDE_AUTH_FILE) || fs.statSync(CLAUDE_AUTH_FILE).size <= 5) return false;
+        const cookies = JSON.parse(fs.readFileSync(CLAUDE_AUTH_FILE, "utf-8"));
+        if (!Array.isArray(cookies) || cookies.length === 0) return false;
+        return cookies.some((c) =>
+          c.domain && /(^|\.)claude\.ai$/i.test(c.domain) &&
+          (c.name === "sessionKey" || c.name.includes("session") || c.name === "cf_clearance")
+        );
+      } catch {
+        return false;
+      }
+    },
+    async login() {
+      const { loginClaudeAndSave } = await import("./claude/browser-login.mjs");
+      await loginClaudeAndSave();
+    },
+  },
+  gemini: {
+    id: "gemini",
+    name: "Gemini",
+    description: "gemini.google.com — флагманские модели Gemini 2.5 от Google DeepMind",
+    authFile: GEMINI_AUTH_FILE,
+    hasAuth: () => {
+      try {
+        if (!fs.existsSync(GEMINI_AUTH_FILE) || fs.statSync(GEMINI_AUTH_FILE).size <= 5) return false;
+        const cookies = JSON.parse(fs.readFileSync(GEMINI_AUTH_FILE, "utf-8"));
+        if (!Array.isArray(cookies) || cookies.length === 0) return false;
+        return cookies.some((c) =>
+          c.domain && /(^|\.)google\.com$/i.test(c.domain) &&
+          (c.name === "__Secure-1PSID" || c.name === "SAPISID" || c.name === "SSID" || c.name === "SID")
+        );
+      } catch {
+        return false;
+      }
+    },
+    async login() {
+      const { loginGeminiAndSave } = await import("./gemini/browser-login.mjs");
+      await loginGeminiAndSave();
     },
   },
 };

@@ -371,6 +371,16 @@ describe("OpenAI-compatible handler", () => {
     assert.equal(result.chatId, "chat-existing");
     assert.equal(result.lastMessageId, "msg-turn-2");
   });
+
+  it("advertises Claude and Gemini models in /v1/models", async () => {
+    const res = await callHandler({ method: "GET", url: "/v1/models" });
+    assert.equal(res.statusCode, 200);
+    const modelIds = res.json.data.map((m) => m.id);
+    assert.ok(modelIds.includes("claude-3-7-sonnet"), "Must include claude-3-7-sonnet");
+    assert.ok(modelIds.includes("claude-3-5-sonnet"), "Must include claude-3-5-sonnet");
+    assert.ok(modelIds.includes("gemini-2.5-pro"), "Must include gemini-2.5-pro");
+    assert.ok(modelIds.includes("gemini-2.5-flash"), "Must include gemini-2.5-flash");
+  });
 });
 
 async function callHandler({ method, url, body }) {
