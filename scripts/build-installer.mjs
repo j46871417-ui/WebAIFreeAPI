@@ -122,10 +122,23 @@ console.log("2. Compiling native Windows GUI installer with csc.exe (with UAC ma
 const cmdCsc = `"${cscExe}" /target:winexe /win32manifest:"${manifestFile}" /out:"${outputExe}" /win32icon:"${iconFile}" /resource:"${archiveZip}",ai-free.zip /reference:System.Windows.Forms.dll /reference:System.Drawing.dll "${csFile}"`;
 execSync(cmdCsc, { cwd: rootDir, stdio: "inherit" });
 
+function safeCopy(src, dst) {
+  try {
+    fs.copyFileSync(src, dst);
+    return true;
+  } catch (err) {
+    if (err.code === "EBUSY" || err.code === "EPERM") {
+      console.warn(`[WARN] Target file is locked/busy, skipping copy: ${dst}`);
+      return false;
+    }
+    throw err;
+  }
+}
+
 const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8"));
 const version = pkg.version || "1.5.0";
 const versionedExe = path.join(distDir, `WebAIFreeAPI_v${version}.exe`);
-fs.copyFileSync(outputExe, versionedExe);
+safeCopy(outputExe, versionedExe);
 
 console.log(`\nNative GUI Installer created: ${outputExe} (${(fs.statSync(outputExe).size / (1024 * 1024)).toFixed(1)} MB)`);
 console.log(`Versioned installer created: ${versionedExe}`);
@@ -138,7 +151,7 @@ const desktops = [
 for (const d of desktops) {
   const destSetup = path.join(d, "WebAIFreeAPI-Setup.exe");
   const destVersioned = path.join(d, `WebAIFreeAPI_v${version}.exe`);
-  fs.copyFileSync(outputExe, destSetup);
-  fs.copyFileSync(versionedExe, destVersioned);
+  safeCopy(outputExe, destSetup);
+  safeCopy(versionedExe, destVersioned);
   console.log(`Copied installer to: ${destSetup} and ${destVersioned}`);
 }

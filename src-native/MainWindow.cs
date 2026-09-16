@@ -15,7 +15,7 @@ namespace WebAIFreeAPI.Native
         public MainWindow(string url)
         {
             this.url = url;
-            Text = "WebAIFreeAPI v1.9.4";
+            Text = "WebAIFreeAPI v1.9.7";
             Width = 1320;
             Height = 860;
             StartPosition = FormStartPosition.CenterScreen;
@@ -41,6 +41,14 @@ namespace WebAIFreeAPI.Native
                 // Remove some default WebView2 features
                 webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
                 webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+
+                webView.CoreWebView2.DocumentTitleChanged += (sender, args) =>
+                {
+                    if (!string.IsNullOrEmpty(webView.CoreWebView2.DocumentTitle))
+                    {
+                        Text = webView.CoreWebView2.DocumentTitle;
+                    }
+                };
 
                 webView.CoreWebView2.ScriptDialogOpening += (sender, args) =>
                 {
