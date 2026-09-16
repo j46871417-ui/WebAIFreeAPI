@@ -90,6 +90,7 @@ import {
   findProviderModel,
   getProviderCatalog,
   getProviderDefaultModel,
+  getProviderIds,
   uiModelCatalog,
 } from "../providers/model-catalog.mjs";
 import { createFileLogger } from "../logging/logger.mjs";
@@ -183,6 +184,32 @@ export function buildOpenCodeConfig({ port = 4317, keys = {} } = {}) {
         models: {
           "mistral-large": { name: "Mistral Large", limit: { context: 128000, output: 8192 } },
           "pixtral-large": { name: "Pixtral Large", vision: true, limit: { context: 128000, output: 8192 } },
+        },
+      },
+      "ai-free-claude": {
+        npm: "@ai-sdk/openai-compatible",
+        name: "WebAIFreeAPI (Claude)",
+        options: {
+          baseURL: `http://127.0.0.1:${port}/v1`,
+          apiKey: keys.claude,
+        },
+        models: {
+          "claude-3-7-sonnet": { name: "Claude 3.7 Sonnet", reasoning: true, limit: { context: 200000, output: 8192 } },
+          "claude-3-5-sonnet": { name: "Claude 3.5 Sonnet", limit: { context: 200000, output: 8192 } },
+          "claude-3-5-haiku": { name: "Claude 3.5 Haiku", limit: { context: 200000, output: 8192 } },
+        },
+      },
+      "ai-free-gemini": {
+        npm: "@ai-sdk/openai-compatible",
+        name: "WebAIFreeAPI (Gemini)",
+        options: {
+          baseURL: `http://127.0.0.1:${port}/v1`,
+          apiKey: keys.gemini,
+        },
+        models: {
+          "gemini-2.5-pro": { name: "Gemini 2.5 Pro", reasoning: true, limit: { context: 1000000, output: 8192 } },
+          "gemini-2.5-flash": { name: "Gemini 2.5 Flash", limit: { context: 1000000, output: 8192 } },
+          "gemini-2.0-flash": { name: "Gemini 2.0 Flash", limit: { context: 1000000, output: 8192 } },
         },
       },
     },
@@ -1543,7 +1570,7 @@ export async function runWindowApp({
           return sendJson(res, { error: `Путь существует, но это не папка: ${workspace}` }, 400);
         }
 
-        const allowedProviders = new Set(["deepseek", "qwen", "chatgpt", "grok", "mistral"]);
+        const allowedProviders = new Set(getProviderIds());
         const requestedProvider = String(body.provider || "deepseek");
         if (!allowedProviders.has(requestedProvider)) {
           return sendJson(res, { error: `Провайдер "${requestedProvider}" не поддерживается.` }, 400);

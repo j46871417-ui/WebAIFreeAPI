@@ -27,6 +27,8 @@ describe("OpenCode configuration generator", () => {
       "ai-free-chatgpt",
       "ai-free-grok",
       "ai-free-mistral",
+      "ai-free-claude",
+      "ai-free-gemini",
     ];
 
     for (const p of expectedProviders) {
@@ -35,6 +37,9 @@ describe("OpenCode configuration generator", () => {
       assert.equal(providers[p].options.baseURL, "http://127.0.0.1:4317/v1");
       assert.ok(Object.keys(providers[p].models).length > 0, `${p} should have configured models`);
     }
+
+    assert.ok(providers["ai-free-claude"].models["claude-3-7-sonnet"]);
+    assert.ok(providers["ai-free-gemini"].models["gemini-2.5-pro"]);
 
     assert.equal(providers["ai-free-qwen"].options.apiKey, "sk-qwen-test");
     assert.equal(providers["ai-free-deepseek"].options.apiKey, "sk-deepseek-test");
