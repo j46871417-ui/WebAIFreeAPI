@@ -1352,6 +1352,41 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
       } catch {}
     }
 
+    async function logoutProviderAction(id) {
+      const info = PROVIDER_INFO[id];
+      if (!info) return;
+      const label = info.label;
+      if (!confirm(t("provider.logoutConfirm", { label }))) return;
+
+      const card = newChatProviderPicker.querySelector('[data-provider="' + id + '"]');
+      const logoutBtn = card?.querySelector(".providerLogoutBtn");
+      if (logoutBtn) {
+        logoutBtn.disabled = true;
+        logoutBtn.dataset.prevText = logoutBtn.textContent;
+        logoutBtn.textContent = "⏳ " + (t("app.loadingShort") || "...");
+      }
+
+      setStatus("Выход из профиля " + label + "...");
+      try {
+        const r = await fetch("/api/providers/" + id + "/logout", { method: "POST" });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+        await refreshAvailableProviders();
+        renderProviderPicker();
+        renderModePickerForProvider();
+        setStatus(t("provider.logoutSuccess", { label }));
+      } catch (e) {
+        setStatus(e.message, true);
+      } finally {
+        if (logoutBtn) {
+          logoutBtn.disabled = false;
+          if (logoutBtn.dataset.prevText) {
+            logoutBtn.textContent = logoutBtn.dataset.prevText;
+          }
+        }
+      }
+    }
+
     function renderProviderPicker() {
       newChatProviderPicker.innerHTML = "";
       for (const id of Object.keys(PROVIDER_INFO)) {
@@ -1386,7 +1421,10 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
           '<div class="providerOptionTitle"></div>' +
           '<div class="providerOptionSub"></div>' +
           (isAuthed 
-            ? '<button type="button" class="reconnectLink success" title="' + t("provider.connectedTitle") + '">' + t("provider.connected") + '</button>'
+            ? '<div class="providerOptionActions">' +
+                '<button type="button" class="reconnectLink success" title="' + t("provider.connectedTitle") + '">' + t("provider.connected") + '</button>' +
+                '<button type="button" class="providerLogoutBtn" title="' + t("provider.logout") + '">' + t("provider.logout") + '</button>' +
+              '</div>'
             : '<button type="button" class="reconnectLink danger" title="' + t("provider.authorizeTitle") + '">' + t("provider.authorize") + '</button>');
         btn.querySelector(".providerOptionTitle").textContent = info.icon ? (info.icon + " " + info.label) : info.label;
         btn.querySelector(".providerOptionSub").textContent = info.sub;
@@ -1437,6 +1475,14 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
         return;
       }
 
+      // Клик по кнопке выхода из профиля
+      const logoutBtn = event.target.closest(".providerLogoutBtn");
+      if (logoutBtn) {
+        event.stopPropagation();
+        await logoutProviderAction(id);
+        return;
+      }
+
       // Если провайдер еще не авторизован — любой клик по нему запускает нативное окно входа
       if (opt.dataset.authed !== "1") {
         event.stopPropagation();
@@ -1461,7 +1507,7 @@ export function renderWindowHtml({ language: requestedLanguage = "", ui = {} } =
     newChatProviderPicker.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       const opt = event.target.closest(".providerOption");
-      if (!opt || event.target.closest(".reconnectLink")) return;
+      if (!opt || event.target.closest(".reconnectLink") || event.target.closest(".providerLogoutBtn")) return;
       if (opt.dataset.provider === "gemini") {
         event.preventDefault();
         setStatus("⚠️ Провайдер Gemini находится в разработке и временно недоступен", true);

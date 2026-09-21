@@ -100,7 +100,7 @@ const itemsToInclude = [
   "setup.bat",
   "ai-free.ico",
   ".gitignore"
-]
+].filter((i) => fs.existsSync(path.join(rootDir, i)));
 
 const excludes = [
   "-xr!.git",
@@ -115,7 +115,11 @@ const excludes = [
 ];
 
 const cmdZip = `"${sevenZipExe}" a -tzip -mx=5 "${archiveZip}" ${itemsToInclude.map(i => `"${path.join(rootDir, i)}"`).join(" ")} ${excludes.join(" ")}`;
-execSync(cmdZip, { cwd: rootDir, stdio: "inherit" });
+try {
+  execSync(cmdZip, { cwd: rootDir, stdio: "inherit" });
+} catch (err) {
+  if (err.status !== 1) throw err;
+}
 
 const manifestFile = path.join(rootDir, "scripts", "app.manifest");
 console.log("2. Compiling native Windows GUI installer with csc.exe (with UAC manifest)...");

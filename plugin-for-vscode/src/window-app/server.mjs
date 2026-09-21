@@ -274,6 +274,7 @@ export async function runWindowApp({
   }
 
   // Lazy init Qwen-клиента + авто-relogin (как DeepSeek AuthManager).
+  let deepseekClient = null;
   let qwenClient = null;
   let qwenAuthManager = null;
   let chatGPTClient = null;
@@ -1132,6 +1133,35 @@ export async function runWindowApp({
             });
           return sendJson(res, { ok: true, loginStarted: true, hasAuth: provider.hasAuth() });
         } catch (error) {
+          return sendJson(res, { error: error.message }, 500);
+        }
+      }
+
+      // Выйти из профиля провайдера (удаление сессии, сброс прокси и кэшей).
+      const providerLogoutMatch = url.pathname.match(/^\/api\/providers\/([^/]+)\/logout$/);
+      if (req.method === "POST" && providerLogoutMatch) {
+        const providerId = providerLogoutMatch[1];
+        const { getProvider, logoutProvider } = await import("../providers/registry.mjs");
+        const provider = getProvider(providerId);
+        if (!provider) {
+          return sendJson(res, { error: `Unknown provider: ${providerId}` }, 404);
+        }
+        try {
+          await logoutProvider(providerId);
+          deepseekClient = null;
+          qwenClient = null;
+          chatGPTClient = null;
+          grokChatClient = null;
+          mistralChatClient = null;
+          claudeChatClient = null;
+          geminiChatClient = null;
+          qwenAuthManager = null;
+          providerLoginStates.delete(providerId);
+          providerLoginJobs.delete(providerId);
+          appLogger.info("provider.logout.completed", { providerId });
+          return sendJson(res, { ok: true, id: providerId, hasAuth: false });
+        } catch (error) {
+          appLogger.error("provider.logout.failed", error, { providerId });
           return sendJson(res, { error: error.message }, 500);
         }
       }

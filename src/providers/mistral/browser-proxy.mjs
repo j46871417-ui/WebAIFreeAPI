@@ -2,9 +2,39 @@ import fs from "node:fs";
 import path from "node:path";
 import { MISTRAL_AUTH_FILE, MISTRAL_BASE_URL, MISTRAL_BROWSER_PROFILE } from "./config.mjs";
 import { launchPersistentDeepSeekContext } from "../../browser/launch.mjs";
+import {
+  detectCloudflareChallenge,
+  waitForCloudflareClearance,
+  trySolveTurnstileCheckbox,
+} from "../chatgpt/cloudflare-challenge.mjs";
 
 let sharedProxyPromise = null;
 let idleTimer = null;
+
+export const DEFAULT_UA = process.platform === "win32"
+  ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+  : "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
+
+export function getMistralBrowserLaunchOptions(env = process.env) {
+  const isHeadless = env.MISTRAL_HEADLESS !== "0";
+  return {
+    headless: isHeadless,
+    args: ["--disable-blink-features=AutomationControlled"],
+    ignoreDefaultArgs: ["--enable-automation"],
+    userAgent: DEFAULT_UA,
+    locale: "ru-RU",
+    viewport: { width: 1280, height: 900 },
+  };
+}
+
+export function isMistralThinkingStatus(text) {
+  if (!text || typeof text !== "string") return false;
+  const clean = text.trim().toLowerCase();
+  return (
+    /^(vibing|thinking|thought|reasoning|searching|searching\s+the\s+web|browsing|думаю|размышляю|поиск|поиск\s+в\s+интернете|подождите|генерирую)[.…]*$/i.test(clean) ||
+    /^(vibing|thinking|думаю|reasoning)\s*\d*[:.]?$/i.test(clean)
+  );
+}
 
 export async function getMistralBrowserProxy({ debug = false } = {}) {
   if (sharedProxyPromise) return sharedProxyPromise;
@@ -34,12 +64,27 @@ async function createMistralBrowserProxy({ debug = false } = {}) {
   const { getChatGPTChromium } = await import("../chatgpt/engine.mjs");
   const chromium = await getChatGPTChromium();
 
-  const headless = process.env.MISTRAL_HEADLESS !== "0";
+  const launchOptions = getMistralBrowserLaunchOptions();
   const context = await launchPersistentDeepSeekContext(
     chromium,
     MISTRAL_BROWSER_PROFILE,
-    headless
+    launchOptions.headless,
+    {
+      args: launchOptions.args,
+      ignoreDefaultArgs: launchOptions.ignoreDefaultArgs,
+      userAgent: launchOptions.userAgent,
+      locale: launchOptions.locale,
+      viewport: launchOptions.viewport,
+    }
   );
+
+  context.on("close", () => {
+    sharedProxyPromise = null;
+  });
+
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  });
 
   // Restore saved cookies if present
   if (fs.existsSync(MISTRAL_AUTH_FILE)) {
@@ -91,17 +136,33 @@ async function createMistralBrowserProxy({ debug = false } = {}) {
     const currentUrl = page.url();
     if (!currentUrl.includes("chat.mistral.ai")) {
       await page.goto(MISTRAL_BASE_URL, { waitUntil: "domcontentloaded", timeout: 45_000 });
-      await page.waitForTimeout(2000);
+      await waitForCloudflareClearance(page, { maxMs: 15_000, debug });
+    } else {
+      const state = await detectCloudflareChallenge(page);
+      if (state.challenge) {
+        await waitForCloudflareClearance(page, { maxMs: 15_000, debug });
+      }
     }
     await dismissModals();
 
-    const pageState = await page.evaluate(() => {
+    const cfState = await detectCloudflareChallenge(page);
+    const hasCfElement = await page.evaluate(() => {
       const title = document.title || "";
-      if (title.includes("Один момент") || title.includes("Just a moment") || document.querySelector("#challenge-running")) {
-        return "Сайт chat.mistral.ai заблокирован проверкой Cloudflare. Требуется повторный вход через кнопку «Авторизоваться».";
-      }
+      return Boolean(
+        title.includes("Один момент") ||
+        title.includes("Just a moment") ||
+        document.querySelector("#challenge-running, #challenge-stage")
+      );
+    }).catch(() => false);
+
+    if (cfState.challenge || hasCfElement) {
+      throw new Error("Mistral: Сайт chat.mistral.ai заблокирован проверкой Cloudflare. Требуется повторный вход через кнопку «Авторизоваться».");
+    }
+
+    const pageState = await page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll("button, a"));
-      const hasSignIn = buttons.some((b) => {
+      const isVisible = (el) => Boolean(el && el.offsetParent !== null && !el.hasAttribute("hidden"));
+      const hasSignIn = buttons.filter(isVisible).some((b) => {
         const t = (b.innerText || b.getAttribute("aria-label") || "").toLowerCase().trim();
         return t === "sign in" || t === "log in" || t === "войти";
       });
@@ -154,6 +215,12 @@ async function createMistralBrowserProxy({ debug = false } = {}) {
     if (typeof composer?.focus === "function") {
       await composer.focus().catch(() => {});
     }
+
+    const initialAssistantCount = await page.evaluate(() => {
+      const msgs = document.querySelectorAll('.prose, [data-message-author-role="assistant"], div[class*="prose"]');
+      return msgs.length;
+    }).catch(() => 0);
+
     await page.keyboard.insertText(prompt);
     await page.waitForTimeout(300);
 
@@ -179,16 +246,43 @@ async function createMistralBrowserProxy({ debug = false } = {}) {
         throw new Error("Request aborted by client");
       }
 
-      const currentText = await page.evaluate(() => {
-        const messageContainers = document.querySelectorAll(
-          '.prose, [data-message-author-role="assistant"], div[class*="message"], div[class*="response"]'
-        );
-        if (!messageContainers.length) {
+      const currentText = await page.evaluate((initCount) => {
+        const messageContainers = Array.from(document.querySelectorAll(
+          '.prose, [data-message-author-role="assistant"], div[class*="prose"], div[class*="markdown"], [data-testid*="message"]'
+        )).filter((el) => {
+          if (el.getAttribute("contenteditable") === "true" || el.closest('[contenteditable="true"]')) return false;
+          return true;
+        });
+
+        if (messageContainers.length <= initCount) {
           return "";
         }
         const last = messageContainers[messageContainers.length - 1];
-        return last ? (last.innerText || "").trim() : "";
-      });
+        if (!last) return "";
+
+        const clone = last.cloneNode(true);
+        const statusSelectors = [
+          "details",
+          "summary",
+          '[class*="thinking"]',
+          '[class*="reasoning"]',
+          '[class*="status"]',
+          '[class*="badge"]',
+          '[class*="loader"]',
+          '[data-testid*="thinking"]',
+          '[data-testid*="reasoning"]',
+        ];
+        for (const s of statusSelectors) {
+          clone.querySelectorAll(s).forEach((el) => el.remove());
+        }
+
+        const raw = (clone.innerText || "").trim();
+        const clean = raw.toLowerCase();
+        if (/^(vibing|thinking|thought|reasoning|searching|searching\s+the\s+web|browsing|думаю|размышляю|поиск|поиск\s+в\s+интернете|подождите|генерирую)[.…]*$/i.test(clean)) {
+          return "";
+        }
+        return raw;
+      }, initialAssistantCount);
 
       if (currentText) {
         if (currentText !== lastText) {
@@ -206,12 +300,31 @@ async function createMistralBrowserProxy({ debug = false } = {}) {
       }
 
       const isGenerating = await page.evaluate(() => {
-        const stopBtn = document.querySelector('button[aria-label*="stop" i], button[aria-label*="остановить" i], button:has(svg[class*="stop"])');
-        return Boolean(stopBtn && stopBtn.getClientRects().length > 0);
+        const stopBtn = document.querySelector('button[aria-label*="stop" i], button[aria-label*="остановить" i], button:has(svg[class*="stop"]), button[data-testid*="stop"]');
+        if (stopBtn && stopBtn.getClientRects().length > 0) return true;
+
+        const spinners = document.querySelectorAll(
+          '[class*="animate-spin"], [class*="animate-pulse"], [data-is-streaming="true"], [class*="thinking"], [class*="reasoning"]'
+        );
+        if (spinners.length > 0) return true;
+
+        const textElements = document.querySelectorAll("button, span, div");
+        for (const el of textElements) {
+          const t = (el.innerText || "").trim().toLowerCase();
+          if (t === "vibing" || t === "думаю" || t === "thinking" || t === "searching the web" || t === "поиск в интернете") {
+            if (el.getClientRects().length > 0) return true;
+          }
+        }
+        return false;
       });
 
       // Ранняя проверка на ошибки или требование авторизации вместо бесконечного ожидания
       if (!lastText && Date.now() - startTime > 12_000) {
+        await trySolveTurnstileCheckbox(page, { debug }).catch(() => {});
+        const cfState = await detectCloudflareChallenge(page);
+        if (cfState.challenge) {
+          await waitForCloudflareClearance(page, { maxMs: 5_000, debug });
+        }
         const errorState = await page.evaluate(() => {
           if (document.title.includes("Один момент") || document.title.includes("Just a moment") || document.querySelector("#challenge-running")) {
             return "Сайт chat.mistral.ai заблокирован проверкой Cloudflare. Авторизуйтесь заново через кнопку «Авторизоваться».";
