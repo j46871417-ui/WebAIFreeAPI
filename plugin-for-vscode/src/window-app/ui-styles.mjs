@@ -2483,6 +2483,16 @@ export const STYLES = `
     .error { color: var(--danger); }
 
     /* Ссылка войти заново / переподключить */
+    .providerOptionActions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+      flex-wrap: wrap;
+    }
+    .providerOptionActions .reconnectLink {
+      margin-top: 0;
+    }
     .reconnectLink {
       display: inline-block;
       font-size: 10px;
@@ -2520,6 +2530,30 @@ export const STYLES = `
       color: #fff;
       background: rgba(255, 119, 109, 0.25);
       border-color: rgba(255, 119, 109, 0.5);
+    }
+    .providerLogoutBtn {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 120ms ease;
+      text-transform: none;
+      border: 1px solid rgba(255, 119, 109, 0.35);
+      background: rgba(255, 119, 109, 0.08);
+      color: #ff776d;
+      font-family: inherit;
+      line-height: 1.2;
+    }
+    .providerLogoutBtn:hover {
+      color: #fff;
+      background: rgba(239, 68, 68, 0.25);
+      border-color: rgba(239, 68, 68, 0.5);
+    }
+    .providerLogoutBtn:disabled {
+      cursor: wait;
+      opacity: 0.65;
     }
 
     .togglePill {

@@ -8,6 +8,12 @@ import { solvePow } from "./pow.mjs";
 import { streamSse } from "./sse.mjs";
 import { fetchWithTlsFallback } from "./fetch-safe.mjs";
 import { createFileLogger } from "../../logging/logger.mjs";
+import {
+  sharedDeepSeekRateLimiter,
+  getDeepSeekPowSettleMs,
+  isDeepSeekRateLimitError,
+  sleep,
+} from "./rate-limiter.mjs";
 
 const providerLogger = createFileLogger({ component: "provider.deepseek" });
 
@@ -62,12 +68,13 @@ export function formatDeepSeekFileFailure(file, fileId) {
 }
 
 export class DeepSeekChatClient {
-  constructor({ cookieHeader, token, debug, authManager = null, hifLeim = "" }) {
+  constructor({ cookieHeader, token, debug, authManager = null, hifLeim = "", rateLimiter = null }) {
     this.cookieHeader = cookieHeader;
     this.token = token;
     this.debug = debug;
     this.authManager = authManager;
     this.hifLeim = hifLeim;
+    this.rateLimiter = rateLimiter || sharedDeepSeekRateLimiter;
   }
 
   setAuthManager(authManager) {
@@ -130,7 +137,10 @@ export class DeepSeekChatClient {
   }
 
   async json(path, opts = {}) {
-    return await this._withReauth(() => this._jsonOnce(path, opts));
+    return await this.rateLimiter.executeWithRetry(
+      () => this._withReauth(() => this._jsonOnce(path, opts)),
+      { signal: opts?.signal }
+    );
   }
 
   async _jsonOnce(path, { method = "GET", body, headers = {} } = {}) {
@@ -154,6 +164,11 @@ export class DeepSeekChatClient {
     try {
       json = JSON.parse(text);
     } catch {
+      if (res.status === 429) {
+        const err = new Error(`DeepSeek rate limit exceeded at ${path}: HTTP 429: ${text.slice(0, 180)}`);
+        err.status = 429;
+        throw err;
+      }
       if (res.status === 401 || res.status === 403) {
         const err = new Error(`Auth required at ${path}: HTTP ${res.status}`);
         err.isAuthError = true;
@@ -168,6 +183,12 @@ export class DeepSeekChatClient {
       console.error(`[debug] ${method} ${path} -> HTTP ${res.status}`, json);
     }
 
+    if (res.status === 429) {
+      const err = new Error(`DeepSeek rate limit exceeded at ${path}: HTTP 429: ${text.slice(0, 180)}`);
+      err.status = 429;
+      throw err;
+    }
+
     if (
       res.status === 401 ||
       res.status === 403 ||
@@ -177,6 +198,14 @@ export class DeepSeekChatClient {
         `Auth required at ${path}: code ${json?.code ?? ""}, http ${res.status}`,
       );
       err.isAuthError = true;
+      throw err;
+    }
+
+    if (isDeepSeekRateLimitError(json?.msg || text, res.status)) {
+      const err = new Error(
+        `DeepSeek rate limit at ${path}: HTTP ${res.status}, code ${json?.code ?? ""}, msg ${json?.msg || text.slice(0, 180)}`,
+      );
+      err.status = res.status;
       throw err;
     }
 
@@ -449,7 +478,10 @@ export class DeepSeekChatClient {
       searchEnabled: args?.searchEnabled === true,
     });
     try {
-      const result = await this._withReauth(() => this._completeWithInvalidMessageRetry(args, refFileIds));
+      const result = await this.rateLimiter.executeWithRetry(
+        () => this._withReauth(() => this._completeWithInvalidMessageRetry(args, refFileIds)),
+        { signal: args?.signal }
+      );
       providerLogger.info("provider.deepseek.success", {
         operation: "completion",
         model: args?.modelType || null,
@@ -521,6 +553,10 @@ export class DeepSeekChatClient {
   }) {
     await this._ensureSearchFeatureToken(searchEnabled);
     const pow = await this.createPowHeader(COMPLETION_PATH);
+    const powSettleMs = getDeepSeekPowSettleMs();
+    if (powSettleMs > 0) {
+      await sleep(powSettleMs, signal);
+    }
     const body = {
       chat_session_id: sessionId,
       parent_message_id: parentMessageId,
@@ -557,6 +593,11 @@ export class DeepSeekChatClient {
     const contentType = String(res.headers.get("content-type") || "");
     if (!res.ok || !contentType.includes("text/event-stream")) {
       const text = await res.text();
+      if (res.status === 429) {
+        const err = new Error(`DeepSeek rate limit exceeded during completion: HTTP 429: ${text.slice(0, 200)}`);
+        err.status = 429;
+        throw err;
+      }
       if (res.status === 401 || res.status === 403) {
         const err = new Error(`Auth required during completion: HTTP ${res.status}`);
         err.isAuthError = true;
@@ -567,6 +608,11 @@ export class DeepSeekChatClient {
         if (parsed && (parsed.code === 40002 || parsed.code === 40003)) {
           const err = new Error(`Auth required during completion: code ${parsed.code}`);
           err.isAuthError = true;
+          throw err;
+        }
+        if (isDeepSeekRateLimitError(parsed?.data?.biz_msg || parsed?.msg || text, res.status)) {
+          const err = new Error(`DeepSeek rate limit during completion: ${parsed?.data?.biz_msg || parsed?.msg || text.slice(0, 200)}`);
+          err.status = res.status;
           throw err;
         }
         const bizCode = parsed?.data?.biz_code;
@@ -582,8 +628,8 @@ export class DeepSeekChatClient {
           throw new Error(`Completion rejected: biz_code ${bizCode}, ${bizMsg}: ${text.slice(0, 500)}`);
         }
       } catch (parseError) {
-        if (parseError?.isAuthError) throw parseError;
-        if (parseError?.message?.includes("biz_code") || parseError?.message?.includes("ref file")) {
+        if (parseError?.isAuthError || parseError?.status === 429) throw parseError;
+        if (parseError?.message?.includes("biz_code") || parseError?.message?.includes("ref file") || parseError?.message?.includes("rate limit")) {
           throw parseError;
         }
       }

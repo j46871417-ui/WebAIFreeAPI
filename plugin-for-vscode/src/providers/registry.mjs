@@ -7,11 +7,12 @@
 
 import path from "node:path";
 import fs from "node:fs";
-import { DEFAULT_AUTH_FILE, AUTH_DIR } from "../config.mjs";
+import { DEFAULT_AUTH_FILE, AUTH_DIR, DEFAULT_BROWSER_PROFILE } from "../config.mjs";
 import { QWEN_AUTH_FILE } from "./qwen/config.mjs";
 import { isJwtActive } from "./qwen/auth-files.mjs";
 import { CHATGPT_AUTH_FILE } from "./chatgpt/config.mjs";
 import { isChatGPTAuthUsable, readChatGPTAuth } from "./chatgpt/auth-files.mjs";
+import { isMistralAuthUsable } from "./mistral/auth-utils.mjs";
 
 export const GROK_AUTH_FILE = path.join(AUTH_DIR, "grok-state.json");
 export const MISTRAL_AUTH_FILE = path.join(AUTH_DIR, "mistral-state.json");
@@ -100,19 +101,7 @@ export const PROVIDERS = {
       try {
         if (!fs.existsSync(MISTRAL_AUTH_FILE) || fs.statSync(MISTRAL_AUTH_FILE).size <= 5) return false;
         const cookies = JSON.parse(fs.readFileSync(MISTRAL_AUTH_FILE, "utf-8"));
-        if (!Array.isArray(cookies) || cookies.length === 0) return false;
-        const mistralCookies = cookies.filter((c) => c.domain && /(^|\.)mistral\.ai$/i.test(c.domain));
-        const hasAnon = mistralCookies.some((c) => c.name === "anonymousUser");
-        if (hasAnon) return false;
-        const hasAuthToken = mistralCookies.some((c) =>
-          c.name === "mistral_session" ||
-          c.name.includes("session-token") ||
-          c.name === "app_session" ||
-          c.name === "__Secure-next-auth.session-token" ||
-          c.name === "authjs.session-token" ||
-          (c.name.includes("session") && !c.name.includes("intercom") && !c.name.includes("anonymous"))
-        );
-        return hasAuthToken;
+        return isMistralAuthUsable(cookies);
       } catch {
         return false;
       }
@@ -173,4 +162,92 @@ export function configuredCount() {
 
 export function configuredProviders() {
   return Object.values(PROVIDERS).filter((p) => p.hasAuth());
+}
+
+export async function logoutProvider(id) {
+  const provider = getProvider(id);
+  if (!provider) {
+    throw new Error(`Неизвестный провайдер: ${id}`);
+  }
+
+  // 1. Удаляем сохраненный auth-файл
+  if (provider.authFile && fs.existsSync(provider.authFile)) {
+    try {
+      fs.unlinkSync(provider.authFile);
+    } catch {}
+  }
+
+  // 2. Сбрасываем браузерные прокси и очищаем данные браузерных сессий
+  if (id === "deepseek") {
+    try {
+      const { resetBrowserProxy } = await import("../browser/proxy.mjs").catch(() => ({}));
+      if (typeof resetBrowserProxy === "function") resetBrowserProxy();
+    } catch {}
+    const profileCookies = path.join(DEFAULT_BROWSER_PROFILE, "Default", "Network", "Cookies");
+    try { if (fs.existsSync(profileCookies)) fs.unlinkSync(profileCookies); } catch {}
+  } else if (id === "qwen") {
+    try {
+      const { resetQwenBrowserProxy } = await import("./qwen/browser-proxy.mjs");
+      await resetQwenBrowserProxy();
+    } catch {}
+    try {
+      const { QWEN_BROWSER_PROFILE } = await import("./qwen/config.mjs");
+      const profileCookies = path.join(QWEN_BROWSER_PROFILE, "Default", "Network", "Cookies");
+      if (fs.existsSync(profileCookies)) fs.unlinkSync(profileCookies);
+    } catch {}
+  } else if (id === "chatgpt") {
+    try {
+      const { resetChatGPTBrowserProxy } = await import("./chatgpt/browser-proxy.mjs");
+      await resetChatGPTBrowserProxy();
+    } catch {}
+    try {
+      const { CHATGPT_BROWSER_PROFILE } = await import("./chatgpt/config.mjs");
+      const profileCookies = path.join(CHATGPT_BROWSER_PROFILE, "Default", "Network", "Cookies");
+      if (fs.existsSync(profileCookies)) fs.unlinkSync(profileCookies);
+    } catch {}
+  } else if (id === "grok") {
+    try {
+      const { resetGrokBrowserProxy } = await import("./grok/browser-proxy.mjs");
+      resetGrokBrowserProxy();
+    } catch {}
+    try {
+      const { GROK_BROWSER_PROFILE } = await import("./grok/config.mjs");
+      const profileCookies = path.join(GROK_BROWSER_PROFILE, "Default", "Network", "Cookies");
+      if (fs.existsSync(profileCookies)) fs.unlinkSync(profileCookies);
+    } catch {}
+  } else if (id === "mistral") {
+    try {
+      const { resetMistralBrowserProxy } = await import("./mistral/browser-proxy.mjs");
+      resetMistralBrowserProxy();
+    } catch {}
+    try {
+      const { MISTRAL_BROWSER_PROFILE } = await import("./mistral/config.mjs");
+      if (fs.existsSync(MISTRAL_BROWSER_PROFILE)) {
+        fs.rmSync(MISTRAL_BROWSER_PROFILE, { recursive: true, force: true });
+      }
+    } catch {}
+    const defaultMistralProfile = DEFAULT_BROWSER_PROFILE + "_mistral";
+    try {
+      if (fs.existsSync(defaultMistralProfile)) {
+        fs.rmSync(defaultMistralProfile, { recursive: true, force: true });
+      }
+    } catch {}
+  } else if (id === "claude") {
+    try {
+      const { resetClaudeBrowserProxy } = await import("./claude/browser-proxy.mjs");
+      resetClaudeBrowserProxy();
+    } catch {}
+    try {
+      const { CLAUDE_BROWSER_PROFILE } = await import("./claude/config.mjs");
+      const profileCookies = path.join(CLAUDE_BROWSER_PROFILE, "Default", "Network", "Cookies");
+      if (fs.existsSync(profileCookies)) fs.unlinkSync(profileCookies);
+    } catch {}
+  } else if (id === "gemini") {
+    try {
+      const { resetGeminiBrowserProxy } = await import("./gemini/browser-proxy.mjs");
+      resetGeminiBrowserProxy();
+    } catch {}
+  }
+
+  return { ok: true, id, hasAuth: provider.hasAuth() };
 }

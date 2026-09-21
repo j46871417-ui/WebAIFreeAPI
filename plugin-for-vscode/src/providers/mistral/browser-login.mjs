@@ -2,6 +2,12 @@ import fs from "node:fs";
 import { MISTRAL_AUTH_FILE } from "../registry.mjs";
 import { launchPersistentDeepSeekContext } from "../../browser/launch.mjs";
 import { DEFAULT_BROWSER_PROFILE } from "../../config.mjs";
+import {
+  isMistralCookieDomain,
+  isMistralAuthUsable,
+  isMistralAuthRoute,
+  evaluateMistralPageState,
+} from "./auth-utils.mjs";
 
 export async function loginMistralAndSave(timeoutMs = 5 * 60 * 1000) {
   const { getChatGPTChromium } = await import("../chatgpt/engine.mjs");
@@ -32,17 +38,7 @@ export async function loginMistralAndSave(timeoutMs = 5 * 60 * 1000) {
       }
 
       const currentUrl = page.url();
-      let isChatMistral = false;
-      try {
-        const u = new URL(currentUrl);
-        isChatMistral = u.hostname === "chat.mistral.ai" &&
-          !u.pathname.startsWith("/auth") &&
-          !u.pathname.startsWith("/login") &&
-          !u.pathname.startsWith("/signin") &&
-          !u.pathname.startsWith("/callback");
-      } catch {}
-
-      if (!isChatMistral) {
+      if (isMistralAuthRoute(currentUrl)) {
         // Пользователь находится на внешнем OAuth провайдере (Google, Microsoft, auth.mistral.ai)
         // или в процессе редиректа. Окно закрывать НЕЛЬЗЯ.
         await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -50,33 +46,23 @@ export async function loginMistralAndSave(timeoutMs = 5 * 60 * 1000) {
       }
 
       // Фильтруем куки строго для домена mistral.ai
-      const mistralCookies = lastCookies.filter((c) =>
-        c.domain && /(^|\.)mistral\.ai$/i.test(c.domain)
-      );
+      const mistralCookies = lastCookies.filter((c) => isMistralCookieDomain(c?.domain));
+      const hasUsableCookies = isMistralAuthUsable(mistralCookies);
 
-      // Проверяем куки на наличие реального токена/сессии (а не гостевого anonymousUser или intercom-session)
-      const hasAnon = mistralCookies.some((c) => c.name === "anonymousUser");
-      const hasAuthToken = mistralCookies.some((c) =>
-        c.name === "mistral_session" ||
-        c.name.includes("session-token") ||
-        c.name === "app_session" ||
-        c.name === "__Secure-next-auth.session-token" ||
-        c.name === "authjs.session-token" ||
-        (c.name.includes("session") && !c.name.includes("intercom") && !c.name.includes("anonymous"))
-      );
-
-      // Проверяем интерфейс страницы: пропала ли кнопка входа и появился ли профиль
-      let hasSignInButton = true;
-      let hasUserProfile = false;
+      // Проверяем интерфейс страницы: наличие поля ввода и отсутствие видимых кнопок входа
+      let domCheck = { hasComposer: false, visibleSignInButtons: [], hasProfile: false };
       try {
-        const domCheck = await page.evaluate(() => {
+        domCheck = await page.evaluate(() => {
+          const isVisible = (el) => Boolean(el && el.offsetParent !== null && !el.hasAttribute("hidden"));
+          const composer = document.querySelector('textarea, div[contenteditable="true"], [role="textbox"]');
+          const hasComposer = isVisible(composer);
+
           const buttons = Array.from(document.querySelectorAll("button, a"));
-          const signPatterns = ["sign in", "log in", "sign up", "se connecter", "s'inscrire", "войти", "регистрация"];
-          const signIn = buttons.some((b) => {
-            const t = (b.innerText || b.getAttribute("aria-label") || "").toLowerCase().trim();
-            const h = (b.getAttribute("href") || "").toLowerCase();
-            return signPatterns.some((p) => t === p || t.startsWith(p)) || h.includes("/login") || h.includes("/auth") || h.includes("/signin");
-          });
+          const signPatterns = ["sign in", "log in", "войти", "se connecter", "sign up", "s'inscrire", "регистрация"];
+          const visibleSignInButtons = buttons
+            .filter(isVisible)
+            .map((b) => (b.innerText || b.getAttribute("aria-label") || "").trim().toLowerCase())
+            .filter((t) => signPatterns.some((p) => t === p || t.startsWith(p)));
 
           const profileSelectors = [
             '[data-testid="user-menu"]',
@@ -85,22 +71,21 @@ export async function loginMistralAndSave(timeoutMs = 5 * 60 * 1000) {
             'button[aria-label*="profile" i]',
             'button[aria-label*="user" i]',
             'a[href*="/account"]',
-            'a[href*="/settings"]'
+            'a[href*="/settings"]',
           ];
-          const profile = profileSelectors.some((sel) => {
-            const el = document.querySelector(sel);
-            return Boolean(el && el.offsetParent !== null);
-          });
+          const hasProfile = profileSelectors.some((sel) => isVisible(document.querySelector(sel)));
 
-          return { signIn, profile };
+          return { hasComposer, visibleSignInButtons, hasProfile };
         });
-        hasSignInButton = domCheck.signIn;
-        hasUserProfile = domCheck.profile;
       } catch {}
 
-      const isActuallyLoggedIn = !hasAnon && !hasSignInButton && (hasUserProfile || hasAuthToken);
+      const pageEvaluation = evaluateMistralPageState({
+        url: currentUrl,
+        hasComposer: domCheck.hasComposer || domCheck.hasProfile,
+        visibleSignInButtons: domCheck.visibleSignInButtons,
+      });
 
-      if (isActuallyLoggedIn) {
+      if (pageEvaluation.isLoggedIn && hasUsableCookies) {
         fs.writeFileSync(MISTRAL_AUTH_FILE, JSON.stringify(mistralCookies, null, 2));
         await page.waitForTimeout(1500).catch(() => {});
         await context.close().catch(() => {});
@@ -112,6 +97,14 @@ export async function loginMistralAndSave(timeoutMs = 5 * 60 * 1000) {
   } catch (err) {
     console.error("[mistral-login] Error during login session:", err);
   } finally {
+    try {
+      if (lastCookies.length > 0) {
+        const mistralCookies = lastCookies.filter((c) => isMistralCookieDomain(c?.domain));
+        if (isMistralAuthUsable(mistralCookies) && !fs.existsSync(MISTRAL_AUTH_FILE)) {
+          fs.writeFileSync(MISTRAL_AUTH_FILE, JSON.stringify(mistralCookies, null, 2));
+        }
+      }
+    } catch {}
     await context.close().catch(() => {});
   }
 
