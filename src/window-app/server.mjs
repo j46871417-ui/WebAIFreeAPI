@@ -349,18 +349,11 @@ export async function runWindowApp({
         }
       }
     }
-    if (embedUi) {
-      const err = new Error(
-        "ChatGPT: войдите через 🧠 → Браузер → ChatGPT. После входа нажмите «Синхронизировать» — drawer можно закрыть.",
-      );
-      err.needsChatGPTLogin = true;
-      throw err;
-    }
     const { loginChatGPTAndSave } = await import("../providers/chatgpt/browser-login.mjs");
-    await loginChatGPTAndSave(CHATGPT_AUTH_FILE);
+    await loginChatGPTAndSave(CHATGPT_AUTH_FILE, { forceExternal: true, closeAfterLogin: true });
     const fresh = readChatGPTAuth(CHATGPT_AUTH_FILE);
     if (!isChatGPTAuthUsable(fresh)) {
-      throw new Error("ChatGPT authorization did not return an access token. Войди заново и дождись открытия обычного чата ChatGPT.");
+      throw new Error("ChatGPT: авторизация не завершена. Войдите заново в открывшемся окне браузера.");
     }
     return fresh;
   }
@@ -462,11 +455,6 @@ export async function runWindowApp({
         console.log("[chatgpt] reload failed, re-auth required…");
         resetChatGPTBrowserProxy();
         chatGPTClient = null;
-        if (process.env.CHATGPT_EMBED_IN_UI === "1") {
-          throw new Error(
-            "ChatGPT: сессия истекла. Откройте 🧠 → «Браузер» и войдите в ChatGPT снова.",
-          );
-        }
         const fresh = await ensureChatGPTAuth({ forceVisible: true });
         client = await buildChatGPTClientFromAuth(fresh);
         chatGPTClient = client;
@@ -2291,7 +2279,7 @@ export async function runWindowApp({
               conversation.messages.push({
                 role: "assistant",
                 content: needsChatGPTLogin
-                  ? "⚠️ Нужен вход в ChatGPT: 🧠 → Браузер → вкладка ChatGPT. Завершите вход и нажмите «Синхронизировать»."
+                  ? "⚠️ Нужен вход в ChatGPT. Нажмите кнопку «Авторизоваться» на карточке ChatGPT в списке провайдеров."
                   : `⚠️ ChatGPT /code error: ${error.message}`,
                 createdAt: new Date().toISOString(),
               });
@@ -2380,11 +2368,9 @@ export async function runWindowApp({
                 String(error?.message || error),
               );
               delete streamMessage.streaming;
-              streamMessage.content = needsChatGPTLogin
-                ? "⚠️ Нужен вход в ChatGPT: 🧠 → Браузер → вкладка ChatGPT. Войдите, нажмите «Синхронизировать», drawer можно закрыть — сессия сохранится."
-                : browserNotReady
-                  ? "⚠️ Внутренний ChatGPT ещё не готов. Откройте 🧠 → Браузер → ChatGPT и дождитесь статуса «ChatGPT готов». При зависании нажмите ↻."
-                  : `⚠️ ChatGPT error: ${error.message}`;
+              streamMessage.content = needsChatGPTLogin || browserNotReady
+                ? "⚠️ Требуется авторизация или проверка Cloudflare в ChatGPT. Нажмите кнопку «Авторизоваться» на карточке ChatGPT в списке провайдеров."
+                : `⚠️ ChatGPT error: ${error.message}`;
               streamMessage.updatedAt = new Date().toISOString();
               conversation.updatedAt = streamMessage.updatedAt;
               saveWindowState(workspaceRoot, state);

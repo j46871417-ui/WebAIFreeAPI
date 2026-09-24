@@ -63,7 +63,7 @@ export async function launchInternalBrowserContext(
   fs.mkdirSync(profileDir, { recursive: true });
   cleanupChromeProfileForLaunch(profileDir, { clearCookies: false });
 
-  const windowArgs = offscreen
+  const windowArgs = (offscreen && !headless)
     ? [
       "--window-position=-24000,-24000",
       `--window-size=${viewport.width},${viewport.height}`,
@@ -678,115 +678,33 @@ export async function loginChatGPTAndSave(authFile = CHATGPT_AUTH_FILE, options 
 
 async function loginChatGPTAndSaveInternal(authFile, options) {
   const profileDir = CHATGPT_BROWSER_PROFILE;
-  const embedUi = process.env.CHATGPT_EMBED_IN_UI === "1";
-  const forceExternal = options.forceExternal === true;
-  const closeAfterLogin = options.closeAfterLogin === true;
-  const launch = getChatGPTBrowserLaunchOptions();
+  const closeAfterLogin = options?.closeAfterLogin !== false;
   const { closeChatGPTBrowserProxy } = await import("./browser-proxy.mjs");
   // Дожидаемся полного закрытия прежнего транспорта. Фиксированная задержка
   // оставляла два Chrome на одном profileDir и порождала потерю/сброс сессии.
   await closeChatGPTBrowserProxy();
 
-  if (embedUi && !forceExternal) {
-    console.log("🔓 ChatGPT: откройте 🧠 → Браузер → ChatGPT в окне ai-free.");
-    console.log("   Войдите вручную в экране панели — сессия сохранится в ~/.chatgpt-cli/auth.json");
-    const { warmChatGPTInAppBrowser } = await import("../../window-app/chatgpt-live-panel.mjs");
-    await warmChatGPTInAppBrowser();
-    const { getChatGPTBrowserProxy } = await import("./browser-proxy.mjs");
-    const proxy = await getChatGPTBrowserProxy();
-    const page = proxy.getPage();
-    const context = proxy.getContext();
-
-    let captured;
-    try {
-      captured = await new Promise((resolve, reject) => {
-        let done = false;
-        let interval = null;
-        const timeout = setTimeout(() => {
-          if (done) return;
-          done = true;
-          if (interval) clearInterval(interval);
-          reject(new Error("Превышено время ожидания входа (10 минут)."));
-        }, 10 * 60 * 1000);
-
-        const captureCurrentSession = async () => {
-          if (done) return;
-          try {
-            if (await isChatGPTChallengePage(page)) return;
-            const body = await readSessionFromPage(page);
-            const cookies = pickEssentialChatGPTCookies(await context.cookies());
-            const sessionToken = body?.sessionToken || getChatGPTSessionToken(cookies);
-            // Auth.js does not always expose accessToken; its persistent session cookie is sufficient.
-            if (isSuccessfulChatGPTSession(body) && sessionToken) {
-              done = true;
-              clearTimeout(timeout);
-              clearInterval(interval);
-              const userAgent = await page.evaluate(() => navigator.userAgent);
-              resolve({
-                accessToken: body.accessToken || "",
-                sessionToken,
-                cookies,
-                userAgent,
-              });
-            }
-          } catch {}
-        };
-
-        interval = setInterval(captureCurrentSession, 4000);
-        captureCurrentSession();
-      });
-    } catch (error) {
-      throw error;
-    }
-
-    writeChatGPTAuth(authFile, {
-      cookies: captured.cookies,
-      accessToken: captured.accessToken,
-      sessionToken: captured.sessionToken,
-      profileDir,
-      userAgent: captured.userAgent,
-    });
-    console.log("✅ ChatGPT: сессия сохранена.");
-    return captured;
-  }
-
   // Сохраняем постоянный профиль и его cookies между повторными входами.
   // repairChatGPTBrowserProfile остаётся явной аварийной операцией для HTTP 431.
   await prepareChromeProfileForLaunch(profileDir, { clearCookies: false });
 
-  const chromium = forceExternal
-    ? (await import("playwright")).chromium
-    : await (await import("./engine.mjs")).getChatGPTChromium();
-  let session;
-  if (forceExternal || launch.useExternalChrome) {
-    session = await launchNormalChromeForChatGPT(chromium, profileDir, {
-      initialUrl: "about:blank",
-      clearCookies: false,
-      skipKillStale: true,
-      headless: forceExternal ? false : launch.headless,
-      offscreen: forceExternal ? false : launch.offscreen,
-      embedded: false,
-    })
-      || await launchPlaywrightChromeForLogin(chromium, profileDir);
-  } else {
-    const { attachInAppBrowserSession } = await import("../../window-app/in-app-browser.mjs");
-    session = await attachInAppBrowserSession("chatgpt");
-  }
+  const chromium = await (await import("./engine.mjs")).getChatGPTChromium();
+  const session = await launchNormalChromeForChatGPT(chromium, profileDir, {
+    initialUrl: "about:blank",
+    clearCookies: false,
+    skipKillStale: true,
+    headless: false,
+    offscreen: false,
+    embedded: false,
+  }) || await launchPlaywrightChromeForLogin(chromium, profileDir);
+
   const { context, page } = session;
 
   await openChatGPTForLogin(page, context);
 
-  if (forceExternal) {
-    console.log("🔓 ChatGPT: завершите вход в открывшемся окне Chrome.");
-    console.log("   • Окно закроется только после проверки активной сессии без RefreshAccessTokenError.");
-  } else if (embedUi) {
-    console.log("🔓 ChatGPT: войдите через 🧠 → Браузер в окне ai-free (отдельное окно Chrome не откроется).");
-  } else {
-    console.log("🔓 Открываем окно ChatGPT (chatgpt.com).");
-    console.log("   • Пройдите Cloudflare вручную, если появится чекбокс.");
-    console.log("   • Затем залогиньтесь вручную (Google, email, etc.).");
-    console.log("   • Окно останется открытым — через него идут все запросы к ChatGPT.");
-  }
+  console.log("🔓 ChatGPT: завершите вход в открывшемся окне браузера.");
+  console.log("   • Пройдите проверку Cloudflare и войдите в свой аккаунт.");
+  console.log("   • После успешного входа окно закроется автоматически.");
   if (session.mode === "chrome-cdp") {
     console.log("   • Используется обычный Google Chrome, не Playwright Chromium.");
   }

@@ -1,6 +1,7 @@
 export async function runWithEmptyStreamRetry({
   operation,
   onDelta,
+  onThinking = null,
   beforeRetry = null,
   maxAttempts = 2,
   requireDelta = false,
@@ -10,11 +11,15 @@ export async function runWithEmptyStreamRetry({
     if (delta) emitted = true;
     onDelta?.(delta);
   };
+  const emitThinking = (delta) => {
+    if (delta) emitted = true;
+    onThinking?.(delta);
+  };
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      const result = await operation({ attempt, onDelta: emit });
-      if (!emitted && (requireDelta || !String(result?.text || ""))) {
+      const result = await operation({ attempt, onDelta: emit, onThinking: emitThinking });
+      if (!emitted && (requireDelta || (!String(result?.text || "") && !String(result?.thinkingText || "")))) {
         throw createEmptyStreamError();
       }
       return result;

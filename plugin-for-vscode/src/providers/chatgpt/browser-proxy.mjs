@@ -149,12 +149,33 @@ export async function installChatGPTDomObserver(page) {
         const value = (match?.innerText || match?.textContent || "").trim();
         if (value) { error = value; break; }
       }
+      // Текст ответа: если .markdown есть — берем чистый текст markdown.
+      // Если .markdown еще нет (модель в фазе рассуждения) — текст пустой, чтобы не стримить статусы.
+      let cleanText = "";
+      const hasStopButton = [...document.querySelectorAll(stopSelector)].some(visible);
+      const isStreaming = Boolean(
+        last?.matches?.('[aria-busy="true"], [data-is-streaming="true"]') ||
+        last?.querySelector?.('[data-is-streaming="true"], .result-streaming')
+      );
+
+      if (markdown && markdown !== last) {
+        cleanText = (markdown.innerText || "").trim();
+      } else if (!hasStopButton && !isStreaming) {
+        cleanText = (last?.innerText || "").trim();
+      }
+
+      if (
+        /^(thought\s+for\s+\d+\s+seconds?|thinking|thought|reasoning|searching|searching\s+the\s+web|searched\s+\d+\s+sites?|browsing|думает|размышляет|размышлял\s+\d+\s+секунд|поиск\s+в\s+интернете|поиск)[.…]*$/i.test(cleanText) ||
+        /^(thought\s+for|thinking|reasoning|размышлял)\s*\d*[:.]?$/i.test(cleanText)
+      ) {
+        cleanText = "";
+      }
+
       return {
         count: nodes.length,
         id: last?.getAttribute("data-message-id") || "",
-        text: (markdown?.innerText || "").trim(),
-        generating: [...document.querySelectorAll(stopSelector)].some(visible)
-          || Boolean(last?.matches?.('[aria-busy="true"], [data-is-streaming="true"]')),
+        text: cleanText,
+        generating: hasStopButton || isStreaming,
         readyForNextPrompt: visible(composer) && composer?.getAttribute("aria-disabled") !== "true",
         error,
       };
@@ -234,10 +255,23 @@ function isOversizedHeaderError(error) {
 }
 
 
+export function isChatGPTThinkingOrStatusText(text) {
+  if (!text || typeof text !== "string") return false;
+  const clean = text.trim().toLowerCase();
+  return (
+    /^(thought\s+for\s+\d+\s+seconds?|thinking|thought|reasoning|searching|searching\s+the\s+web|searched\s+\d+\s+sites?|browsing|думает|размышляет|размышлял\s+\d+\s+секунд|поиск\s+в\s+интернете|поиск)[.…]*$/i.test(clean) ||
+    /^(thought\s+for|thinking|reasoning|размышлял)\s*\d*[:.]?$/i.test(clean)
+  );
+}
+
 // Code-agent иногда получает от ChatGPT сырой JSON tool-call — вытаскиваем message для UI.
 export function normalizeChatGPTAssistantText(text) {
   const trimmed = String(text || "").trim();
   if (!trimmed) return "";
+
+  if (isChatGPTThinkingOrStatusText(trimmed)) {
+    return "";
+  }
 
   const tryParseJson = (raw) => {
     try {
@@ -273,7 +307,7 @@ const CHATGPT_COMPOSER_SELECTORS = [
 
 export function createChatGPTComposerUnavailableError() {
   const error = new Error(
-    "ChatGPT: вход сохранён, но поле ввода не отрисовалось. Откройте 🧠 → Браузер → ChatGPT и завершите вход.",
+    "ChatGPT: вход сохранён, но поле ввода не отрисовалось. Нажмите «Авторизоваться» на карточке ChatGPT.",
   );
   error.needsChatGPTLogin = true;
   return error;
@@ -778,13 +812,13 @@ async function createProxy({ debug, adoptedSession = null }) {
         if (found) return found;
       } else if (Date.now() - startedAt > 2500) {
         throw new Error(
-          "ChatGPT: вход не завершён. Откройте 🧠 → Браузер → ChatGPT, выберите учётную запись и дождитесь обычного чата. authentication",
+          "ChatGPT: вход не завершён. Нажмите «Авторизоваться» на карточке ChatGPT. authentication",
         );
       }
       if (state.challenge) {
         if (!(await waitThroughCloudflareChallenge())) {
           throw new Error(
-            "ChatGPT: Cloudflare не пройден. Откройте 🧠 → Браузер → ChatGPT, пройдите проверку и нажмите «Синхронизировать». authentication",
+            "ChatGPT: Cloudflare не пройден или сессия истекла. Нажмите «Авторизоваться» на карточке ChatGPT. authentication",
           );
         }
         const afterChallenge = await findComposerLocator();
@@ -860,15 +894,31 @@ async function createProxy({ debug, adoptedSession = null }) {
     const current = await page.evaluate(({ stopSelector }) => {
       const nodes = document.querySelectorAll('[data-message-author-role="assistant"]');
       const last = nodes[nodes.length - 1];
-      const md = last?.querySelector(".markdown") || last;
+      const md = last?.querySelector(".markdown");
       const visible = (node) => Boolean(node && node.getClientRects().length);
       const composer = document.querySelector('#prompt-textarea[contenteditable="true"]');
+      const hasStop = [...document.querySelectorAll(stopSelector)].some(visible);
+      const isStreaming = Boolean(
+        last?.matches?.('[aria-busy="true"], [data-is-streaming="true"]') ||
+        last?.querySelector?.('[data-is-streaming="true"], .result-streaming')
+      );
+      let text = "";
+      if (md) {
+        text = (md.innerText || "").trim();
+      } else if (!hasStop && !isStreaming) {
+        text = (last?.innerText || "").trim();
+      }
+      if (
+        /^(thought\s+for\s+\d+\s+seconds?|thinking|thought|reasoning|searching|searching\s+the\s+web|searched\s+\d+\s+sites?|browsing|думает|размышляет|размышлял\s+\d+\s+секунд|поиск\s+в\s+интернете|поиск)[.…]*$/i.test(text) ||
+        /^(thought\s+for|thinking|reasoning|размышлял)\s*\d*[:.]?$/i.test(text)
+      ) {
+        text = "";
+      }
       return {
         count: nodes.length,
         id: last?.getAttribute("data-message-id") || "",
-        text: (md?.innerText || "").trim(),
-        generating: [...document.querySelectorAll(stopSelector)].some(visible)
-          || Boolean(last?.matches?.('[aria-busy="true"], [data-is-streaming="true"]')),
+        text,
+        generating: hasStop || isStreaming,
         readyForNextPrompt: visible(composer) && composer?.getAttribute("aria-disabled") !== "true",
         error: "",
       };
@@ -994,8 +1044,9 @@ async function createProxy({ debug, adoptedSession = null }) {
         const nodes = document.querySelectorAll('[data-message-author-role="assistant"]');
         const last = nodes[nodes.length - 1];
         if (!last) return { text: "", id: null };
-        const md = last.querySelector(".markdown") || last;
-        return { text: (md.innerText || "").trim(), id: last.getAttribute("data-message-id") || null };
+        const md = last.querySelector(".markdown");
+        const text = (md ? md.innerText : last.innerText || "").trim();
+        return { text, id: last.getAttribute("data-message-id") || null };
       })
       .catch(() => ({ text: "", id: null }));
     return { text: normalizeChatGPTAssistantText(dom.text), id: dom.id };
@@ -1294,7 +1345,7 @@ async function createProxy({ debug, adoptedSession = null }) {
       const state = await detectPageState();
       if (state.challenge) {
         throw new Error(
-          "ChatGPT: Cloudflare помешал получить ответ. 🧠 → Браузер → пройдите проверку → «Синхронизировать». authentication",
+          "ChatGPT: Cloudflare помешал получить ответ. Нажмите «Авторизоваться» на карточке ChatGPT. authentication",
         );
       }
       throw new Error("ChatGPT: ответ получить не удалось (пустой текст). Повтори запрос.");

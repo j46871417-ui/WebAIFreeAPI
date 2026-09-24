@@ -66,7 +66,7 @@ export const PROVIDERS = {
     hasAuth: () => isChatGPTAuthUsable(readChatGPTAuth(CHATGPT_AUTH_FILE)),
     async login(options = {}) {
       const { loginChatGPTAndSave } = await import("./chatgpt/browser-login.mjs");
-      await loginChatGPTAndSave(CHATGPT_AUTH_FILE, options);
+      await loginChatGPTAndSave(CHATGPT_AUTH_FILE, { forceExternal: true, closeAfterLogin: true, ...options });
     },
   },
   grok: {

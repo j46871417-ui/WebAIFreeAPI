@@ -381,6 +381,60 @@ describe("OpenAI-compatible handler", () => {
     assert.ok(modelIds.includes("gemini-2.5-pro"), "Must include gemini-2.5-pro");
     assert.ok(modelIds.includes("gemini-2.5-flash"), "Must include gemini-2.5-flash");
   });
+
+  it("streams reasoning_content chunks via onThinking before text in StreamParser", () => {
+    const res = makeWritableResponse();
+    const parser = new StreamParser("qwen3.8-max", res);
+
+    parser.onThinking("thinking part 1\n");
+    parser.onThinking("thinking part 2\n");
+    parser.onText("final answer");
+    parser.onEnd();
+
+    const events = parseSseJsonEvents(Buffer.concat(res.chunks).toString("utf8"));
+    assert.deepEqual(events[0].choices[0].delta, { role: "assistant" });
+    assert.deepEqual(events[1].choices[0].delta, { reasoning_content: "thinking part 1\n" });
+    assert.deepEqual(events[2].choices[0].delta, { reasoning_content: "thinking part 2\n" });
+    assert.deepEqual(events[3].choices[0].delta, { content: "final answer" });
+    assert.equal(events.at(-1).choices[0].finish_reason, "stop");
+    assert.equal(parser.outputCount, 3);
+  });
+
+  it("does not emit empty stream error when StreamParser has received thinking chunks", () => {
+    const res = makeWritableResponse();
+    const parser = new StreamParser("qwen3.8-max", res);
+
+    parser.onThinking("only thought");
+    parser.onEnd();
+
+    const events = parseSseJsonEvents(Buffer.concat(res.chunks).toString("utf8"));
+    const errorChunks = events.filter((e) => (e.choices[0].delta.content || "").includes("[Error]"));
+    assert.equal(errorChunks.length, 0);
+    assert.equal(events.at(-1).choices[0].finish_reason, "stop");
+    assert.equal(parser.hasEmitted, true);
+  });
+
+  it("streams Qwen thinking and text deltas as reasoning_content and content SSE events", async () => {
+    const res = makeWritableResponse();
+    const client = {
+      async complete({ onThinking, onText }) {
+        onThinking?.("Step 1: plan\n");
+        onThinking?.("Step 2: execute\n");
+        onText?.("Result output");
+        return { text: "Result output", thinkingText: "Step 1: plan\nStep 2: execute\n" };
+      },
+    };
+
+    await handleQwenStream(client, "chat-thinking", "test prompt", "qwen3.8-max", "qwen3.7-max", res);
+
+    const events = parseSseJsonEvents(Buffer.concat(res.chunks).toString("utf8"));
+    const reasoning = events.map((e) => e.choices[0].delta.reasoning_content || "").join("");
+    const content = events.map((e) => e.choices[0].delta.content || "").join("");
+
+    assert.equal(reasoning, "Step 1: plan\nStep 2: execute\n");
+    assert.equal(content, "Result output");
+    assert.equal(events.at(-1).choices[0].finish_reason, "stop");
+  });
 });
 
 async function callHandler({ method, url, body }) {

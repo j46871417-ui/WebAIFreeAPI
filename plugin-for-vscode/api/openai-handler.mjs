@@ -1269,7 +1269,7 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
         logQwenTiming(requestId, "completion_start", { attempt: attempt + 1, total_ms: elapsedMs(startedAt) });
         completionResult = await runWithEmptyStreamRetry({
           requireDelta: true,
-          operation: ({ onDelta }) => activeClient.complete({
+          operation: ({ onDelta, onThinking }) => activeClient.complete({
             chatId: activeChatId,
             prompt,
             parentId,
@@ -1278,6 +1278,7 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
             model,
             signal,
             onText: onDelta,
+            onThinking,
           }),
           onDelta: (textDelta) => {
             if (signal?.aborted || res.destroyed || res.writableEnded) {
@@ -1295,6 +1296,23 @@ export async function handleQwenStream(client, chatId, prompt, modelName, model,
               });
             }
             parser.onText(textDelta);
+          },
+          onThinking: (thinkDelta) => {
+            if (signal?.aborted || res.destroyed || res.writableEnded) {
+              const abortErr = new Error("Request aborted by client");
+              abortErr.name = "AbortError";
+              throw abortErr;
+            }
+            if (!sawDelta) {
+              sawDelta = true;
+              firstDeltaAt = Date.now();
+              logQwenTiming(requestId, "first_thinking_delta", {
+                attempt: attempt + 1,
+                ttft_ms: elapsedMs(startedAt),
+                completion_to_first_delta_ms: elapsedMs(completionStartedAt),
+              });
+            }
+            parser.onThinking(thinkDelta);
           },
           beforeRetry: async ({ attempt: emptyAttempt, error }) => {
             if (signal?.aborted || res.destroyed || res.writableEnded) throw error;
@@ -1929,6 +1947,7 @@ export class StreamParser {
     this.isBareTools = false;
     this.toolsBuffer = "";
     this.first = true;
+    this.hasEmitted = false;
     this.ended = false;
     this.id = `chatcmpl-${Math.floor(Date.now() / 1000)}${Math.random().toString(36).slice(2, 10)}`;
     this.tools = tools;
@@ -1936,8 +1955,19 @@ export class StreamParser {
     this.rawText = "";
   }
 
+  onThinking(thinkDelta) {
+    if (!thinkDelta) return;
+    this.hasEmitted = true;
+    if (this.first) {
+      this.sendChunk({ role: "assistant" }, true);
+      this.first = false;
+    }
+    this.sendChunk({ reasoning_content: thinkDelta });
+  }
+
   onText(textDelta) {
     this.rawText += textDelta;
+    this.hasEmitted = true;
     if (this.isBareTools) {
       this.buffer += textDelta;
       return;
@@ -2001,7 +2031,7 @@ export class StreamParser {
     if (this.ended) return;
     this.ended = true;
     let finishReason = "stop";
-    if (this.first && !this.buffer && !this.toolsBuffer) {
+    if (this.first && !this.buffer && !this.toolsBuffer && !this.hasEmitted) {
       this.sendChunk({ role: "assistant" }, true);
       this.first = false;
       this.sendChunk({ content: "[Error] Upstream model stream ended without response content. Retry the request." });
@@ -2179,7 +2209,7 @@ export class StreamParser {
       choices: [{ index: 0, delta }],
     };
     sendSseEvent(this.res, chunk);
-    if (delta.content || delta.tool_calls?.length) this.outputCount += 1;
+    if (delta.content || delta.reasoning_content || delta.tool_calls?.length) this.outputCount += 1;
     if (this.res.flush) this.res.flush();
   }
 
