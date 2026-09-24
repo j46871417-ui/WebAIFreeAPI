@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it, beforeEach, afterEach } from "node:test";
-import { normalizeChatGPTAssistantText } from "../src/providers/chatgpt/browser-proxy.mjs";
+import {
+  normalizeChatGPTAssistantText,
+  isChatGPTThinkingOrStatusText,
+} from "../src/providers/chatgpt/browser-proxy.mjs";
 import {
   getChatGPTBrowserLaunchOptions,
   tryAssistCloudflareClick,
@@ -90,6 +93,32 @@ describe("normalizeChatGPTAssistantText", () => {
 
   it("returns plain text unchanged", () => {
     assert.equal(normalizeChatGPTAssistantText("Привет"), "Привет");
+  });
+
+  it("drops reasoning and search status phrases", () => {
+    assert.equal(normalizeChatGPTAssistantText("Thought for 5 seconds"), "");
+    assert.equal(normalizeChatGPTAssistantText("Thinking..."), "");
+    assert.equal(normalizeChatGPTAssistantText("Searched 3 sites"), "");
+    assert.equal(normalizeChatGPTAssistantText("Searching the web..."), "");
+    assert.equal(normalizeChatGPTAssistantText("Размышлял 10 секунд"), "");
+    assert.equal(normalizeChatGPTAssistantText("Поиск в интернете..."), "");
+  });
+});
+
+describe("isChatGPTThinkingOrStatusText", () => {
+  it("detects thought, reasoning and search indicator strings", () => {
+    assert.equal(isChatGPTThinkingOrStatusText("Thought for 12 seconds"), true);
+    assert.equal(isChatGPTThinkingOrStatusText("Thought for 1 second."), true);
+    assert.equal(isChatGPTThinkingOrStatusText("Thinking..."), true);
+    assert.equal(isChatGPTThinkingOrStatusText("Searched 4 sites"), true);
+    assert.equal(isChatGPTThinkingOrStatusText("Searching the web"), true);
+    assert.equal(isChatGPTThinkingOrStatusText("Поиск в интернете..."), true);
+    assert.equal(isChatGPTThinkingOrStatusText("Размышлял 5 секунд"), true);
+  });
+
+  it("does not match regular response text", () => {
+    assert.equal(isChatGPTThinkingOrStatusText("Привет! Чем могу помочь?"), false);
+    assert.equal(isChatGPTThinkingOrStatusText("Thinking about this, I believe the answer is 42."), false);
   });
 });
 
