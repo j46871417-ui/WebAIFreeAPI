@@ -96,7 +96,7 @@ export function parseAgentTaskPrompt(prompt) {
     };
   }
 
-  const termMatch = text.match(/^\/(?:terminal|term|cmd|sh|run)(?:\s+([\s\S]*))?$/i);
+  const termMatch = text.match(/^\/(?:terminal|term|cmd|sh|bash|run)(?:\s+([\s\S]*))?$/i);
   if (termMatch) {
     const raw = (termMatch[1] || "").trim();
     if (!raw) {
@@ -130,7 +130,8 @@ export function parseAgentTaskPrompt(prompt) {
         empty: true,
       };
     }
-    const task = `Выполни в Windows PowerShell команду или скрипт:\n${raw}\nЗапусти соответствующий инструмент (run_command с cmd "powershell" или run_shell с shell "powershell"), изучи вывод консоли (stdout/stderr) и подробно объясни результат пользователю.`;
+    const psName = process.platform === "win32" ? "Windows PowerShell" : "PowerShell";
+    const task = `Выполни в ${psName} команду или скрипт:\n${raw}\nЗапусти соответствующий инструмент (run_command с cmd "powershell" или run_shell с shell "powershell"), изучи вывод консоли (stdout/stderr) и подробно объясни результат пользователю.`;
     return {
       mode: "code",
       command: "powershell",

@@ -17,6 +17,9 @@ function safeSpawn(command, args, options) {
       windowsVerbatimArguments: true,
     });
   }
+  if (process.platform !== "win32" && /\.(sh|bash)$/i.test(command)) {
+    return spawn("/bin/sh", [command, ...args], options);
+  }
   return spawn(command, args, options);
 }
 import {
@@ -330,8 +333,11 @@ function findCommand(command) {
     ? []
     : [
         path.join(os.homedir(), ".cargo", "bin"),
-        "/opt/homebrew/bin",
+        path.join(os.homedir(), ".local", "bin"),
         "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/opt/homebrew/bin",
       ];
   const paths = [
     ...String(process.env.PATH || "").split(path.delimiter).filter(Boolean),
@@ -369,6 +375,13 @@ function isExecutable(file) {
     fs.accessSync(file, fs.constants.X_OK);
     return true;
   } catch {
+    if (process.platform !== "win32" && /\.(sh|bash)$/i.test(file)) {
+      try {
+        return fs.existsSync(file) && fs.statSync(file).isFile();
+      } catch {
+        return false;
+      }
+    }
     return false;
   }
 }

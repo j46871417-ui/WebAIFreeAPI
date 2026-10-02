@@ -281,6 +281,8 @@ export function normalizePermissionCommand(command, workspaceRoot = "") {
   if (basename === "powershell.exe" || basename === "powershell") return "powershell";
   if (basename === "pwsh.exe" || basename === "pwsh") return "pwsh";
   if (basename === "cmd.exe" || basename === "cmd") return "cmd";
+  if (basename === "bash") return "bash";
+  if (basename === "sh") return "sh";
 
   const isPython = /^python(?:3(?:\.\d+)?)?(?:\.exe)?$/.test(basename) || basename === "py.exe";
   if (!isPython) return "";
@@ -336,15 +338,31 @@ export async function runWorkspaceShell(workspaceRoot, call) {
   const requestedShell = String(call.shell || "").toLowerCase();
   let shellCmd;
   let shellArgs;
+  let resolvedShellType;
   if (requestedShell === "powershell" || requestedShell === "pwsh" || requestedShell === "ps") {
     shellCmd = requestedShell === "pwsh" ? "pwsh" : (process.platform === "win32" ? "powershell.exe" : "pwsh");
     shellArgs = ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command];
+    resolvedShellType = requestedShell;
+  } else if (requestedShell === "cmd") {
+    shellCmd = process.platform === "win32" ? "cmd.exe" : "sh";
+    shellArgs = process.platform === "win32" ? ["/d", "/s", "/c", command] : ["-c", command];
+    resolvedShellType = "cmd";
+  } else if (requestedShell === "bash") {
+    shellCmd = "bash";
+    shellArgs = ["-c", command];
+    resolvedShellType = "bash";
+  } else if (requestedShell === "sh") {
+    shellCmd = "sh";
+    shellArgs = ["-c", command];
+    resolvedShellType = "sh";
   } else if (process.platform === "win32") {
     shellCmd = "cmd.exe";
     shellArgs = ["/d", "/s", "/c", command];
+    resolvedShellType = "cmd";
   } else {
-    shellCmd = "sh";
+    shellCmd = resolveDefaultUnixShell();
     shellArgs = ["-c", command];
+    resolvedShellType = shellCmd;
   }
 
   let result;
@@ -359,7 +377,7 @@ export async function runWorkspaceShell(workspaceRoot, call) {
       ok: false,
       command,
       shell: true,
-      shellType: requestedShell || (process.platform === "win32" ? "cmd" : "sh"),
+      shellType: requestedShell || resolvedShellType || (process.platform === "win32" ? "cmd" : "sh"),
       error: error.message,
     };
   }
@@ -368,13 +386,23 @@ export async function runWorkspaceShell(workspaceRoot, call) {
     ok: result.status === 0,
     command,
     shell: true,
-    shellType: requestedShell || (process.platform === "win32" ? "cmd" : "sh"),
+    shellType: requestedShell || resolvedShellType || (process.platform === "win32" ? "cmd" : "sh"),
     status: result.status,
     signal: result.signal,
     timedOut: result.timedOut,
     stdout: truncateOutput(result.stdout),
     stderr: truncateOutput(result.stderr),
   };
+}
+
+export function resolveDefaultUnixShell() {
+  if (process.env.SHELL && (process.env.SHELL.endsWith("/bash") || process.env.SHELL.endsWith("/sh"))) {
+    return path.basename(process.env.SHELL);
+  }
+  try {
+    if (fs.existsSync("/bin/bash") || fs.existsSync("/usr/bin/bash")) return "bash";
+  } catch {}
+  return "sh";
 }
 
 export function createInstallRequestForMissingCommand(cmd) {
@@ -640,6 +668,14 @@ export function resolveWorkspacePath(workspaceRoot, requestedPath, options = {})
     const windir = process.env.SystemRoot || process.env.windir || "C:\\Windows";
     if (target.toLowerCase().startsWith(path.resolve(windir).toLowerCase())) {
       throw new Error(`Access to system directory is blocked: ${requestedPath}`);
+    }
+  } else {
+    // Linux/Unix critical system directories check
+    const blockedUnixSystemDirs = ["/proc", "/sys", "/dev", "/etc/shadow", "/etc/sudoers", "/root"];
+    for (const sysDir of blockedUnixSystemDirs) {
+      if (target === sysDir || target.startsWith(`${sysDir}/`)) {
+        throw new Error(`Access to system directory is blocked: ${requestedPath}`);
+      }
     }
   }
 

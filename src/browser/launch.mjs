@@ -214,20 +214,81 @@ export function detectBrowserChannels() {
     result.chromium = check("/Applications/Chromium.app/Contents/MacOS/Chromium") ||
       check(path.join(home, "Applications/Chromium.app/Contents/MacOS/Chromium"));
   } else {
+    const check = (p) => {
+      try {
+        return (p && fs.existsSync(p)) ? p : null;
+      } catch {
+        return null;
+      }
+    };
     const which = (name) => {
       try {
         const res = spawnSync("which", [name], { encoding: "utf8" });
         if (res.status === 0 && res.stdout) {
           const first = res.stdout.split("\n")[0].trim();
-          if (first && fs.existsSync(first)) return first;
+          if (first && check(first)) return first;
         }
       } catch {}
       return null;
     };
-    result.chrome = which("google-chrome") || which("google-chrome-stable");
-    result.msedge = which("microsoft-edge") || which("microsoft-edge-stable");
-    result.brave = which("brave-browser");
-    result.chromium = which("chromium") || which("chromium-browser");
+    const findBinary = (names, paths) => {
+      for (const name of names) {
+        const found = which(name);
+        if (found) return found;
+      }
+      for (const p of paths) {
+        const found = check(p);
+        if (found) return found;
+      }
+      return null;
+    };
+
+    result.chrome = findBinary(
+      ["google-chrome", "google-chrome-stable"],
+      [
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/local/bin/google-chrome",
+        "/usr/local/bin/google-chrome-stable",
+        "/opt/google/chrome/google-chrome",
+        "/opt/google/chrome/chrome",
+        "/snap/bin/google-chrome",
+        "/var/lib/flatpak/exports/bin/com.google.Chrome",
+      ],
+    );
+    result.msedge = findBinary(
+      ["microsoft-edge", "microsoft-edge-stable", "msedge"],
+      [
+        "/usr/bin/microsoft-edge",
+        "/usr/bin/microsoft-edge-stable",
+        "/usr/bin/msedge",
+        "/opt/microsoft/msedge/msedge",
+        "/opt/microsoft/msedge/microsoft-edge",
+        "/usr/local/bin/microsoft-edge",
+      ],
+    );
+    result.brave = findBinary(
+      ["brave-browser", "brave"],
+      [
+        "/usr/bin/brave-browser",
+        "/usr/bin/brave",
+        "/usr/local/bin/brave-browser",
+        "/opt/brave.com/brave/brave-browser",
+        "/snap/bin/brave",
+        "/var/lib/flatpak/exports/bin/com.brave.Browser",
+      ],
+    );
+    result.chromium = findBinary(
+      ["chromium", "chromium-browser"],
+      [
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/local/bin/chromium",
+        "/usr/local/bin/chromium-browser",
+        "/snap/bin/chromium",
+        "/var/lib/flatpak/exports/bin/org.chromium.Chromium",
+      ],
+    );
   }
 
   // Порядок выбора основного бинарника: Chrome → Edge → Brave → Chromium
@@ -251,6 +312,10 @@ function osHomedirSafe() {
 export function fallbackOpen(url) {
   if (process.platform === "win32") {
     spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" }).unref();
+    return;
+  }
+  if (process.platform === "darwin") {
+    spawn("open", [url], { detached: true, stdio: "ignore" }).unref();
     return;
   }
   spawn("xdg-open", [url], { detached: true, stdio: "ignore" }).unref();

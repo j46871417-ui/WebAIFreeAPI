@@ -1,0 +1,18 @@
+[Unit]
+Description=WebAIFreeAPI Background Service
+Documentation=https://github.com/j46871417-ui/WebAIFreeAPI
+After=network.target
+
+[Service]
+Type=simple
+Environment=NODE_ENV=production
+WorkingDirectory=/opt/ai-free
+ExecStart=/usr/bin/node /opt/ai-free/bin/deepseek.mjs --no-window
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+KillMode=process
+
+[Install]
+WantedBy=default.target
