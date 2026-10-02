@@ -1,6 +1,6 @@
 {
   "name": "WebAIFreeAPI",
-  "version": "1.9.9",
+  "version": "1.10.0-alpha.1",
   "description": "Free local AI client for DeepSeek, Qwen and ChatGPT with OpenAI-compatible API, CLI, code agent, memory and skills.",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
@@ -70,6 +70,8 @@
     "check:runtime": "node ./scripts/runtime-check.mjs .",
     "build:gui": "node ./scripts/build-native-gui.mjs",
     "build:installer": "node ./scripts/build-installer.mjs",
+    "build:linux": "node ./scripts/build-linux-package.mjs",
+    "pack:rpm": "node ./scripts/build-linux-package.mjs --rpm",
     "pretest": "node plugin-for-vscode/build.mjs",
     "test": "node --test test/*.test.mjs"
   },

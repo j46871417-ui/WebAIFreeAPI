@@ -72,8 +72,8 @@ describe("agent task commands (/file, /folder, /terminal, /code, /skill)", () =>
     assert.match(res2.task, /найди тесты агента/);
   });
 
-  it("parses /terminal, /term, /cmd, /sh, /run with command string", () => {
-    for (const prefix of ["/terminal", "/term", "/cmd", "/sh", "/run"]) {
+  it("parses /terminal, /term, /cmd, /sh, /bash, /run with command string", () => {
+    for (const prefix of ["/terminal", "/term", "/cmd", "/sh", "/bash", "/run"]) {
       const res = parseAgentTaskPrompt(`${prefix} npm test`);
       assert.equal(res.empty, false, prefix);
       assert.equal(res.command, "terminal", prefix);

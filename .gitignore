@@ -41,3 +41,5 @@ msg.txt
 request.json
 opencode_latest.json
 *.tmp
+__pycache__/
+*.py[cod]

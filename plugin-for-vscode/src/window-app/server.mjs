@@ -6,7 +6,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
 import { openAppWindow } from "../browser/launch.mjs";
@@ -1346,7 +1346,7 @@ export async function runWindowApp({
           }
         }
 
-        const requestedShell = String(body.shell || "powershell").toLowerCase();
+        const requestedShell = String(body.shell || (process.platform === "win32" ? "powershell" : "default")).toLowerCase();
         if (process.platform === "win32") {
           try {
             if (requestedShell === "cmd") {
@@ -1380,8 +1380,36 @@ export async function runWindowApp({
           spawn("open", ["-a", "Terminal", targetDir], { detached: true, stdio: "ignore" }).unref();
           return sendJson(res, { ok: true, shell: requestedShell, path: targetDir });
         } else {
-          spawn("x-terminal-emulator", ["--working-directory", targetDir], { detached: true, stdio: "ignore" }).unref();
-          return sendJson(res, { ok: true, shell: requestedShell, path: targetDir });
+          try {
+            const launched = launchLinuxTerminal(targetDir);
+            return sendJson(res, { ok: true, shell: launched || requestedShell, path: targetDir });
+          } catch (err) {
+            return sendJson(res, { error: `Не удалось запустить терминал: ${err.message}` }, 500);
+          }
+        }
+      }
+
+      if (req.method === "POST" && (url.pathname === "/api/folder/open" || url.pathname === "/api/directory/open" || url.pathname === "/api/browse/open")) {
+        const body = await readJsonBody(req).catch(() => ({}));
+        let targetDir = workspaceRoot;
+        const requested = typeof body.path === "string" && body.path.trim()
+          ? body.path.trim()
+          : (typeof body.workspace === "string" && body.workspace.trim() ? body.workspace.trim() : "");
+        if (requested) {
+          try {
+            targetDir = resolveWorkspacePath(workspaceRoot, requested);
+            if (!fs.existsSync(targetDir) || !fs.statSync(targetDir).isDirectory()) {
+              targetDir = workspaceRoot;
+            }
+          } catch {
+            return sendJson(res, { error: "Указанный путь заблокирован." }, 400);
+          }
+        }
+        try {
+          openDirectoryInFileManager(targetDir);
+          return sendJson(res, { ok: true, path: targetDir });
+        } catch (err) {
+          return sendJson(res, { error: `Не удалось открыть папку: ${err.message}` }, 500);
         }
       }
 
@@ -3092,7 +3120,7 @@ function formatCodeProgressMessage(task, logs, { browserOnly = false } = {}) {
 
 export function shouldAutoRunCodeTask(prompt) {
   const text = String(prompt || "").trim();
-  if (!text || /^\/(?:code|skill|file|read|folder|dir|terminal|term|cmd|sh|run|powershell|pwsh|ps)\b/i.test(text)) return false;
+  if (!text || /^\/(?:code|skill|file|read|folder|dir|terminal|term|cmd|sh|bash|run|powershell|pwsh|ps)\b/i.test(text)) return false;
   const normalized = text.toLowerCase();
   const hasAny = (terms) => terms.some((term) => normalized.includes(term));
 
@@ -3213,3 +3241,70 @@ function effectiveThinkingForMode(mode, userToggle, globalDefault) {
   if (mode === "expert") return true;
   return globalDefault;
 }
+
+export function isLinuxCommandAvailable(command) {
+  try {
+    const res = spawnSync("which", [command], { encoding: "utf8" });
+    if (res.status === 0 && res.stdout.trim()) return true;
+  } catch {}
+  const commonDirs = ["/usr/bin", "/bin", "/usr/local/bin"];
+  for (const dir of commonDirs) {
+    try {
+      if (fs.existsSync(path.join(dir, command))) return true;
+    } catch {}
+  }
+  return false;
+}
+
+export function launchLinuxTerminal(targetDir) {
+  const candidates = [
+    { name: "x-terminal-emulator", args: (dir) => ["--working-directory", dir] },
+    { name: "gnome-terminal", args: (dir) => ["--working-directory", dir] },
+    { name: "konsole", args: (dir) => ["--workdir", dir] },
+    { name: "xterm", args: () => [] },
+  ];
+
+  for (const c of candidates) {
+    if (isLinuxCommandAvailable(c.name)) {
+      const child = spawn(c.name, c.args(targetDir), {
+        cwd: targetDir,
+        detached: true,
+        stdio: "ignore",
+      });
+      child.unref();
+      return c.name;
+    }
+  }
+
+  const fallback = candidates[0];
+  const child = spawn(fallback.name, fallback.args(targetDir), {
+    cwd: targetDir,
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
+  return fallback.name;
+}
+
+export function openDirectoryInFileManager(targetDir) {
+  if (process.platform === "win32") {
+    const child = spawn("explorer.exe", [targetDir], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+  } else if (process.platform === "darwin") {
+    const child = spawn("open", [targetDir], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+  } else {
+    const child = spawn("xdg-open", [targetDir], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+  }
+}
+

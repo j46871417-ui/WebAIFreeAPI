@@ -1,0 +1,39 @@
+[Desktop Entry]
+Version=1.5
+Type=Application
+Name=WebAIFreeAPI
+Name[ru]=WebAIFreeAPI (AI Клиент)
+GenericName=AI Client
+GenericName[ru]=Клиент искусственного интеллекта
+Comment=Free local AI client for DeepSeek, Qwen and ChatGPT with OpenAI-compatible API
+Comment[ru]=Локальный клиент нейросетей DeepSeek, Qwen и ChatGPT с OpenAI API
+Exec=/usr/bin/ai-free %U
+Icon=ai-free
+Terminal=false
+Categories=Development;Utility;ArtificialIntelligence;Network;
+MimeType=x-scheme-handler/aifree;
+StartupNotify=true
+StartupWMClass=WebAIFreeAPI
+Keywords=ai;deepseek;qwen;chatgpt;openai;llm;bot;
+Keywords[ru]=ии;нейросеть;дипсик;дипсик-чат;чатгпт;квен;
+Actions=OpenBrowser;RunTerminal;OpenLogs;
+
+[Desktop Action OpenBrowser]
+Name=Open Web Interface
+Name[ru]=Открыть веб-интерфейс
+Exec=/usr/bin/ai-free --window
+Icon=ai-free
+
+[Desktop Action RunTerminal]
+Name=Interactive CLI Chat
+Name[ru]=Интерактивный CLI чат
+Exec=/usr/bin/ai-free
+Icon=utilities-terminal
+Terminal=true
+
+[Desktop Action OpenLogs]
+Name=Service Status & Logs
+Name[ru]=Статус сервиса и логи
+Exec=/usr/bin/ai-free --status
+Icon=text-x-generic
+Terminal=true

@@ -118,3 +118,32 @@ describe("applyAgentTaskInputToConversation", () => {
   });
 });
 
+describe("Linux terminal and file manager helpers", () => {
+  it("excludes /bash from shouldAutoRunCodeTask", () => {
+    assert.equal(shouldAutoRunCodeTask("/bash echo test"), false);
+    assert.equal(shouldAutoRunCodeTask("/sh echo test"), false);
+  });
+
+  it("exports launchLinuxTerminal and openDirectoryInFileManager", async () => {
+    const { launchLinuxTerminal, openDirectoryInFileManager, isLinuxCommandAvailable } = await import("../src/window-app/server.mjs");
+    assert.equal(typeof launchLinuxTerminal, "function");
+    assert.equal(typeof openDirectoryInFileManager, "function");
+    assert.equal(typeof isLinuxCommandAvailable, "function");
+  });
+});
+
+describe("cross-platform browser detection", () => {
+  it("exports detectBrowserChannels and findChromeBinary", async () => {
+    const { detectBrowserChannels, findChromeBinary } = await import("../src/browser/launch.mjs");
+    assert.equal(typeof detectBrowserChannels, "function");
+    assert.equal(typeof findChromeBinary, "function");
+    const channels = detectBrowserChannels();
+    assert.ok("chrome" in channels);
+    assert.ok("chromium" in channels);
+    assert.ok("brave" in channels);
+    assert.ok("msedge" in channels);
+    assert.ok("any" in channels);
+  });
+});
+
+
