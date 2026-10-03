@@ -60,7 +60,12 @@ function throwIfQwenAuthFailure(status, text, context) {
   throw err;
 }
 
-function finalizeQwenCompletionResult(parsed, rawText, context) {
+function finalizeQwenCompletionResult(parsed, rawText, context, fallbackMessageId = null) {
+  const isBranchName = parsed?.lastMessageId === "primary" || parsed?.lastMessageId === "alternate";
+  const resolvedMessageId = (!parsed?.lastMessageId || isBranchName)
+    ? (fallbackMessageId || parsed?.lastMessageId || null)
+    : parsed?.lastMessageId;
+
   if (parsed?.error) {
     const errText = String(parsed.error);
     if (isQwenSessionExpiredText(errText)) {
@@ -72,7 +77,7 @@ function finalizeQwenCompletionResult(parsed, rawText, context) {
     }
     return {
       text: errText,
-      lastMessageId: parsed.lastMessageId ?? null,
+      lastMessageId: resolvedMessageId,
       thinkingText: parsed.thinkingText || "",
     };
   }
@@ -82,7 +87,7 @@ function finalizeQwenCompletionResult(parsed, rawText, context) {
     if (fields && isQwenAntiBotRejection(fields.code, fields.details)) {
       return {
         text: formatQwenAntiBotMessage(fields),
-        lastMessageId: null,
+        lastMessageId: resolvedMessageId,
         thinkingText: "",
         error: formatQwenAntiBotMessage(fields),
       };
@@ -92,11 +97,11 @@ function finalizeQwenCompletionResult(parsed, rawText, context) {
     }
     const fallback = emptyQwenParseFallback(rawText || "", rawText || "", 0);
     throwIfQwenSessionExpiredFromAssistantText(fallback.text, context);
-    return fallback;
+    return { ...fallback, lastMessageId: resolvedMessageId };
   }
 
   throwIfQwenSessionExpiredFromAssistantText(parsed.text, context);
-  return parsed;
+  return { ...parsed, lastMessageId: resolvedMessageId };
 }
 
 function extractCodeFromCompletionText(text) {
@@ -458,7 +463,7 @@ export class QwenChatClient {
           const proxy = await getQwenBrowserProxy({ debug: this.debug });
           const useLiveStream = typeof onText === "function" || typeof onThinking === "function";
           const streamParser = useLiveStream
-            ? createQwenIncrementalParser({ onText, onThinking })
+            ? createQwenIncrementalParser({ onText, onThinking, fallbackMessageId: body.assistantFid })
             : null;
           const result = useLiveStream
             ? await proxy.proxyFetchStream({
@@ -497,7 +502,7 @@ export class QwenChatClient {
 
           const parsed = useLiveStream
             ? streamParser.finish(result.text)
-            : parseQwenResponseText(result.text, result.contentType, onText);
+            : parseQwenResponseText(result.text, result.contentType, onText, body.assistantFid);
 
           if (isQwenInvalidParentError(parsed, result.text)) {
             return { result: null, chatInProgressStuck: false, invalidParentStuck: true };
@@ -526,7 +531,10 @@ export class QwenChatClient {
             continue;
           }
 
-          return { result: finalizeQwenCompletionResult(parsed, result.text, "completion (browser)"), chatInProgressStuck: false };
+          return {
+            result: finalizeQwenCompletionResult(parsed, result.text, "completion (browser)", body.assistantFid),
+            chatInProgressStuck: false,
+          };
         } catch (error) {
           providerLogger.error("provider.qwen.error", error, {
             operation: "completion_round",
@@ -708,12 +716,13 @@ function createQwenResponseSelector() {
   };
 }
 
-export function createQwenIncrementalParser({ onText = null, onThinking = null } = {}) {
+export function createQwenIncrementalParser({ onText = null, onThinking = null, fallbackMessageId = null } = {}) {
   let buffer = "";
   let fullText = "";
   let thinkingBuf = "";
   let lastMessageId = null;
   let error = null;
+  let sawSearchActivityInCurrentChunk = false;
   const responseSelector = createQwenResponseSelector();
 
   function consumeEvent(raw) {
@@ -726,6 +735,16 @@ export function createQwenIncrementalParser({ onText = null, onThinking = null }
     if (errMsg) {
       error = errMsg;
       return;
+    }
+    const isSearchActivity = Boolean(
+      parsed.phase === "search"
+      || parsed.status === "searching"
+      || parsed.query
+      || parsed.plugin_call
+      || (parsed.choices?.[0]?.delta && (parsed.choices[0].delta.phase === "search" || parsed.choices[0].delta.search))
+    );
+    if (isSearchActivity) {
+      sawSearchActivityInCurrentChunk = true;
     }
     const found = extractTextRecursively(parsed);
     if (found.text) {
@@ -744,6 +763,7 @@ export function createQwenIncrementalParser({ onText = null, onThinking = null }
     push(chunk) {
       const textLengthBefore = fullText.length;
       const thinkingLengthBefore = thinkingBuf.length;
+      sawSearchActivityInCurrentChunk = false;
       buffer += String(chunk || "");
       let boundary;
       while ((boundary = buffer.indexOf("\n\n")) >= 0) {
@@ -751,18 +771,26 @@ export function createQwenIncrementalParser({ onText = null, onThinking = null }
         buffer = buffer.slice(boundary + 2);
         if (error) break;
       }
-      return fullText.length > textLengthBefore || thinkingBuf.length > thinkingLengthBefore;
+      return (
+        fullText.length > textLengthBefore
+        || thinkingBuf.length > thinkingLengthBefore
+        || sawSearchActivityInCurrentChunk
+      );
     },
     finish(rawFallback = "") {
       if (buffer.trim()) consumeEvent(buffer);
+      const isBranchName = lastMessageId === "primary" || lastMessageId === "alternate";
+      const resolvedMessageId = (!lastMessageId || (isBranchName && fallbackMessageId))
+        ? (fallbackMessageId || lastMessageId)
+        : lastMessageId;
       if (error) {
-        return { text: error, lastMessageId, thinkingText: thinkingBuf, error };
+        return { text: error, lastMessageId: resolvedMessageId, thinkingText: thinkingBuf, error };
       }
       if (!fullText && !thinkingBuf) {
         const fallback = emptyQwenParseFallback(rawFallback, rawFallback, 0);
-        return { ...fallback, error: null };
+        return { ...fallback, lastMessageId: resolvedMessageId, error: null };
       }
-      return { text: fullText, lastMessageId, thinkingText: thinkingBuf, error: null };
+      return { text: fullText, lastMessageId: resolvedMessageId, thinkingText: thinkingBuf, error: null };
     },
   };
 }
@@ -812,7 +840,7 @@ function emptyQwenParseFallback(text, rawAccumulated, eventCount) {
 // Парсит полный текст ответа (от browser-proxy — он отдаёт весь body одним куском).
 // Поддерживает оба варианта: одиночный JSON и SSE-стрим из много "data: {...}" блоков.
 // Если передан onText callback, вызывает его для каждого найденного текстового кусочка.
-export function parseQwenResponseText(text, contentType, onText) {
+export function parseQwenResponseText(text, contentType, onText, fallbackMessageId = null) {
   const ct = String(contentType || "").toLowerCase();
 
   // Одиночный JSON-ответ (обычно — ошибка или non-streaming endpoint).
@@ -866,10 +894,16 @@ export function parseQwenResponseText(text, contentType, onText) {
     if (found.messageId) lastMessageId = String(found.messageId);
   }
 
+  const isBranchName = lastMessageId === "primary" || lastMessageId === "alternate";
+  const resolvedMessageId = (!lastMessageId || (isBranchName && fallbackMessageId))
+    ? (fallbackMessageId || lastMessageId)
+    : lastMessageId;
+
   if (!fullText && !thinkingBuf) {
-    return emptyQwenParseFallback(text, text, events.length);
+    const fallback = emptyQwenParseFallback(text, text, events.length);
+    return { ...fallback, lastMessageId: resolvedMessageId, error: null };
   }
-  return { text: fullText, lastMessageId, thinkingText: thinkingBuf };
+  return { text: fullText, lastMessageId: resolvedMessageId, thinkingText: thinkingBuf };
 }
 
 // Парсер SSE-стрима Qwen.

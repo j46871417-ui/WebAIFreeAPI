@@ -8,7 +8,6 @@
 import fs from "node:fs";
 import { DEFAULT_BROWSER_PROFILE } from "../config.mjs";
 import {
-  clearProfileSession,
   loginAndSaveAuth,
   refreshAuthFromProfile,
 } from "../browser/login.mjs";
@@ -54,13 +53,7 @@ export class AuthManager {
       throw new Error("Too many failed re-login attempts in a row. Aborting to avoid loop.");
     }
 
-    console.log("\n🔒 DeepSeek session expired. Clearing stale session and opening login window...");
-    try {
-      await clearProfileSession(DEFAULT_BROWSER_PROFILE);
-    } catch (error) {
-      if (this.debug) console.error(`[auth] could not clear profile session (continuing): ${error.message}`);
-    }
-
+    console.log("\n🔒 DeepSeek session expired. Opening login window...");
     const auth = await loginAndSaveAuth(this.authFile);
     this._consecutiveFailures = 0;
     console.log("✅ Re-login completed. Resuming...");

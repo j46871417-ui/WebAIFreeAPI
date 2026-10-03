@@ -355,7 +355,6 @@ async function createProxy({ debug }) {
                       break;
                     }
                     if (isStreamingResponse && /(^|\n)data:\s*\[DONE\](\n|$)/.test(text)) {
-                      try { await reader.cancel(); } catch {}
                       break;
                     }
                   }
@@ -528,7 +527,6 @@ async function createProxy({ debug }) {
                         break;
                       }
                       if (isStreamingResponse && /(^|\n)data:\s*\[DONE\](\n|$)/.test(text)) {
-                        try { await reader.cancel(); } catch {}
                         break;
                       }
                     }

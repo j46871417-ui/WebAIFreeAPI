@@ -126,15 +126,8 @@ export async function importQwenFromJson(jsonPath, authFile = QWEN_AUTH_FILE) {
 // Главный entry-point для `npm run login-qwen` и in-app re-login.
 export async function loginQwenAndSave(authFile = QWEN_AUTH_FILE, { clearSession = false } = {}) {
   const profileDir = QWEN_BROWSER_PROFILE;
-  let clearSessionFinal = clearSession;
-  const previousToken = clearSessionFinal ? (readQwenAuth(authFile)?.token || "") : "";
-  if (!clearSessionFinal) {
-    const existing = readQwenAuth(authFile)?.token || "";
-    if (existing && !isJwtActive(existing)) {
-      console.log("🔒 Предыдущий JWT-токен Qwen истёк — сбрасываю старую сессию для нового входа.");
-      clearSessionFinal = true;
-    }
-  }
+  const clearSessionFinal = clearSession;
+  const previousToken = readQwenAuth(authFile)?.token || "";
   const { getChatGPTChromium } = await import("../chatgpt/engine.mjs");
   const chromium = await getChatGPTChromium();
   // Переиспользуем launch-функцию от DeepSeek — она запускает реальный Chrome.

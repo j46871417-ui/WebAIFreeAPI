@@ -23,6 +23,7 @@ export function buildQwenCompletionPayload({
     chat_mode: "normal",
     model,
     parent_id: parentId,
+    assistantFid,
     messages: [
       {
         fid,

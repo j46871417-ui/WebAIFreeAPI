@@ -2129,7 +2129,10 @@ export async function runWindowApp({
                   },
                 },
               );
-              conversation.parentMessageId = result.lastMessageId ?? conversation.parentMessageId;
+              const isBranchName = result.lastMessageId === "primary" || result.lastMessageId === "alternate";
+              if (result.lastMessageId && !isBranchName) {
+                conversation.parentMessageId = result.lastMessageId;
+              }
               // Qwen recovered «The chat is in progress!» by creating a fresh
               // chat_id. Закрепляем его в conversation.sessionId, чтобы следующие
               // сообщения шли в восстановленный чат, а не в зависший старый.

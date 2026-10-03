@@ -10,10 +10,19 @@ import { spawn, spawnSync } from "node:child_process";
 // Поддерживает каскадный выбор браузера: Edge → Chrome → Brave → Chromium → bundled Playwright.
 export async function launchPersistentDeepSeekContext(chromium, profileDir, headless, overrides = {}) {
   fs.mkdirSync(profileDir, { recursive: true });
+  const linuxArgs = process.platform === "linux"
+    ? ["--no-sandbox", "--disable-setuid-sandbox"]
+    : [];
   const options = {
     headless,
     viewport: null,
-    args: ["--disable-blink-features=AutomationControlled"],
+    ignoreDefaultArgs: ["--enable-automation"],
+    args: [
+      "--no-first-run",
+      "--no-default-browser-check",
+      ...linuxArgs,
+      ...(overrides.args || []),
+    ],
     ...overrides,
   };
 
@@ -28,16 +37,24 @@ export async function launchPersistentDeepSeekContext(chromium, profileDir, head
   if (overrides.channel) {
     candidateAttempts.push({ type: "channel", value: overrides.channel });
   } else {
-    if (detected.msedge) candidateAttempts.push({ type: "channel", value: "msedge" });
     if (detected.chrome) candidateAttempts.push({ type: "channel", value: "chrome" });
-    if (detected.chromium) candidateAttempts.push({ type: "channel", value: "chromium" });
+    if (detected.msedge) candidateAttempts.push({ type: "channel", value: "msedge" });
+    if (detected.chromium) {
+      if (process.platform === "linux") {
+        candidateAttempts.push({ type: "executablePath", value: detected.chromium });
+      } else {
+        candidateAttempts.push({ type: "channel", value: "chromium" });
+      }
+    }
 
     // Если точные пути не определились (например, в экзотических окружениях),
     // всё равно пробуем стандартные каналы по очереди
     if (!candidateAttempts.length) {
-      candidateAttempts.push({ type: "channel", value: "msedge" });
       candidateAttempts.push({ type: "channel", value: "chrome" });
-      candidateAttempts.push({ type: "channel", value: "chromium" });
+      candidateAttempts.push({ type: "channel", value: "msedge" });
+      if (process.platform !== "linux") {
+        candidateAttempts.push({ type: "channel", value: "chromium" });
+      }
     }
   }
 
@@ -89,7 +106,15 @@ export async function launchPersistentDeepSeekContext(chromium, profileDir, head
       delete launchOpts.channel;
       delete launchOpts.executablePath;
     }
-    return await chromium.launchPersistentContext(profileDir, launchOpts);
+    const ctx = await chromium.launchPersistentContext(profileDir, launchOpts);
+    try {
+      await ctx.addInitScript(() => {
+        try {
+          Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+        } catch {}
+      });
+    } catch {}
+    return ctx;
   };
 
   const errors = [];
