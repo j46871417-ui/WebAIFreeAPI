@@ -19,16 +19,58 @@ npm install
 - скачает Node-зависимости (~20 МБ),
 - через `postinstall`-хук подтянет Chromium для Playwright (~150 МБ).
 
-## Linux: дополнительные системные библиотеки
+## Установка на Linux (ROSA Linux 13, Fedora, РЕД ОС, Ubuntu/Debian)
 
-Только для Linux, один раз:
-
+### Вариант 1: Готовый RPM-пакет (ROSA 13 / Fedora / РЕД ОС)
+Скачай `.rpm` из раздела [Releases](https://github.com/j46871417-ui/WebAIFreeAPI/releases):
 ```bash
-sudo npx playwright install-deps chromium
+# Для РОСА Линукс 13, Fedora, РЕД ОС:
+sudo dnf install ./ai-free-*.noarch.rpm
+
+# Для дистрибутивов с urpmi (ROSA Fresh / Mandriva):
+sudo urpmi ./ai-free-*.noarch.rpm
+```
+Ярлык появится в меню приложений. Команда запуска из терминала: `ai-free`.
+
+### Вариант 2: Универсальный скрипт `install.sh` (любой Linux)
+Скачай релизный архив `ai-free-*-linux.tar.gz` из [Releases](https://github.com/j46871417-ui/WebAIFreeAPI/releases):
+```bash
+tar -xzf ai-free-*-linux.tar.gz
+cd ai-free-*
+
+# Установка без прав root (в ~/.local, только для текущего пользователя):
+./linux/install.sh --user
+
+# Или системная установка (в /opt/ai-free, требует sudo):
+sudo ./linux/install.sh --system
 ```
 
-Это поставит `libnss3`, `libgbm`, `libasound2` и прочие зависимости Chromium.
-На macOS и Windows этот шаг не нужен.
+### Вариант 3: Из исходного кода (Git)
+```bash
+git clone https://github.com/j46871417-ui/WebAIFreeAPI.git
+cd WebAIFreeAPI
+npm install
+```
+
+### Системные библиотеки браузера (Linux):
+Если на вашей системе не установлен Chromium / Google Chrome, Playwright может запросить библиотеки:
+```bash
+sudo npx playwright install-deps chromium
+# Либо просто установите системный Chromium:
+# sudo dnf install -y chromium   (для ROSA/Fedora)
+# sudo apt install -y chromium   (для Ubuntu/Debian)
+```
+
+### Управление и автозапуск сервиса (systemd):
+```bash
+# Запуск через системный трей (легковесный Python-трей):
+ai-free --tray
+
+# Управление пользовательским фоновым сервисом systemd:
+systemctl --user enable --now ai-free    # включить и запустить
+systemctl --user status ai-free          # проверить статус
+systemctl --user stop ai-free            # остановить
+```
 
 ## Первый запуск
 

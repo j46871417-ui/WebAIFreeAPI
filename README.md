@@ -6,6 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/j46871417-ui/WebAIFreeAPI/releases/latest/download/WebAIFreeAPI-Setup.exe"><img src="https://img.shields.io/badge/Скачать_WebAIFreeAPI--Setup.exe-2ea44f?style=for-the-badge&logo=windows&logoColor=white" alt="Скачать WebAIFreeAPI-Setup.exe"></a>
+  <a href="https://github.com/j46871417-ui/WebAIFreeAPI/releases"><img src="https://img.shields.io/badge/Linux_RPM_%26_Tar.gz-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Скачать для Linux"></a>
   <a href="https://github.com/j46871417-ui/WebAIFreeAPI/releases"><img src="https://img.shields.io/github/v/release/j46871417-ui/WebAIFreeAPI?style=for-the-badge&label=Релиз" alt="Релизы"></a>
   <a href="https://t.me/+8qU7020rMF84OWNi"><img src="https://img.shields.io/badge/Telegram-Сообщество-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Сообщество"></a>
 </p>
@@ -19,6 +20,7 @@ WebAIFreeAPI превращает бесплатные веб-чаты AI в п�
 ## ✨ Основные возможности:
 
 - 📦 **Готовый установщик в 1 клик (`WebAIFreeAPI-Setup.exe`)**: портативный пакет для Windows со встроенным Node.js, автоматической загрузкой Chromium и автонастройкой ярлыков.
+- 🐧 **Полноценная поддержка Linux (ROSA Linux Fresh 13, Fedora, ALT Linux, РЕД ОС, Ubuntu/Debian)**: официальные RPM-пакеты, универсальный скрипт `install.sh`, интеграция с Freedesktop (`.desktop`, иконки), фоновый сервис `systemd --user` и легковесный системный трей на Python.
 - 🤖 **Полноценная работа Qwen и DeepSeek в OpenCode Desktop**: поддержка tool calling, bash, чтения и правки файлов без сбоев.
 - 💬 **Умное переиспользование сессий**: внутри одной сессии чат продолжается последовательно без раздувания контекста каждым новым системным промтом.
 - 🔄 **Автообновление прямо из интерфейса и трея**: проверка свежих версий с GitHub и установка обновления в один клик.
@@ -127,6 +129,53 @@ npm start
 ```
 
 В PowerShell или Windows Terminal — обе оболочки работают. CMD тоже, но Windows Terminal удобнее для интерактивного ввода (например, при `npm run save-creds`).
+
+---
+
+## 🐧 Быстрый старт на Linux (ROSA 13, Fedora, ALT Linux, РЕД ОС, Ubuntu/Debian)
+
+### Способ 1 — Готовый RPM-пакет (ROSA Linux Fresh 13 / Fedora / РЕД ОС)
+Скачай `.rpm` пакет из [Releases](https://github.com/j46871417-ui/WebAIFreeAPI/releases):
+```bash
+# Для РОСА Линукс 13, Fedora, РЕД ОС:
+sudo dnf install ./ai-free-*.noarch.rpm
+
+# Либо через urpmi (ROSA / Mandriva):
+sudo urpmi ./ai-free-*.noarch.rpm
+```
+Ярлык приложения появится в системном меню (категория «Разработка»).
+
+### Способ 2 — Универсальный установщик `install.sh` (любой Linux)
+Скачай архив `ai-free-*-linux.tar.gz` из [Releases](https://github.com/j46871417-ui/WebAIFreeAPI/releases):
+```bash
+tar -xzf ai-free-*-linux.tar.gz
+cd ai-free-*
+
+# Установка без root в ~/.local (только для текущего пользователя):
+./linux/install.sh --user
+
+# Или общесистемная установка (требует sudo, ставит в /opt/ai-free):
+sudo ./linux/install.sh --system
+```
+
+### Способ 3 — Из исходного кода (Git)
+```bash
+git clone https://github.com/j46871417-ui/WebAIFreeAPI.git
+cd WebAIFreeAPI
+npm install
+npm start
+```
+*Совет для Linux:* Если Playwright запросит системные библиотеки Chromium, установите их: `npx playwright install-deps chromium` (или `sudo dnf install -y chromium`).
+
+### ⚙️ Управление на Linux:
+- **Запуск приложения:** `ai-free` или клик по ярлыку в меню приложений.
+- **Системный трей:** `ai-free --tray` (легковесный Python-трей со статусом и быстрым доступом к окну и логам).
+- **Фоновый сервис (systemd):**
+  ```bash
+  systemctl --user enable --now ai-free    # включить и запустить сервис
+  systemctl --user status ai-free          # проверить статус
+  systemctl --user stop ai-free            # остановить
+  ```
 
 ---
 

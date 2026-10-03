@@ -86,4 +86,20 @@ describe("qwen incremental parser", () => {
     assert.equal(result.text, "Main answer");
     assert.equal(result.lastMessageId, "primary");
   });
+
+  it("resolves fallbackMessageId when lastMessageId is primary branch or missing", () => {
+    const parser = createQwenIncrementalParser({ fallbackMessageId: "uuid-assistant-123" });
+    parser.push('data: {"response.created":{"response_id":"primary","response_index":0}}\n\n');
+    parser.push('data: {"choices":[{"delta":{"content":"Answer text"}}],"response_id":"primary"}\n\n');
+    parser.push("data: [DONE]\n\n");
+    const result = parser.finish();
+    assert.equal(result.text, "Answer text");
+    assert.equal(result.lastMessageId, "uuid-assistant-123");
+  });
+
+  it("registers search phase as meaningful content to prevent stream timeouts", () => {
+    const parser = createQwenIncrementalParser({ fallbackMessageId: "uuid-asst" });
+    const hasContent = parser.push('data: {"phase":"search","status":"searching","query":"ROSA Linux 13"}\n\n');
+    assert.equal(hasContent, true, "Search event MUST register as meaningful content");
+  });
 });
