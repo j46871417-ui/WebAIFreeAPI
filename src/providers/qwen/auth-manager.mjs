@@ -8,7 +8,7 @@
 
 import fs from "node:fs";
 import { QWEN_AUTH_FILE, QWEN_BROWSER_PROFILE } from "./config.mjs";
-import { readQwenAuth } from "./auth-files.mjs";
+import { readQwenAuth, isJwtActive } from "./auth-files.mjs";
 import { loginQwenAndSave, refreshQwenAuthFromProfile } from "./browser-login.mjs";
 import { resetQwenBrowserProxy } from "./browser-proxy.mjs";
 import { isQwenSessionExpiredError, isQwenSessionExpiredText, createQwenReloginFailedError } from "./session-errors.mjs";
@@ -59,10 +59,13 @@ export class QwenAuthManager {
 
     const now = Date.now();
     const existing = readQwenAuth(this.authFile);
+    const existingValid = Boolean(existing?.token && isJwtActive(existing.token));
     if (
-      forceVisible
+      !clearSession
+      && forceVisible
       && this._lastReloginAt
       && existing?.token
+      && existingValid
       && existing.token === this._lastReloginToken
       && now - this._lastReloginAt < 10 * 60 * 1000
     ) {

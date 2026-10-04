@@ -23,8 +23,9 @@ export const QWEN_BROWSER_PROFILE = path.join(QWEN_HOME, "browser-profile");
 export const QWEN_TOKEN_COOKIE_NAME = "token";
 
 // Имена ключевых cookies, которые должны быть после логина.
-// Минимум: token. Желательно: cnaui (user UUID), aui.
-export const QWEN_REQUIRED_COOKIES = ["token"];
+// В новых версиях chat.qwen.ai токен хранится в localStorage['token'],
+// поэтому обязательных cookies для валидации сессии нет.
+export const QWEN_REQUIRED_COOKIES = [];
 
 export const QWEN_MODELS = getProviderCatalog("qwen").models;
 
