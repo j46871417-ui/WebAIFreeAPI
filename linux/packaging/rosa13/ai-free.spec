@@ -1,12 +1,12 @@
 Name:           ai-free
 Version:        1.10.0
-Release:        0.1.alpha1%{?dist}
+Release:        1%{?dist}
 Summary:        Free local AI client for DeepSeek, Qwen and ChatGPT with OpenAI-compatible API
 Summary(ru):    Локальный ИИ-клиент DeepSeek, Qwen и ChatGPT с поддержкой OpenAI API
 License:        MIT
 Group:          Development/Tools
 URL:            https://github.com/j46871417-ui/WebAIFreeAPI
-Source0:        %{name}-1.10.0-alpha.1-linux.tar.gz
+Source0:        %{name}-1.10.0-linux.tar.gz
 
 BuildArch:      noarch
 
@@ -27,7 +27,7 @@ CLI, code agent, memory and skills.
 консольным интерфейсом, кодовым агентом, долговременной памятью и навыками.
 
 %prep
-%setup -q -n %{name}-1.10.0-alpha.1
+%setup -q -n %{name}-1.10.0
 
 %build
 # No compilation required for pure JavaScript / Node.js application.

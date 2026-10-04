@@ -38,7 +38,18 @@ function findCsc() {
   return null;
 }
 
+function findTar() {
+  try {
+    const fromPath = execSync("where tar", { encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }).trim().split(/\r?\n/)[0];
+    if (fromPath && fs.existsSync(fromPath)) return fromPath;
+  } catch {}
+  const winTar = "C:\\Windows\\System32\\tar.exe";
+  if (fs.existsSync(winTar)) return winTar;
+  return null;
+}
+
 const sevenZipExe = find7Zip();
+const tarExe = findTar();
 const cscExe = findCsc();
 const iconFile = path.join(rootDir, "ai-free.ico");
 const csFile = path.join(rootDir, "scripts", "Installer.cs");
@@ -49,8 +60,8 @@ const npxCmd = fs.existsSync(path.join(rootDir, "node", "npx.cmd"))
   ? path.join(rootDir, "node", "npx.cmd")
   : (process.platform === "win32" ? "npx.cmd" : "npx");
 
-if (!sevenZipExe) {
-  console.error("7-Zip not found in Program Files or PATH. Please install 7-Zip.");
+if (!sevenZipExe && !tarExe) {
+  console.error("Neither 7-Zip nor tar.exe found. Please install 7-Zip or ensure Windows tar is in PATH.");
   process.exit(1);
 }
 
@@ -114,11 +125,27 @@ const excludes = [
   "-xr!*.db",
 ];
 
-const cmdZip = `"${sevenZipExe}" a -tzip -mx=5 "${archiveZip}" ${itemsToInclude.map(i => `"${path.join(rootDir, i)}"`).join(" ")} ${excludes.join(" ")}`;
-try {
+if (sevenZipExe) {
+  const cmdZip = `"${sevenZipExe}" a -tzip -mx=5 "${archiveZip}" ${itemsToInclude.map(i => `"${path.join(rootDir, i)}"`).join(" ")} ${excludes.join(" ")}`;
+  try {
+    execSync(cmdZip, { cwd: rootDir, stdio: "inherit" });
+  } catch (err) {
+    if (err.status !== 1) throw err;
+  }
+} else if (tarExe) {
+  const tarExcludes = [
+    "--exclude=.git",
+    "--exclude=.deepseek-cli",
+    "--exclude=.qwen-cli",
+    "--exclude=.chatgpt-cli",
+    "--exclude=.ai-free",
+    "--exclude=dist",
+    "--exclude=*.log",
+    "--exclude=*.tmp",
+    "--exclude=*.db",
+  ];
+  const cmdZip = `"${tarExe}" -a -c -f "${archiveZip}" ${tarExcludes.join(" ")} ${itemsToInclude.map(i => `"${i}"`).join(" ")}`;
   execSync(cmdZip, { cwd: rootDir, stdio: "inherit" });
-} catch (err) {
-  if (err.status !== 1) throw err;
 }
 
 const manifestFile = path.join(rootDir, "scripts", "app.manifest");
