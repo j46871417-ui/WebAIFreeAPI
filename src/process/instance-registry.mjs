@@ -41,7 +41,7 @@ export function registerInstance(details = {}) {
     cwd: details.cwd || process.cwd(),
     execPath: details.execPath || process.execPath,
     argv: details.argv || process.argv,
-    version: details.version || "1.10.0-alpha.1",
+    version: details.version || "1.10.0",
   };
 
   try {

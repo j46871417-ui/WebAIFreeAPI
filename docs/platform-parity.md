@@ -73,9 +73,9 @@ WebAIFreeAPI построен по принципу **единого источ�
    ```
 2. **RPM пакет (РОСА 13, ALT Linux, Fedora):**
    ```bash
-   sudo dnf install ./ai-free-1.10.0-alpha.1.noarch.rpm
+   sudo dnf install ./ai-free-1.10.0.noarch.rpm
    # или для РОСА / urpmi:
-   sudo urpmi ./ai-free-1.10.0-alpha.1.noarch.rpm
+   sudo urpmi ./ai-free-1.10.0.noarch.rpm
    ```
 3. **Управление фоновой службой:**
    ```bash
