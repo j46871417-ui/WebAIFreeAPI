@@ -191,6 +191,20 @@ export async function loginQwenAndSave(authFile = QWEN_AUTH_FILE, { clearSession
     try { localStorage.setItem("token", token); } catch {}
   }, captured.token);
 
+  try {
+    await context.addCookies([
+      {
+        name: QWEN_TOKEN_COOKIE_NAME,
+        value: captured.token,
+        domain: ".qwen.ai",
+        path: "/",
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+      },
+    ]);
+  } catch {}
+
   writeQwenAuth(authFile, {
     cookies: captured.cookies,
     token: captured.token,
@@ -210,7 +224,58 @@ export async function loginQwenAndSave(authFile = QWEN_AUTH_FILE, { clearSession
   };
 }
 
-// Ждём, пока в cookies появится валидный JWT в `token`.
+// Извлекаем токен и куки из контекста браузера.
+// Проверяет cookie "token" (старые версии) и localStorage["token"] (актуальные версии chat.qwen.ai).
+async function extractTokenFromContext(context) {
+  let cookies;
+  try {
+    cookies = await context.cookies(QWEN_BASE_URL);
+  } catch {
+    return { error: "closed", cookies: [], token: "", userId: "", source: "" };
+  }
+
+  const userId =
+    cookies.find((c) => c.name === "cnaui")?.value ||
+    cookies.find((c) => c.name === "aui")?.value ||
+    "";
+
+  // 1. Проверяем cookie "token"
+  const tokenCookie = cookies.find((c) => c.name === QWEN_TOKEN_COOKIE_NAME);
+  if (tokenCookie?.value && isJwtActive(tokenCookie.value)) {
+    return { cookies, token: tokenCookie.value, userId, source: "cookie" };
+  }
+
+  // 2. Проверяем localStorage на открытых страницах Qwen
+  const pages = context.pages();
+  const qwenPage =
+    pages.find((p) => {
+      try {
+        const u = new URL(p.url());
+        return u.hostname === "chat.qwen.ai" || u.hostname.endsWith(".qwen.ai");
+      } catch {
+        return false;
+      }
+    }) || pages[0];
+
+  if (qwenPage) {
+    try {
+      const storageToken = await qwenPage.evaluate(() => {
+        try {
+          return localStorage.getItem("token") || "";
+        } catch {
+          return "";
+        }
+      });
+      if (storageToken && isJwtActive(storageToken)) {
+        return { cookies, token: storageToken, userId, source: "localStorage" };
+      }
+    } catch {}
+  }
+
+  return { cookies, token: "", userId, source: "" };
+}
+
+// Ждём, пока в cookies или localStorage появится валидный JWT в `token`.
 // previousToken — при re-login не принимаем тот же JWT, что был до сброса сессии.
 async function waitForQwenToken(
   context,
@@ -220,61 +285,49 @@ async function waitForQwenToken(
   let lastSeen = "";
   let staleTokenLogged = false;
   while (Date.now() - startedAt < timeoutMs) {
-    let cookies;
-    try {
-      cookies = await context.cookies(QWEN_BASE_URL);
-    } catch {
+    const extracted = await extractTokenFromContext(context);
+    if (extracted.error === "closed") {
       throw new Error("Qwen login window was closed before authentication completed.");
     }
 
-    const tokenCookie = cookies.find((c) => c.name === QWEN_TOKEN_COOKIE_NAME);
-    const allRequired = QWEN_REQUIRED_COOKIES.every((n) => cookies.some((c) => c.name === n));
-    const token = tokenCookie?.value || "";
-    const jwtActive = isJwtActive(token);
+    const { cookies, token, userId, source } = extracted;
+    const allRequired = QWEN_REQUIRED_COOKIES.length === 0 || QWEN_REQUIRED_COOKIES.every((n) => cookies.some((c) => c.name === n));
 
-    if (allRequired && jwtActive) {
+    if (allRequired && token && isJwtActive(token)) {
       if (previousToken && token === previousToken) {
         if (!staleTokenLogged) {
           staleTokenLogged = true;
           console.log("[qwen-login] Старый JWT ещё в профиле — заверши вход заново в окне браузера…");
         }
       } else {
-        const userId = cookies.find((c) => c.name === "cnaui")?.value
-          || cookies.find((c) => c.name === "aui")?.value
-          || "";
+        console.log(`[qwen-login] Токен Qwen успешно получен из ${source || "сессии"} (${token.length} симв.)`);
         return { cookies, token, userId };
       }
     }
 
     if (token && token !== lastSeen) {
       lastSeen = token;
-      console.log(`[qwen-login] token cookie found (${token.length} chars) — checking format...`);
+      console.log(`[qwen-login] token found (${token.length} chars) — checking format...`);
     }
 
     await new Promise((r) => setTimeout(r, intervalMs));
   }
   throw new Error(
-    `Qwen login timeout (${Math.round(timeoutMs / 1000)}s). Не дождались валидного JWT в куках. Попробуй снова.`,
+    `Qwen login timeout (${Math.round(timeoutMs / 1000)}s). Не дождались валидного JWT в куках или localStorage. Попробуй снова.`,
   );
 }
 
 // Считать JWT и куки из уже открытого контекста (после goto на chat.qwen.ai).
 async function captureQwenAuthFromContext(context, authFile, profileDir) {
-  const cookies = await context.cookies(QWEN_BASE_URL);
-  const tokenCookie = cookies.find((c) => c.name === QWEN_TOKEN_COOKIE_NAME);
-  const token = tokenCookie?.value || "";
+  const extracted = await extractTokenFromContext(context);
+  const { cookies, token, userId } = extracted;
   const jwtActive = isJwtActive(token);
 
   if (!jwtActive) {
     throw new Error(
-      "В профиле Qwen нет активного JWT (cookie token). Залогинься: npm run login-qwen",
+      "В профиле Qwen нет активного JWT (cookie token или localStorage). Залогинься: npm run login-qwen",
     );
   }
-
-  const userId =
-    cookies.find((c) => c.name === "cnaui")?.value ||
-    cookies.find((c) => c.name === "aui")?.value ||
-    "";
 
   writeQwenAuth(authFile, { cookies, token, userId, profileDir });
   return {

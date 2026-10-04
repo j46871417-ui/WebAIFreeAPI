@@ -7,4 +7,8 @@
 *.service text eol=lf
 *.spec text eol=lf
 linux/** text eol=lf
+*.png binary
+*.ico binary
+*.exe binary
+*.lib binary
 scripts/*.sh text eol=lf
