@@ -17,16 +17,16 @@ const projectRoot = path.resolve(here, "..");
 
 loadDotEnv();
 
-// Help / version не требуют зависимостей — пропускаем bootstrap, иначе юзер
-// не сможет даже посмотреть `--help` без интернета.
+// Help / version / doctor не требуют зависимостей — пропускаем bootstrap, иначе юзер
+// не сможет выполнить диагностику окружения или посмотреть `--help` без интернета.
 const argv = process.argv.slice(2);
 const bootstrapLogger = createFileLogger({ component: "bootstrap", surface: "desktop" });
 installProcessErrorLogging(bootstrapLogger, { version: AI_FREE_VERSION, mode: argv });
-const isHelpOnly = argv.some((a) => a === "-h" || a === "--help" || a === "--version");
+const isDiagnosticOrHelp = argv.some((a) => a === "-h" || a === "--help" || a === "--version" || a === "doctor" || a === "--doctor");
 
 // Проверяем единственную внешнюю зависимость. Если её нет — установка нужна.
 const playwrightPkg = path.join(projectRoot, "node_modules", "playwright", "package.json");
-if (!isHelpOnly && !fs.existsSync(playwrightPkg)) {
+if (!isDiagnosticOrHelp && !fs.existsSync(playwrightPkg)) {
   console.log("📦 Первый запуск: ставлю зависимости (один раз, ~150 МБ с Chromium)...");
   console.log("   Это займёт минуту. Вывод npm:\n");
 
@@ -56,15 +56,17 @@ if (process.env.CHATGPT_EMBED_IN_UI == null) {
 
 // Импортируем динамически — на случай если в будущем какой-то модуль захочет
 // что-то проверить перед стартом. Сейчас работает и через static, но dynamic безопаснее.
-const { ensureBrowserBinaries } = await import("../src/browser/ensure-binaries.mjs");
-const browserReady = await ensureBrowserBinaries();
-if (!browserReady.ok) {
-  bootstrapLogger.error("browser.bootstrap.error", new Error(browserReady.error || "Browser binaries unavailable"));
-  console.error(`\n❌ ${browserReady.error || "Chromium browser binaries are unavailable."}`);
-  if (process.platform === "win32") {
-    console.error("   Проверьте, что антивирус не заблокировал папку %LOCALAPPDATA%\\ms-playwright.");
+if (!isDiagnosticOrHelp) {
+  const { ensureBrowserBinaries } = await import("../src/browser/ensure-binaries.mjs");
+  const browserReady = await ensureBrowserBinaries();
+  if (!browserReady.ok) {
+    bootstrapLogger.error("browser.bootstrap.error", new Error(browserReady.error || "Browser binaries unavailable"));
+    console.error(`\n❌ ${browserReady.error || "Chromium browser binaries are unavailable."}`);
+    if (process.platform === "win32") {
+      console.error("   Проверьте, что антивирус не заблокировал папку %LOCALAPPDATA%\\ms-playwright.");
+    }
+    process.exit(1);
   }
-  process.exit(1);
 }
 
 const { run } = await import("../src/cli/run.mjs");

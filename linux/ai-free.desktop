@@ -7,7 +7,7 @@ GenericName=AI Client
 GenericName[ru]=Клиент искусственного интеллекта
 Comment=Free local AI client for DeepSeek, Qwen and ChatGPT with OpenAI-compatible API
 Comment[ru]=Локальный клиент нейросетей DeepSeek, Qwen и ChatGPT с OpenAI API
-Exec=/usr/bin/ai-free %U
+Exec=@AI_FREE_BIN@ %U
 Icon=ai-free
 Terminal=false
 Categories=Development;Utility;ArtificialIntelligence;Network;
@@ -21,19 +21,19 @@ Actions=OpenBrowser;RunTerminal;OpenLogs;
 [Desktop Action OpenBrowser]
 Name=Open Web Interface
 Name[ru]=Открыть веб-интерфейс
-Exec=/usr/bin/ai-free --window
+Exec=@AI_FREE_BIN@ --window
 Icon=ai-free
 
 [Desktop Action RunTerminal]
 Name=Interactive CLI Chat
 Name[ru]=Интерактивный CLI чат
-Exec=/usr/bin/ai-free
+Exec=@AI_FREE_BIN@
 Icon=utilities-terminal
 Terminal=true
 
 [Desktop Action OpenLogs]
 Name=Service Status & Logs
 Name[ru]=Статус сервиса и логи
-Exec=/usr/bin/ai-free --status
+Exec=@AI_FREE_BIN@ --status
 Icon=text-x-generic
 Terminal=true

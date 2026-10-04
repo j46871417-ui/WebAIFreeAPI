@@ -339,14 +339,45 @@ export async function runWorkspaceShell(workspaceRoot, call) {
   let shellCmd;
   let shellArgs;
   let resolvedShellType;
+  let isTranslated = false;
+
   if (requestedShell === "powershell" || requestedShell === "pwsh" || requestedShell === "ps") {
-    shellCmd = requestedShell === "pwsh" ? "pwsh" : (process.platform === "win32" ? "powershell.exe" : "pwsh");
-    shellArgs = ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command];
-    resolvedShellType = requestedShell;
+    if (process.platform !== "win32") {
+      const hasPwsh = whichCommand("pwsh");
+      if (!hasPwsh && !call.allowShellTranslation) {
+        return {
+          ok: false,
+          status: "unsupported_shell",
+          requestedShell,
+          platform: "linux",
+          executed: false,
+          error: "PowerShell ('pwsh') is not installed on this system.",
+        };
+      }
+      if (!hasPwsh && call.allowShellTranslation) {
+        isTranslated = true;
+      }
+    }
+    shellCmd = requestedShell === "pwsh" ? "pwsh" : (process.platform === "win32" ? "powershell.exe" : (isTranslated ? "bash" : "pwsh"));
+    shellArgs = isTranslated ? ["-c", command] : ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command];
+    resolvedShellType = isTranslated ? "bash" : requestedShell;
   } else if (requestedShell === "cmd") {
+    if (process.platform !== "win32") {
+      if (!call.allowShellTranslation) {
+        return {
+          ok: false,
+          status: "unsupported_shell",
+          requestedShell: "cmd",
+          platform: "linux",
+          executed: false,
+          error: "Shell 'cmd' is not natively supported on Linux. Use 'bash' or 'sh', or enable explicit shell translation.",
+        };
+      }
+      isTranslated = true;
+    }
     shellCmd = process.platform === "win32" ? "cmd.exe" : "sh";
     shellArgs = process.platform === "win32" ? ["/d", "/s", "/c", command] : ["-c", command];
-    resolvedShellType = "cmd";
+    resolvedShellType = isTranslated ? "sh" : "cmd";
   } else if (requestedShell === "bash") {
     shellCmd = "bash";
     shellArgs = ["-c", command];
@@ -545,6 +576,16 @@ export function looksLikePath(value) {
   );
 }
 
+export function whichCommand(cmd) {
+  try {
+    const whichCmd = process.platform === "win32" ? "where" : "which";
+    execSync(`${whichCmd} ${cmd}`, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function killChildProcessTree(child) {
   if (!child || !child.pid) return;
   if (process.platform === "win32") {
@@ -554,22 +595,56 @@ export function killChildProcessTree(child) {
       try { child.kill("SIGTERM"); } catch {}
     }
   } else {
+    // On POSIX systems, signal the entire process group (-pid) if leader, fallback to child pid
     try {
-      child.kill("SIGTERM");
-    } catch {}
+      process.kill(-child.pid, "SIGTERM");
+    } catch {
+      try { child.kill("SIGTERM"); } catch {}
+    }
+    // Grace period before SIGKILL to avoid leaving orphans
+    setTimeout(() => {
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {
+        try { child.kill("SIGKILL"); } catch {}
+      }
+    }, 400).unref?.();
   }
 }
 
-export function spawnSyncSafe(cmd, args, options) {
+export function spawnSyncSafe(cmd, args, options = {}) {
+  const isPosix = process.platform !== "win32";
   const child = spawn(cmd, args, {
     cwd: options.cwd,
     env: options.env || process.env,
     stdio: ["ignore", "pipe", "pipe"],
+    detached: isPosix,
   });
 
   let stdout = "";
   let stderr = "";
   let timedOut = false;
+  let aborted = false;
+
+  let abortHandler = null;
+  if (options.signal) {
+    if (options.signal.aborted) {
+      killChildProcessTree(child);
+      return Promise.resolve({
+        status: null,
+        signal: "SIGTERM",
+        timedOut: false,
+        aborted: true,
+        stdout: "",
+        stderr: "Command execution cancelled by signal",
+      });
+    }
+    abortHandler = () => {
+      aborted = true;
+      killChildProcessTree(child);
+    };
+    options.signal.addEventListener("abort", abortHandler, { once: true });
+  }
 
   return waitForChild(child, options.timeoutMs, {
     onStdout: (chunk) => { stdout += chunk; },
@@ -578,7 +653,12 @@ export function spawnSyncSafe(cmd, args, options) {
       timedOut = true;
       killChildProcessTree(child);
     },
-    onClose: (status, signal) => ({ status, signal, timedOut, stdout, stderr }),
+    onClose: (status, signal) => {
+      if (abortHandler && options.signal) {
+        options.signal.removeEventListener("abort", abortHandler);
+      }
+      return { status, signal, timedOut, aborted, stdout, stderr };
+    },
   });
 }
 

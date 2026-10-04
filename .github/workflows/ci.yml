@@ -11,9 +11,14 @@ permissions:
 
 jobs:
   test:
-    name: Tests and architecture checks
-    runs-on: ubuntu-latest
+    name: Tests and architecture checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node-version: [20]
 
     steps:
       - name: Checkout
@@ -22,7 +27,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node-version }}
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -35,7 +40,7 @@ jobs:
         working-directory: plugin-for-vscode
         run: npm ci --ignore-scripts
 
-      - name: Check versions, catalogs, EconomyOS, and artifacts
+      - name: Check CI invariants and duplicates
         run: npm run check:ci
 
       - name: Run tests
@@ -44,3 +49,11 @@ jobs:
       - name: Check VS Code extension build
         working-directory: plugin-for-vscode
         run: npm run build
+
+      - name: Linux shell & python checks
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          bash -n linux/bin/ai-free
+          bash -n linux/install.sh
+          python3 -m py_compile linux/gui/ai_free_tray.py
+          npm run build:linux

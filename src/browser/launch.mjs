@@ -4,6 +4,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import { killBrowserProfileProcesses } from "../process/instance-registry.mjs";
+
 
 // Поднять persistent Chromium-профиль для DeepSeek/Qwen/ChatGPT. headless=false —
 // видимое окно, true — для тихого refresh из профиля. Чистит stale SingletonLock-файлы от падений.
@@ -69,26 +71,8 @@ export async function launchPersistentDeepSeekContext(chromium, profileDir, head
   // Убиваем зависшие процессы браузера, которые держат лок на этой папке профиля
   const clearLocks = () => {
     try {
-      if (process.platform === "win32") {
-        const escaped = String(profileDir).replace(/'/g, "''");
-        spawnSync(
-          "powershell",
-          [
-            "-NoProfile",
-            "-Command",
-            `$p = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${escaped}*' }; if ($p) { $p | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } }`,
-          ],
-          { stdio: "ignore", timeout: 10_000 }
-        );
-      } else {
-        const dir = String(profileDir);
-        spawnSync("pkill", ["-9", "-f", dir], { stdio: "ignore", timeout: 5_000 });
-      }
+      killBrowserProfileProcesses(profileDir);
     } catch {}
-
-    for (const f of ["SingletonLock", "SingletonCookie", "SingletonSocket", "lockfile"]) {
-      try { fs.unlinkSync(path.join(profileDir, f)); } catch {}
-    }
   };
 
   // Чистим локи и зависшие процессы перед первой попыткой

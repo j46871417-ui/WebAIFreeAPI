@@ -263,7 +263,13 @@ cmd_stop() {
   msg "Остановка процессов WebAIFreeAPI..." "Stopping WebAIFreeAPI processes..."
   local stopped=0
 
-  # 1. Stop systemd service
+  # 1. Graceful HTTP shutdown if server is listening
+  if is_port_listening "$DEFAULT_WEB_PORT"; then
+    curl -s -X POST --connect-timeout 1 "http://127.0.0.1:${DEFAULT_WEB_PORT}/api/shutdown" >/dev/null 2>&1 || true
+    sleep 0.5
+  fi
+
+  # 2. Stop systemd service
   if has_systemd_user; then
     if systemctl --user is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
       systemctl --user stop "${SERVICE_NAME}" 2>/dev/null || true
@@ -272,37 +278,42 @@ cmd_stop() {
     fi
   fi
 
-  # 2. Stop PID file process
-  if [ -f "$PID_FILE" ]; then
-    local pid
+  # 3. Stop instance via verified PID and process group (no unowned pkill)
+  local instance_file="${HOME}/.ai-free/instances/server-default.json"
+  local pid=""
+  if [ -f "$instance_file" ] && command -v jq >/dev/null 2>&1; then
+    pid=$(jq -r '.pid // empty' "$instance_file" 2>/dev/null || echo "")
+  fi
+  if [ -z "$pid" ] && [ -f "$PID_FILE" ]; then
     pid=$(cat "$PID_FILE" 2>/dev/null || echo "")
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-      kill -15 "$pid" 2>/dev/null || true
+  fi
+
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    local is_owned=0
+    if [ -r "/proc/$pid/cmdline" ]; then
+      local cmdline
+      cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || echo "")
+      if [[ "$cmdline" =~ deepseek\.mjs ]] || [[ "$cmdline" =~ ai-free ]]; then
+        is_owned=1
+      fi
+    else
+      is_owned=1
+    fi
+
+    if [ "$is_owned" -eq 1 ]; then
+      kill -15 -"$pid" 2>/dev/null || kill -15 "$pid" 2>/dev/null || true
       local waited=0
       while kill -0 "$pid" 2>/dev/null && [ $waited -lt 10 ]; do
-        sleep 0.5
+        sleep 0.3
         waited=$((waited + 1))
       done
       if kill -0 "$pid" 2>/dev/null; then
-        kill -9 "$pid" 2>/dev/null || true
+        kill -9 -"$pid" 2>/dev/null || kill -9 "$pid" 2>/dev/null || true
       fi
       msg "✓ Процесс (PID: $pid) завершен." "✓ Process (PID: $pid) terminated."
       stopped=1
     fi
-    rm -f "$PID_FILE" 2>/dev/null || true
-  fi
-
-  # 3. Terminate any remaining deepseek.mjs instances
-  local pids
-  pids=$(pgrep -f "deepseek\.mjs" 2>/dev/null || echo "")
-  if [ -n "$pids" ]; then
-    for p in $pids; do
-      kill -15 "$p" 2>/dev/null || true
-    done
-    sleep 1
-    pkill -9 -f "deepseek\.mjs" 2>/dev/null || true
-    msg "✓ Оставшиеся процессы завершены." "✓ Remaining processes terminated."
-    stopped=1
+    rm -f "$PID_FILE" "$instance_file" 2>/dev/null || true
   fi
 
   if [ $stopped -eq 1 ]; then
@@ -436,7 +447,10 @@ cmd_tray() {
   fi
 
   # 3. If python tray helper exists, run it
-  local tray_py="${BASE_DIR}/linux/bin/ai-free-tray.py"
+  local tray_py="${BASE_DIR}/linux/gui/ai_free_tray.py"
+  if [ ! -f "$tray_py" ]; then
+    tray_py="${BASE_DIR}/linux/bin/ai-free-tray.py"
+  fi
   if [ -f "$tray_py" ] && command -v python3 >/dev/null 2>&1; then
     python3 "$tray_py" &
     return 0
@@ -455,13 +469,17 @@ cmd_help() {
   echo ""
   msg "Режимы запуска и системные команды:" \
       "Execution modes and system commands:"
+  printf "  %-24s %s\n" "doctor" "Диагностика окружения, браузеров и сервиса / System & environment diagnostics"
+  printf "  %-24s %s\n" "start" "Запуск фоновой службы (systemd / daemon) / Start background service"
+  printf "  %-24s %s\n" "stop" "Остановка всех запущенных сервисов / Stop all running processes"
+  printf "  %-24s %s\n" "restart" "Перезапуск фоновой службы / Restart background service"
+  printf "  %-24s %s\n" "status" "Проверка статуса сервиса и портов / Check service and ports status"
+  printf "  %-24s %s\n" "logs" "Просмотр системных логов / View service logs"
   printf "  %-24s %s\n" "--window" "Запуск Web UI в окне браузера / Run Web UI in browser window"
   printf "  %-24s %s\n" "--no-window" "Запуск веб-сервера без открытия окна / Run server without opening window"
   printf "  %-24s %s\n" "--api" "Запуск OpenAI-совместимого API (порт 4318) / Run OpenAI-compatible API"
   printf "  %-24s %s\n" "--service [cmd]" "Управление systemd службой (start|stop|status|restart|logs)"
-  printf "  %-24s %s\n" "--tray" "Запуск в фоне с уведомлением / Launch in background with tray/notification"
-  printf "  %-24s %s\n" "--status" "Проверка статуса сервиса и портов / Check service and ports status"
-  printf "  %-24s %s\n" "--stop" "Остановка всех запущенных сервисов / Stop all running processes"
+  printf "  %-24s %s\n" "--tray" "Запуск в фоне с треем / Launch in background with system tray"
   printf "  %-24s %s\n" "--help, -h" "Показать данную справку / Show this help"
   echo ""
   msg "Команды CLI и прямое использование:" \
@@ -479,12 +497,28 @@ cmd_help() {
 ACTION="${1:-}"
 
 case "$ACTION" in
-  --status)
-    cmd_status
+  doctor|--doctor)
+    cd "$BASE_DIR"
+    exec "$NODE_BIN" "$ENTRY_POINT" "$@"
+    ;;
+  start)
+    cmd_service start
     exit 0
     ;;
-  --stop)
+  stop|--stop)
     cmd_stop
+    exit 0
+    ;;
+  restart)
+    cmd_service restart
+    exit 0
+    ;;
+  logs)
+    cmd_service logs
+    exit 0
+    ;;
+  status|--status)
+    cmd_status
     exit 0
     ;;
   --service)

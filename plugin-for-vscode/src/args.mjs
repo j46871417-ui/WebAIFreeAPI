@@ -30,7 +30,10 @@ export function parseArgs(argv) {
     loginChatGPT: false,
     importChatGPTFile: null,
     loginGrok: false,
-    loginMistral: false,
+    loginGemini: false,
+    doctor: false,
+    json: false,
+    strict: false,
     forceWelcome: false,
     prompt: [],
   };
@@ -46,6 +49,9 @@ export function parseArgs(argv) {
     else if (arg === "--thinking") args.thinking = true;
     else if (arg === "--search") args.search = true;
     else if (arg === "--check") args.check = true;
+    else if (arg === "--doctor" || arg === "doctor") args.doctor = true;
+    else if (arg === "--json") args.json = true;
+    else if (arg === "--strict") args.strict = true;
     else if (arg === "--debug") args.debug = true;
     else if (arg === "--stream") args.stream = true;
     else if (arg === "--window") args.window = true;
