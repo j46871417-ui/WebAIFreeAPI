@@ -343,9 +343,23 @@ def stop_server_process(
             except Exception:
                 pass
 
-    # 5. On POSIX, kill any lingering deepseek.mjs node processes
-    if os.name == "posix":
-        _kill_lingering_processes("deepseek.mjs")
+    # 5. Check instance registry descriptors (~/.ai-free/instances/*.json)
+    instances_dir = Path.home() / ".ai-free" / "instances"
+    if instances_dir.is_dir():
+        for inst_file in instances_dir.glob("*.json"):
+            try:
+                data = json.loads(inst_file.read_text(encoding="utf-8"))
+                inst_pid = data.get("pid")
+                if inst_pid and isinstance(inst_pid, int) and is_pid_alive(inst_pid):
+                    logger.info("Killing verified PID %d from instance %s", inst_pid, inst_file.name)
+                    kill_pid(inst_pid)
+            except Exception as e:
+                logger.debug("Error reading instance file %s: %s", inst_file, e)
+            finally:
+                try:
+                    inst_file.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     stopped = not is_server_running(host, port, timeout=0.5)
     logger.info("Server stop completed (stopped=%s)", stopped)
@@ -376,11 +390,18 @@ def is_pid_alive(pid: int) -> bool:
 
 
 def kill_pid(pid: int, timeout: float = 2.0) -> None:
-    """Send SIGTERM then SIGKILL to a PID."""
+    """Send SIGTERM then SIGKILL to a PID and its process group on POSIX."""
     if not is_pid_alive(pid):
         return
     try:
-        os.kill(pid, signal.SIGTERM)
+        if hasattr(os, "killpg") and hasattr(os, "getpgid"):
+            try:
+                pgid = os.getpgid(pid)
+                os.killpg(pgid, signal.SIGTERM)
+            except Exception:
+                os.kill(pid, signal.SIGTERM)
+        else:
+            os.kill(pid, signal.SIGTERM)
     except Exception:
         return
 
@@ -391,18 +412,16 @@ def kill_pid(pid: int, timeout: float = 2.0) -> None:
         time.sleep(0.1)
 
     try:
-        os.kill(pid, signal.SIGKILL if hasattr(signal, "SIGKILL") else signal.SIGTERM)
+        if hasattr(os, "killpg") and hasattr(os, "getpgid"):
+            try:
+                pgid = os.getpgid(pid)
+                os.killpg(pgid, signal.SIGKILL if hasattr(signal, "SIGKILL") else signal.SIGTERM)
+            except Exception:
+                os.kill(pid, signal.SIGKILL if hasattr(signal, "SIGKILL") else signal.SIGTERM)
+        else:
+            os.kill(pid, signal.SIGKILL if hasattr(signal, "SIGKILL") else signal.SIGTERM)
     except Exception:
         pass
-
-
-def _kill_lingering_processes(pattern: str) -> None:
-    """Fallback kill on POSIX for lingering background processes matching pattern."""
-    if shutil.which("pkill"):
-        try:
-            subprocess.run(["pkill", "-f", pattern], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2.0)
-        except Exception:
-            pass
 
 
 # ---------------------------------------------------------------------------

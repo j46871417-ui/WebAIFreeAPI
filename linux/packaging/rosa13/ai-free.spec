@@ -69,14 +69,16 @@ chmod 0755 %{buildroot}/opt/%{name}/bin/ai-free-browser-mcp.mjs
 # Симлинк %{buildroot}%{_bindir}/ai-free -> /opt/ai-free/linux/bin/ai-free
 ln -sf /opt/%{name}/linux/bin/%{name} %{buildroot}%{_bindir}/%{name}
 
-# Установка десктоп-файла
-install -m 0644 linux/%{name}.desktop %{buildroot}%{_datadir}/applications/%{name}.desktop
+# Установка десктоп-файла с подстановкой пути
+sed -e 's|@AI_FREE_BIN@|%{_bindir}/%{name}|g' linux/%{name}.desktop > %{buildroot}%{_datadir}/applications/%{name}.desktop
+chmod 0644 %{buildroot}%{_datadir}/applications/%{name}.desktop
 
 # Установка иконки
-install -m 0644 linux/%{name}.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/%{name}.svg
+install -m 0644 linux/assets/%{name}.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/%{name}.svg
 
-# Установка systemd юнита
-install -m 0644 linux/%{name}.service %{buildroot}%{_prefix}/lib/systemd/user/%{name}.service
+# Установка systemd юнита с подстановкой путей
+sed -e 's|@APP_DIR@|/opt/%{name}|g' -e 's|@NODE_BIN@|%{_bindir}/node|g' linux/%{name}.service > %{buildroot}%{_prefix}/lib/systemd/user/%{name}.service
+chmod 0644 %{buildroot}%{_prefix}/lib/systemd/user/%{name}.service
 
 %post
 if [ $1 -eq 1 ]; then

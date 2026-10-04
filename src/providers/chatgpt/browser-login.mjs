@@ -3,6 +3,7 @@ import net from "node:net";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { findChromeBinary, launchPersistentDeepSeekContext } from "../../browser/launch.mjs";
+import { killBrowserProfileProcesses } from "../../process/instance-registry.mjs";
 import {
   CHATGPT_AUTH_FILE,
   CHATGPT_BASE_URL,
@@ -365,42 +366,10 @@ async function connectOverCDP(chromium, port, timeoutMs = 45_000) {
 
 // Убиваем «зависшие» Chrome на этом user-data-dir (в т.ч. detached после прошлого запуска).
 export function killStaleChromeForProfile(profileDir) {
-  let killed = false;
   try {
-    if (process.platform === "win32") {
-      const escaped = String(profileDir).replace(/'/g, "''");
-      const result = spawnSync(
-        "powershell",
-        [
-          "-NoProfile",
-          "-Command",
-          `$p = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*--user-data-dir=${escaped}*' }; if ($p) { $p | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; exit 0 } else { exit 1 }`,
-        ],
-        { stdio: "ignore", timeout: 10_000 },
-      );
-      return result.status === 0;
-    }
-    const dir = String(profileDir);
-    const patterns = [
-      `--user-data-dir=${dir}`,
-      `--user-data-dir=${dir}/`,
-      dir,
-    ];
-    for (const pattern of patterns) {
-      const term = spawnSync("pkill", ["-f", pattern], {
-        stdio: "ignore",
-        timeout: 10_000,
-      });
-      if (term.status === 0) killed = true;
-      const kill = spawnSync("pkill", ["-9", "-f", pattern], {
-        stdio: "ignore",
-        timeout: 10_000,
-      });
-      if (kill.status === 0) killed = true;
-    }
-    return killed;
+    return killBrowserProfileProcesses(profileDir);
   } catch {
-    return killed;
+    return false;
   }
 }
 

@@ -168,14 +168,24 @@ npm start
 *Совет для Linux:* Если Playwright запросит системные библиотеки Chromium, установите их: `npx playwright install-deps chromium` (или `sudo dnf install -y chromium`).
 
 ### ⚙️ Управление на Linux:
-- **Запуск приложения:** `ai-free` или клик по ярлыку в меню приложений.
+- **Диагностика системы:** `ai-free doctor` (проверяет Node.js, браузеры, права доступа, порты и провайдеры).
+- **Запуск приложения:** `ai-free` (консольный режим) или `ai-free --window` (окно веб-приложения).
 - **Системный трей:** `ai-free --tray` (легковесный Python-трей со статусом и быстрым доступом к окну и логам).
+- **Быстрые команды сервиса:**
+  ```bash
+  ai-free start      # запустить фоновую службу
+  ai-free status     # проверить статус сервиса и портов
+  ai-free logs       # посмотреть свежие логи
+  ai-free restart    # перезапустить службу
+  ai-free stop       # остановить все процессы службы
+  ```
 - **Фоновый сервис (systemd):**
   ```bash
-  systemctl --user enable --now ai-free    # включить и запустить сервис
+  systemctl --user enable --now ai-free    # включить автозапуск и запустить сервис
   systemctl --user status ai-free          # проверить статус
   systemctl --user stop ai-free            # остановить
   ```
+- Подробную архитектуру и матрицу возможностей см. в [Platform Parity Guide](docs/platform-parity.md).
 
 ---
 

@@ -1,5 +1,8 @@
 import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import { streamSse } from "../src/providers/deepseek/sse.mjs";
 import { killChildProcessTree } from "../src/code-agent/executor.mjs";
 
@@ -78,5 +81,88 @@ describe("killChildProcessTree", () => {
       kill: () => {},
     };
     assert.doesNotThrow(() => killChildProcessTree(mockChild));
+  });
+});
+
+describe("spawnSyncSafe cancellation", () => {
+  it("terminates long-running process when AbortSignal triggers", async () => {
+    const { spawnSyncSafe } = await import("../src/code-agent/executor.mjs");
+    const controller = new AbortController();
+
+    const cmd = process.platform === "win32" ? "ping" : "sleep";
+    const args = process.platform === "win32" ? ["127.0.0.1", "-n", "10"] : ["10"];
+
+    // Cancel after 200ms
+    setTimeout(() => controller.abort(), 200);
+
+    const started = Date.now();
+    const result = await spawnSyncSafe(cmd, args, {
+      cwd: process.cwd(),
+      timeoutMs: 15_000,
+      signal: controller.signal,
+    });
+
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed < 4000, `Execution should be cancelled quickly, took ${elapsed}ms`);
+    assert.ok(result.aborted === true || result.signal === "SIGTERM" || result.timedOut === false);
+  });
+});
+
+describe("instance-registry ownership and lifecycle", () => {
+  it("registers, reads, checks alive/ownership, and unregisters instance cleanly", async () => {
+    const {
+      registerInstance,
+      readInstance,
+      isProcessAlive,
+      isProcessOwnedByInstance,
+      unregisterInstance,
+    } = await import("../src/process/instance-registry.mjs");
+
+    const testId = "test-instance-" + Date.now();
+    const registered = registerInstance({
+      instanceId: testId,
+      port: 54321,
+      pid: process.pid,
+      cwd: process.cwd(),
+    });
+
+    assert.equal(registered.instanceId, testId);
+    assert.equal(registered.pid, process.pid);
+
+    const readBack = readInstance(testId);
+    assert.ok(readBack);
+    assert.equal(readBack.port, 54321);
+    assert.equal(readBack.pid, process.pid);
+
+    // Current process should be alive and owned
+    assert.equal(isProcessAlive(process.pid), true);
+    assert.equal(isProcessOwnedByInstance(process.pid, readBack), true);
+
+    // Fake dead pid should not be alive
+    assert.equal(isProcessAlive(9999999), false);
+    assert.equal(isProcessOwnedByInstance(9999999, readBack), false);
+
+    unregisterInstance(testId);
+    assert.equal(readInstance(testId), null);
+  });
+
+  it("cleans up browser profile lock files safely", async () => {
+    const { killBrowserProfileProcesses } = await import("../src/process/instance-registry.mjs");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "browser-lock-test-"));
+    try {
+      const lock1 = path.join(tmpDir, "SingletonLock");
+      const lock2 = path.join(tmpDir, "lockfile");
+      fs.writeFileSync(lock1, "fake-lock", "utf8");
+      fs.writeFileSync(lock2, "fake-lock", "utf8");
+      assert.ok(fs.existsSync(lock1));
+      assert.ok(fs.existsSync(lock2));
+
+      killBrowserProfileProcesses(tmpDir);
+
+      assert.equal(fs.existsSync(lock1), false, "SingletonLock should be unlinked");
+      assert.equal(fs.existsSync(lock2), false, "lockfile should be unlinked");
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

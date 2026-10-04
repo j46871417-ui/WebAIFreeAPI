@@ -23,6 +23,20 @@ export async function run() {
   const args = parseArgs(process.argv.slice(2));
   const workspaceRoot = path.resolve(args.workspace);
 
+  if (args.doctor) {
+    const { runDiagnostics, formatDiagnosticsText } = await import("../diagnostics/doctor.mjs");
+    const report = await runDiagnostics({ strict: args.strict });
+    if (args.json) {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(formatDiagnosticsText(report));
+    }
+    if (!report.ok && args.strict) {
+      process.exit(1);
+    }
+    return;
+  }
+
   if (args.saveCreds) {
     await saveCredentialsInteractive();
     return;

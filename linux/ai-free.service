@@ -6,13 +6,13 @@ After=network.target
 [Service]
 Type=simple
 Environment=NODE_ENV=production
-WorkingDirectory=/opt/ai-free
-ExecStart=/usr/bin/node /opt/ai-free/bin/deepseek.mjs --no-window
+WorkingDirectory=@APP_DIR@
+ExecStart=@NODE_BIN@ @APP_DIR@/bin/deepseek.mjs --no-window
 Restart=on-failure
 RestartSec=3
 StandardOutput=journal
 StandardError=journal
-KillMode=process
+KillMode=control-group
 
 [Install]
 WantedBy=default.target

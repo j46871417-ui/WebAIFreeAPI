@@ -1,0 +1,10 @@
+* text=auto
+
+# Linux files must always use Unix LF line endings
+*.sh text eol=lf
+*.bash text eol=lf
+*.desktop text eol=lf
+*.service text eol=lf
+*.spec text eol=lf
+linux/** text eol=lf
+scripts/*.sh text eol=lf

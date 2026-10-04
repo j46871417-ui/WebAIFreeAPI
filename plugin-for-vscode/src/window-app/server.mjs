@@ -98,123 +98,15 @@ import { createFileLogger } from "../logging/logger.mjs";
 const appLogger = createFileLogger({ component: "window-server" });
 const STREAM_SAVE_THROTTLE_MS = 1000;
 
-export function buildOpenCodeConfig({ port = 4317, keys = {} } = {}) {
-  return {
-    $schema: "https://opencode.ai/config.json",
-    model: "ai-free-qwen/qwen3.7-max",
-    small_model: "ai-free-deepseek/deepseek-chat",
-    provider: {
-      "ai-free-qwen": {
-        npm: "@ai-sdk/openai-compatible",
-        name: "WebAIFreeAPI (Qwen)",
-        options: {
-          baseURL: `http://127.0.0.1:${port}/v1`,
-          apiKey: keys.qwen,
-        },
-        models: {
-          "qwen3.7-max": {
-            name: "Qwen 3.7 Max",
-            tools: true,
-            limit: { context: 128000, output: 8192 },
-          },
-          "qwen3.7-plus": {
-            name: "Qwen 3.7 Plus",
-            limit: { context: 128000, output: 8192 },
-          },
-          "qwen3-coder-plus": {
-            name: "Qwen 3 Coder Plus",
-            tools: true,
-            limit: { context: 128000, output: 8192 },
-          },
-        },
-      },
-      "ai-free-deepseek": {
-        npm: "@ai-sdk/openai-compatible",
-        name: "WebAIFreeAPI (DeepSeek)",
-        options: {
-          baseURL: `http://127.0.0.1:${port}/v1`,
-          apiKey: keys.deepseek,
-        },
-        models: {
-          "deepseek-chat": {
-            name: "DeepSeek Chat",
-            tools: true,
-            limit: { context: 128000, output: 8192 },
-          },
-          "deepseek-reasoner": {
-            name: "DeepSeek Reasoner (R1)",
-            reasoning: true,
-            tools: true,
-            limit: { context: 128000, output: 8192 },
-          },
-        },
-      },
-      "ai-free-chatgpt": {
-        npm: "@ai-sdk/openai-compatible",
-        name: "WebAIFreeAPI (ChatGPT)",
-        options: {
-          baseURL: `http://127.0.0.1:${port}/v1`,
-          apiKey: keys.chatgpt,
-        },
-        models: {
-          "gpt-5.5-instant": { name: "GPT-5.5 Instant", limit: { context: 128000, output: 8192 } },
-          "gpt-4o": { name: "GPT-4o", limit: { context: 128000, output: 4096 } },
-          "o3-mini": { name: "o3 mini", reasoning: true, limit: { context: 128000, output: 8192 } },
-        },
-      },
-      "ai-free-grok": {
-        npm: "@ai-sdk/openai-compatible",
-        name: "WebAIFreeAPI (Grok)",
-        options: {
-          baseURL: `http://127.0.0.1:${port}/v1`,
-          apiKey: keys.grok,
-        },
-        models: {
-          "grok-3": { name: "Grok 3", limit: { context: 128000, output: 8192 } },
-          "grok-3-reasoner": { name: "Grok 3 (Thinking)", reasoning: true, limit: { context: 128000, output: 8192 } },
-        },
-      },
-      "ai-free-mistral": {
-        npm: "@ai-sdk/openai-compatible",
-        name: "WebAIFreeAPI (Mistral)",
-        options: {
-          baseURL: `http://127.0.0.1:${port}/v1`,
-          apiKey: keys.mistral,
-        },
-        models: {
-          "mistral-large": { name: "Mistral Large", limit: { context: 128000, output: 8192 } },
-          "pixtral-large": { name: "Pixtral Large", vision: true, limit: { context: 128000, output: 8192 } },
-        },
-      },
-      "ai-free-claude": {
-        npm: "@ai-sdk/openai-compatible",
-        name: "WebAIFreeAPI (Claude)",
-        options: {
-          baseURL: `http://127.0.0.1:${port}/v1`,
-          apiKey: keys.claude,
-        },
-        models: {
-          "claude-3-7-sonnet": { name: "Claude 3.7 Sonnet", reasoning: true, limit: { context: 200000, output: 8192 } },
-          "claude-3-5-sonnet": { name: "Claude 3.5 Sonnet", limit: { context: 200000, output: 8192 } },
-          "claude-3-5-haiku": { name: "Claude 3.5 Haiku", limit: { context: 200000, output: 8192 } },
-        },
-      },
-      "ai-free-gemini": {
-        npm: "@ai-sdk/openai-compatible",
-        name: "WebAIFreeAPI (Gemini)",
-        options: {
-          baseURL: `http://127.0.0.1:${port}/v1`,
-          apiKey: keys.gemini,
-        },
-        models: {
-          "gemini-3.1-pro": { name: "Gemini 3.1 Pro", reasoning: true, limit: { context: 1000000, output: 8192 } },
-          "gemini-3.8-flash": { name: "Gemini 3.8 Flash", limit: { context: 1000000, output: 8192 } },
-          "gemini-3.5-flash-lite": { name: "Gemini 3.5 Flash Lite", limit: { context: 1000000, output: 8192 } },
-        },
-      },
-    },
-  };
-}
+import { registerInstance, unregisterInstance } from "../process/instance-registry.mjs";
+import {
+  buildOpenCodeConfig,
+  applyOpenCodeConfig,
+  detectOpenCodeConfigs,
+} from "../integrations/opencode.mjs";
+
+export { buildOpenCodeConfig, applyOpenCodeConfig, detectOpenCodeConfigs };
+
 
 export function isChatGPTLoginRecoveryRequired(error) {
   const message = String(error?.message || error || "");
@@ -1538,24 +1430,8 @@ export async function runWindowApp({
 
       if (req.method === "POST" && url.pathname === "/api/settings/setup-opencode") {
         try {
-          const homedir = os.homedir();
-          const appData = process.env.APPDATA || path.join(homedir, "AppData", "Roaming");
-          const opencodeDirs = [
-            path.join(homedir, ".opencode"),
-            path.join(appData, "opencode"),
-          ];
-          const opencodeConfig = buildOpenCodeConfig({ port, keys });
-
-          const configuredPaths = [];
-          for (const dir of opencodeDirs) {
-            try {
-              fs.mkdirSync(dir, { recursive: true });
-              const cfgPath = path.join(dir, "opencode.json");
-              fs.writeFileSync(cfgPath, JSON.stringify(opencodeConfig, null, 2), "utf8");
-              configuredPaths.push(cfgPath);
-            } catch {}
-          }
-          return sendJson(res, { ok: true, paths: configuredPaths });
+          const result = applyOpenCodeConfig({ port, keys });
+          return sendJson(res, { ok: true, paths: result.paths });
         } catch (err) {
           return sendJson(res, { ok: false, error: err.message }, 500);
         }
@@ -2767,6 +2643,17 @@ export async function runWindowApp({
   });
 
   const url = `http://127.0.0.1:${port}`;
+  try {
+    registerInstance({
+      instanceId: "server-default",
+      pid: process.pid,
+      port,
+      cwd: workspaceRoot,
+      startedAt: new Date().toISOString(),
+    });
+  } catch (regErr) {
+    appLogger.warn("instance.register_failed", { error: regErr.message });
+  }
   appLogger.info("server.started", { url, workspaceRoot, port });
   const startupConversation = state.conversations.find((item) => item.id === state.activeConversationId);
   if (startupConversation?.provider === "qwen") {
@@ -2814,6 +2701,7 @@ export async function runWindowApp({
   const shutdown = (signal) => {
     if (shuttingDown) return;
     shuttingDown = true;
+    try { unregisterInstance("server-default"); } catch {}
     if (signal === "SIGINT") process.stdout.write("\n");
     requestAppShutdown({ source: signal || "signal" }).finally(() => {
       process.exit(0);
@@ -2822,6 +2710,7 @@ export async function runWindowApp({
 
   registerShutdownServerCloser((done) => {
     appLogger.info("server.stopping", { port });
+    try { unregisterInstance("server-default"); } catch {}
     telegramBot?.stop?.();
     server.close(() => {
       appLogger.info("server.stopped", { port });
