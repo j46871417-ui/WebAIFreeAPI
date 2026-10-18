@@ -1,26 +1,16 @@
-node_modules/
 node/
 plugin-for-vscode/packages/
 dist/
-*.7z
-*.exe
-.env
-.DS_Store
 .deepseek-cli/
 .qwen-cli/
 .chatgpt-cli/
 .ai-free/
-*.vsix
-*.log
-*.db
 .repro-snapshot.tar.gz
 cookies*.json
 *cookie*.json
 deepseek-token*.txt
 
 # IDE
-.idea/
-.vscode/
 
 # Internal notes (не для публики)
 CLAUDE.md
@@ -40,9 +30,6 @@ commit_msg.txt
 msg.txt
 request.json
 opencode_latest.json
-*.tmp
-__pycache__/
-*.py[cod]
 
 # Source hygiene: local data, credentials, build output and accidental copies
 .env
