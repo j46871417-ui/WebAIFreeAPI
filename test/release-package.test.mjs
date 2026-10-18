@@ -24,8 +24,8 @@ test("client release packages explicitly exclude internal tests", () => {
   assertTestExclusions(read("plugin-for-vscode/.vscodeignore"), "plugin-for-vscode/.vscodeignore");
 });
 
-test("README presents the current desktop agent screenshot", () => {
-  const asset = "docs/assets/ai-free-agent-0.4.13.png";
+test("README presents a redacted desktop screenshot", () => {
+  const asset = "docs/assets/ai-free-real-redacted.png";
   assert.ok(fs.existsSync(path.join(root, asset)), `${asset} must exist`);
   assert.match(read("README.md"), new RegExp(asset.replaceAll(".", "\\.")));
 });
