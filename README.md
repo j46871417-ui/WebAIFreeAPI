@@ -29,7 +29,7 @@ WebAIFreeAPI превращает бесплатные веб-чаты AI в п�
 - 🔌 **Интеграция с любой IDE**: встроенный генератор шаблонов и автогенерация API-ключей для Cursor, VS Code (Cline, Continue), Windsurf, JetBrains, OpenCode, Aider и Zed.
 
 <p align="center">
-  <img src="docs/assets/ai-free-agent-0.4.13.png" alt="WebAIFreeAPI Interface" width="800">
+  <img src="docs/assets/ai-free-real-redacted.png" alt="WebAIFreeAPI Interface" width="800">
 </p>
 
 ---

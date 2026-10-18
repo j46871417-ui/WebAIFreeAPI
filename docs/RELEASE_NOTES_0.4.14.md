@@ -2,7 +2,7 @@
 
 AI Free 0.4.14 stabilizes long ChatGPT tasks, Windows tooling discovery and the chat interface in desktop and VS Code.
 
-![AI Free desktop agent](https://raw.githubusercontent.com/Staks-sor/ai-free/v0.4.14/docs/assets/ai-free-agent-0.4.13.png)
+![AI Free desktop agent](https://raw.githubusercontent.com/Staks-sor/ai-free/v0.4.14/docs/assets/ai-free-real-redacted.png)
 
 ## ChatGPT long-task observer
 

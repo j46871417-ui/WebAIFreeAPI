@@ -2,7 +2,7 @@
 
 AI Free 0.4.13 improves long-running agent continuity, ChatGPT browser reliability and release packaging in desktop and VS Code.
 
-![AI Free 0.4.13 desktop agent](https://raw.githubusercontent.com/Staks-sor/ai-free/v0.4.13/docs/assets/ai-free-agent-0.4.13.png)
+![AI Free 0.4.13 desktop agent](https://raw.githubusercontent.com/Staks-sor/ai-free/v0.4.13/docs/assets/ai-free-real-redacted.png)
 
 ## Compact persistent agent context
 

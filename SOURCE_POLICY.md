@@ -32,3 +32,5 @@ The Windows GUI build downloads WebView2 1.0.2151.40 from NuGet when needed,
 checks its pinned SHA-256 and extracts it locally. SDK files and copied DLLs
 are build inputs/output, not project source. The first clean Windows build
 needs network access. Run `node scripts/download-webview2.mjs` to prefetch.
+
+Screenshots must hide chat contents, workspace names and account data before they are added. Use the existing redacted screenshot for docs.

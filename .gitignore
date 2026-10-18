@@ -310,3 +310,13 @@ desktop.ini
 /plugin-for-vscode/src/window-app/web-start.mjs
 
 /webview2-sdk-*/
+
+# No unredacted chats or browser/network captures
+/docs/assets/ai-free-real.png
+/docs/assets/ai-free-main-window.png
+/docs/assets/ai-free-agent-0.4.13.png
+*.asar
+*.asar.*
+*.har
+*.pcap
+*.pcapng
