@@ -9,6 +9,9 @@
 linux/** text eol=lf
 *.png binary
 *.ico binary
+*.svg text eol=lf
 *.exe binary
 *.lib binary
 scripts/*.sh text eol=lf
+
+.githooks/* text eol=lf

@@ -1,11 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const binDir = path.join(rootDir, "bin");
+if (!fs.existsSync(path.join(rootDir, "webview2-sdk/lib/net45/Microsoft.Web.WebView2.Core.dll"))) {
+  execFileSync(process.execPath, [path.join(rootDir, "scripts/download-webview2.mjs")], { cwd: rootDir, stdio: "inherit" });
+}
 const srcNativeDir = path.join(rootDir, "src-native");
 const distDir = path.join(rootDir, "dist");
 function findCsc() {

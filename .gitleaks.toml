@@ -1,0 +1,9 @@
+title = "Source secret checks"
+
+[extend]
+useDefault = true
+
+# Literal model names are not API credentials.
+[[allowlists]]
+regexTarget = "secret"
+regexes = ['^(?:claude-3-[57]-sonnet|gpt-5\.6-sol-medium)$']

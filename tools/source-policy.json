@@ -1,0 +1,38 @@
+{
+  "allowed_duplicate_groups": [
+    [
+      "LICENSE",
+      "plugin-for-vscode/LICENSE"
+    ],
+    [
+      "linux/assets/ai-free-128x128.png",
+      "linux/assets/icons/hicolor/128x128/apps/ai-free.png"
+    ],
+    [
+      "linux/assets/ai-free-16x16.png",
+      "linux/assets/icons/hicolor/16x16/apps/ai-free.png"
+    ],
+    [
+      "linux/assets/ai-free-256x256.png",
+      "linux/assets/ai-free.png",
+      "linux/assets/icons/hicolor/256x256/apps/ai-free.png"
+    ],
+    [
+      "linux/assets/ai-free-32x32.png",
+      "linux/assets/icons/hicolor/32x32/apps/ai-free.png"
+    ],
+    [
+      "linux/assets/ai-free-48x48.png",
+      "linux/assets/icons/hicolor/48x48/apps/ai-free.png"
+    ],
+    [
+      "linux/assets/ai-free-64x64.png",
+      "linux/assets/icons/hicolor/64x64/apps/ai-free.png"
+    ],
+    [
+      "linux/assets/ai-free.svg",
+      "linux/assets/icons/hicolor/scalable/apps/ai-free.svg",
+      "plugin-for-vscode/media/icon.svg"
+    ]
+  ]
+}

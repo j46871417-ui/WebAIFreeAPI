@@ -41,8 +41,9 @@ function listTrackedFiles(baseDir) {
     encoding: "utf8",
   });
   const prefix = `${baseDir}/`;
-  return output
-    .split("\0")
+  const generated = JSON.parse(fs.readFileSync(path.join(root, "plugin-for-vscode/shared-files.json"), "utf8"))
+    .map((file) => `plugin-for-vscode/${file}`);
+  return [...new Set([...output.split("\0"), ...generated])]
     .filter((file) => file.startsWith(prefix))
     .map((file) => file.slice(prefix.length));
 }

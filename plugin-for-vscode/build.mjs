@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
+import { materializeShared } from "../scripts/materialize-vscode-shared.mjs";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+materializeShared(path.resolve(__dirname, ".."));
 const sharedCoreSource = path.resolve(__dirname, "../packages/core");
 const sharedCoreTarget = path.join(__dirname, "packages/core");
 
